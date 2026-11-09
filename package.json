@@ -1,0 +1,19 @@
+{
+	"name": "vscode-design-system",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"engines": { "node": ">=22" },
+	"scripts": {
+		"install-workspace": "node scripts/install.mjs",
+		"dev": "node scripts/book.mjs serve",
+		"list": "node scripts/book.mjs list",
+		"read": "node scripts/book.mjs read",
+		"search": "node scripts/book.mjs search",
+		"documents": "node scripts/book.mjs documents",
+		"read-document": "node scripts/book.mjs read-document",
+		"validate": "node scripts/book.mjs validate",
+		"export": "node scripts/export.mjs",
+		"test": "node scripts/test.mjs"
+	}
+}

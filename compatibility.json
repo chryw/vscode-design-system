@@ -1,0 +1,8 @@
+{
+	"version": 1,
+	"viewerVersion": "0.1.0",
+	"bookVersion": 1,
+	"productRepository": "https://github.com/microsoft/vscode",
+	"productBranch": "chryw/design-system-exploration",
+	"productCommit": "977a0d2b8c26b2b66ce8ecdf2ffee940d82ce719"
+}

@@ -1,0 +1,295 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.motion-doc {
+	container-type: inline-size;
+	color: var(--vscode-editor-foreground);
+	line-height: 1.65;
+	display: grid;
+	gap: var(--article-section-gap);
+}
+.motion-doc-section,
+.motion-doc-recipe {
+	margin: 0;
+	min-width: 0;
+	scroll-margin-top: 24px;
+}
+.motion-doc-section > * + *,
+.motion-doc-recipe > * + * {
+	margin-top: var(--article-content-gap);
+}
+.motion-doc p,
+.motion-doc dd { max-width: var(--article-measure); }
+.motion-doc-section > :is(h3, .motion-doc-section, .motion-doc-recipe) { margin-top: 32px; }
+.motion-doc :is(h2, h3, h4, h5, h6) { font-weight: var(--vscode-fontWeight-semiBold); }
+.motion-doc h2 { font-size: var(--book-section-size); }
+.motion-doc h3 { font-size: var(--book-subsection-size); }
+.motion-doc h4 { margin: 0; font-size: var(--book-body-size); }
+.motion-doc h5 { margin: 0; font-size: var(--book-detail-size); }
+.motion-doc h6 { margin: 0; font-size: var(--book-detail-size); }
+.motion-doc .meta,
+.motion-doc-implementation {
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-fontSize-body2);
+}
+.motion-doc-grid,
+.motion-doc-specimens,
+.motion-doc-easing-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--vscode-spacing-size240);
+	align-items: start;
+}
+.motion-doc-example,
+.motion-doc-specimen-item,
+.motion-doc-curve,
+.motion-doc-duration {
+	display: grid;
+	grid-template-rows: subgrid;
+	min-width: 0;
+	width: 100%;
+	justify-self: start;
+	gap: var(--vscode-spacing-size120);
+}
+.motion-doc-example { grid-template-rows: auto auto 1fr; }
+.motion-doc-pattern { grid-template-rows: auto auto; }
+.motion-doc-specimen-item { grid-row: span 3; }
+.motion-doc-duration { grid-template-rows: auto; }
+.motion-doc-curve { grid-row: span 3; }
+.motion-doc-curve header p { margin-block: var(--vscode-spacing-size80); }
+.motion-doc-variant { display: flex; align-items: center; gap: var(--vscode-spacing-size80); margin-top: var(--vscode-spacing-size120); }
+.motion-doc-duration-study {
+	display: grid;
+	gap: var(--vscode-spacing-size240);
+	max-width: var(--article-measure);
+}
+.motion-doc-duration-viewer { max-width: 100%; }
+.motion-doc-duration-comparison,
+.motion-doc-duration-guidance {
+	display: grid;
+	gap: var(--vscode-spacing-size240);
+}
+.motion-doc-duration-comparison { padding: var(--vscode-spacing-size160); }
+.motion-doc-duration-guidance p { margin-block: var(--vscode-spacing-size80) 0; }
+.motion-doc-duration-band {
+	height: var(--vscode-spacing-size80);
+	background: var(--vscode-button-secondaryBackground);
+	overflow: hidden;
+}
+.motion-doc-duration-fill {
+	height: 100%;
+	background: var(--vscode-button-background);
+	transform-origin: left;
+}
+.motion-doc-recipe-examples { row-gap: var(--vscode-spacing-size120); }
+.motion-doc-immediate { display: flex; align-items: center; gap: var(--vscode-spacing-size80); }
+.motion-doc-immediate input { accent-color: var(--vscode-button-background); }
+.motion-doc-example header p,
+.motion-doc-specimen-item p,
+.motion-doc-duration header p { margin-top: var(--vscode-spacing-size80); }
+.motion-doc-viewer {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	width: 100%;
+	max-width: 400px;
+	border: var(--vscode-strokeThickness) solid var(--vscode-editorWidget-border);
+	border-radius: var(--vscode-cornerRadius-medium);
+	overflow: clip;
+	justify-self: start;
+	background: var(--vscode-editor-background);
+	font-size: var(--vscode-fontSize-body1);
+	line-height: 1.4;
+}
+.motion-doc-stage {
+	display: grid;
+	place-items: center;
+	flex: 1;
+	position: relative;
+	min-width: 0;
+	min-height: calc(var(--vscode-spacing-size400) * 4 + var(--vscode-spacing-size320));
+	box-sizing: border-box;
+	padding: var(--vscode-spacing-size160);
+	background: var(--vscode-editor-background);
+}
+.motion-doc-preview-tools {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--vscode-spacing-size80) var(--vscode-spacing-size160);
+	padding: var(--vscode-spacing-size80) var(--vscode-spacing-size120);
+}
+.motion-doc-product-stage { padding: 0; min-height: 0; place-items: start stretch; }
+.motion-doc-product-viewer { max-width: 480px; }
+.motion-doc-preview-tools label { display: inline-flex; align-items: center; gap: var(--vscode-spacing-size80); }
+.motion-doc-preview-tools input { margin: 0; }
+.motion-doc-playback { display: flex; gap: var(--vscode-spacing-size40); margin-inline-start: auto; }
+.monaco-button.motion-doc-layout-toggle {
+	width: auto;
+	min-height: var(--vscode-spacing-size320);
+	margin-inline-start: auto;
+	font-size: var(--vscode-fontSize-label1);
+}
+.monaco-button.motion-doc-playback-button {
+	width: var(--vscode-spacing-size320);
+	min-height: var(--vscode-spacing-size320);
+	padding: 0;
+	border-width: var(--vscode-strokeThickness);
+	border-radius: var(--vscode-cornerRadius-small);
+	font-size: var(--vscode-fontSize-label1);
+}
+.monaco-button.motion-doc-playback-button .codicon-glyph {
+	margin: 0;
+	font-size: var(--vscode-codiconFontSize);
+}
+.motion-doc-playback-button:focus-visible { outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder); }
+.motion-doc-playback-error { padding: var(--vscode-spacing-size120); }
+.motion-doc-caption {
+	max-width: 480px;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-fontSize-label1);
+	line-height: 1.5;
+}
+.motion-doc-caption p { margin: 0; }
+.motion-doc-reference > .motion-doc-example { margin-top: var(--vscode-spacing-size240); }
+.motion-doc .control-stage {
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	display: grid;
+	justify-items: stretch;
+}
+.motion-doc .control-stage > * + * { margin-top: 0; }
+.motion-doc .control-stage[data-preview-state="ready"] > .preview-status { display: none; }
+.motion-doc .component-preview { min-height: 0; display: block; }
+.motion-doc-reference summary { cursor: pointer; }
+.motion-doc-reference summary:focus-visible {
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: var(--vscode-spacing-size20);
+}
+.motion-doc-reference > * + * { margin-top: var(--vscode-spacing-size80); }
+.motion-doc-specimen-stage { overflow: clip; }
+.motion-doc-specimen-target,
+.motion-doc-specimen-outline {
+	grid-area: 1 / 1;
+	width: calc(var(--vscode-spacing-size320) * 2);
+	height: calc(var(--vscode-spacing-size320) * 2);
+	box-sizing: border-box;
+	border-radius: var(--vscode-cornerRadius-small);
+}
+.motion-doc-specimen-target { background: var(--vscode-button-background); border: var(--vscode-strokeThickness) solid var(--vscode-input-border); }
+.motion-doc-specimen-stage[data-shape="card"] .motion-doc-specimen-target {
+	border-color: var(--vscode-editorWidget-border);
+	border-radius: var(--vscode-cornerRadius-medium);
+	box-shadow: 0 var(--vscode-spacing-size20) var(--vscode-spacing-size60) var(--vscode-widget-shadow);
+}
+.motion-doc-specimen-outline { border: var(--vscode-strokeThickness) dashed var(--vscode-input-border); }
+.motion-doc-specimen-stage[data-shape="travel"] > div { margin-right: calc(var(--vscode-spacing-size320) * 2); }
+.motion-doc-specimen-destination { transform: translateX(100%); }
+.motion-doc-layout-stack {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: center;
+	gap: var(--vscode-spacing-size80);
+	height: calc(var(--vscode-spacing-size400) * 3);
+	width: 100%;
+}
+.motion-doc-layout-details {
+	flex: none;
+	width: calc(var(--vscode-spacing-size400) * 5);
+	max-width: 100%;
+	background: var(--vscode-inputOption-activeBackground);
+	border-radius: var(--vscode-cornerRadius-small);
+	overflow: hidden;
+}
+.motion-doc-specimen-bar {
+	flex: none;
+	width: calc(var(--vscode-spacing-size400) * 5);
+	max-width: 100%;
+	height: var(--vscode-spacing-size160);
+	border-radius: var(--vscode-cornerRadius-small);
+	background: var(--vscode-inputOption-activeBackground);
+}
+.motion-doc-curve-stage svg { width: 100%; max-width: 240px; height: auto; overflow: visible; }
+.motion-doc-curve-axis { fill: none; stroke: var(--vscode-input-border); stroke-width: var(--vscode-strokeThickness); }
+.motion-doc-curve-path { fill: none; stroke: var(--vscode-button-background); stroke-width: var(--vscode-strokeThickness); }
+.motion-doc-curve-marker { r: var(--vscode-spacing-size40); fill: var(--vscode-button-background); }
+.motion-doc-scene { overflow: clip; }
+.motion-doc-silhouette-line {
+	height: var(--vscode-spacing-size40);
+	width: 72%;
+	flex: none;
+	border-radius: var(--vscode-cornerRadius-small);
+	background: var(--vscode-descriptionForeground);
+	opacity: 0.35;
+}
+.motion-doc-silhouette-line + .motion-doc-silhouette-line { margin-top: var(--vscode-spacing-size80); }
+.motion-doc-silhouette-line:last-child { width: 48%; }
+.motion-doc-layout-frame {
+	display: flex;
+	width: 100%;
+	height: calc(var(--vscode-spacing-size400) * 4);
+	padding: var(--vscode-spacing-size80);
+	border: var(--vscode-strokeThickness) solid var(--vscode-editorWidget-border);
+	border-radius: var(--vscode-cornerRadius-medium);
+	box-sizing: border-box;
+}
+.motion-doc-layout-main { flex: 1; min-width: 0; padding: var(--vscode-spacing-size120); background: var(--vscode-editorWidget-background); border-radius: var(--vscode-cornerRadius-small); }
+.motion-doc-layout-expansion { display: grid; flex: none; }
+.motion-doc-layout-expansion > div { min-width: 0; min-height: 0; overflow: hidden; }
+.motion-doc-layout-panel {
+	width: calc(var(--vscode-spacing-size320) * 3);
+	height: 100%;
+	box-sizing: border-box;
+	padding: var(--vscode-spacing-size120);
+	background: var(--vscode-inputOption-activeBackground);
+	border-radius: var(--vscode-cornerRadius-small);
+}
+.motion-doc-scene[data-direction="block-start"] .motion-doc-layout-frame { flex-direction: column; }
+.motion-doc-scene[data-direction="block-start"] .motion-doc-layout-main { min-height: 0; overflow: hidden; }
+.motion-doc-scene[data-direction="block-start"] .motion-doc-layout-panel { width: 100%; height: calc(var(--vscode-spacing-size320) * 3); }
+.motion-doc-content-context { width: 100%; padding: var(--vscode-spacing-size120); box-sizing: border-box; border: var(--vscode-strokeThickness) solid var(--vscode-editorWidget-border); border-radius: var(--vscode-cornerRadius-medium); }
+.motion-doc-content-steps { display: flex; gap: var(--vscode-spacing-size80); margin-bottom: var(--vscode-spacing-size120); }
+.motion-doc-content-steps > div { width: var(--vscode-spacing-size160); height: var(--vscode-spacing-size80); border-radius: var(--vscode-cornerRadius-circle); background: var(--vscode-button-secondaryBackground); }
+.motion-doc-content-layers { position: relative; width: 100%; height: calc(var(--vscode-spacing-size400) * 2 + var(--vscode-spacing-size240)); }
+.motion-doc-content-old,
+.motion-doc-content-new { position: absolute; inset: 0; display: grid; gap: var(--vscode-spacing-size80); }
+.motion-doc-content-old { grid-template-columns: repeat(3, 1fr); }
+.motion-doc-content-new { grid-template-columns: 1fr 2fr; grid-template-rows: repeat(2, 1fr); }
+.motion-doc-content-old > div,
+.motion-doc-content-new > div { min-width: 0; padding: var(--vscode-spacing-size80); border: var(--vscode-strokeThickness) solid var(--vscode-input-border); border-radius: var(--vscode-cornerRadius-small); background: var(--vscode-button-secondaryBackground); }
+.motion-doc-content-new > div:first-child { grid-row: span 2; background: var(--vscode-inputOption-activeBackground); }
+.motion-doc-notification-edge { position: absolute; inset: var(--vscode-spacing-size160); padding: var(--vscode-spacing-size120); border: var(--vscode-strokeThickness) solid var(--vscode-input-border); border-radius: var(--vscode-cornerRadius-medium); }
+.motion-doc-notification-surface {
+	position: absolute;
+	bottom: var(--vscode-spacing-size240);
+	right: var(--vscode-spacing-size240);
+	width: 72%;
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-spacing-size120);
+	padding: var(--vscode-spacing-size160);
+	border: var(--vscode-strokeThickness) solid var(--vscode-editorWidget-border);
+	border-radius: var(--vscode-cornerRadius-large);
+	background: var(--vscode-editorWidget-background);
+	box-sizing: border-box;
+}
+.motion-doc-notification-mark { flex: none; width: var(--vscode-codiconFontSize); height: var(--vscode-codiconFontSize); border-radius: var(--vscode-cornerRadius-circle); background: var(--vscode-button-background); }
+.motion-doc-notification-lines { width: 100%; height: var(--vscode-spacing-size240); border-block: var(--vscode-strokeThickness) solid var(--vscode-input-border); }
+.motion-doc-recipe-composition { color: var(--vscode-descriptionForeground); font-size: var(--vscode-fontSize-body2); }
+.motion-doc-recipe-tokens { overflow-wrap: anywhere; font-size: var(--vscode-fontSize-body2); color: var(--vscode-descriptionForeground); }
+.motion-doc-layout-toggle { width: auto; margin-inline-start: auto; }
+.motion-doc .motion-doc-pivot { display: inline-flex; flex-wrap: wrap; gap: 0; border: var(--vscode-strokeThickness) solid var(--vscode-editorWidget-border); border-radius: var(--vscode-cornerRadius-small); padding: var(--vscode-spacing-size20); margin-block: var(--vscode-spacing-size80); }
+.motion-doc-pivot legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.motion-doc .motion-doc-pivot label { position: relative; border: 0; padding: 0; }
+.motion-doc-pivot input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.motion-doc-pivot span { display: block; padding: var(--vscode-spacing-size40) var(--vscode-spacing-size80); border-radius: var(--vscode-cornerRadius-xSmall); }
+.motion-doc-pivot input:checked + span { color: var(--vscode-inputOption-activeForeground); background: var(--vscode-inputOption-activeBackground); }
+.motion-doc-pivot input:focus-visible + span { outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder); outline-offset: calc(var(--vscode-strokeThickness) * -1); }
+.motion-doc-pivot input:disabled + span { opacity: 0.5; }
+@container (min-width: 780px) {
+	.motion-doc-specimens,
+	.motion-doc-easing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Visual Studio Code Design System</title>
+	<link rel="stylesheet" href="/canvas.css">
+	<link rel="stylesheet" href="/shell.css">
+	<link rel="stylesheet" href="/book-navigation.css">
+	<script type="module" src="/shell.mjs"></script>
+</head>
+<body class="design-reference explorer">
+	<a class="skip" href="#reference" hidden>Skip to content</a>
+	<header class="explorer-heading">
+		<div>
+			<p class="book-title">Visual Studio Code Design System</p>
+			<details class="checkout-details">
+				<summary>Local checkout</summary>
+				<p id="checkout" class="meta"></p>
+			</details>
+		</div>
+		<button id="refresh" type="button" disabled>Refresh</button>
+	</header>
+	<div class="explorer-layout">
+		<div id="book-navigation" hidden></div>
+		<div class="explorer-article">
+			<main id="reference" tabindex="-1"><p role="status">Reading this checkout...</p></main>
+			<div id="book-pagination" hidden></div>
+		</div>
+	</div>
+</body>
+</html>

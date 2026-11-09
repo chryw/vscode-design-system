@@ -1,0 +1,146 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+#book-navigation {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	margin-bottom: 20px;
+}
+.book-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-block: 8px;
+	background: var(--page);
+	border-bottom: 1px solid var(--line);
+}
+.book-current {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--muted);
+}
+.book-panel {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	position: fixed;
+	inset: 0 auto 0 0;
+	width: min(320px, calc(100vw - 32px));
+	height: 100dvh;
+	max-height: 100dvh;
+	margin: 0;
+	padding: 20px;
+	border: 0;
+	border-inline-end: 1px solid var(--line);
+	background: var(--page);
+	color: var(--ink);
+	box-shadow: 4px 0 16px color-mix(in srgb, var(--ink) 12%, transparent);
+	font: var(--book-detail-size)/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.book-panel[popover]:not(:popover-open) { display: none; }
+.book-panel-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.book-panel-heading strong { font-size: 13px; font-weight: 600; }
+.book-search {
+	display: grid;
+	gap: 6px;
+	font-size: 11px;
+	color: var(--muted);
+}
+.book-search input { width: 100%; min-width: 0; font-size: 13px; color: var(--ink); }
+.book-search input::placeholder { color: var(--muted); opacity: 1; }
+.book-panel nav { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.book-group + .book-group { margin-top: 12px; }
+.book-group > summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 12px;
+	list-style: none;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+.book-group > summary::-webkit-details-marker { display: none; }
+.book-group > summary::after {
+	content: '';
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-inline-end: 1px solid currentColor;
+	border-block-end: 1px solid currentColor;
+	transform: rotate(-45deg);
+}
+.book-group[open] > summary::after { transform: rotate(45deg); }
+.book-panel nav > .book-group > summary { position: sticky; top: 0; z-index: 1; background: var(--page); }
+.book-group .book-group > summary { color: var(--muted); font-size: 11px; }
+.book-group ul { list-style: none; margin: 0; padding: 0; }
+.book-group .book-group { margin-inline-start: 8px; }
+.book-panel a {
+	display: block;
+	padding: 4px 12px;
+	border-inline-start: 1px solid transparent;
+	border-radius: 0 var(--control-radius) var(--control-radius) 0;
+	color: var(--ink);
+	text-decoration: none;
+	overflow-wrap: anywhere;
+	line-height: 1.5;
+	scroll-margin-block: 40px 8px;
+}
+.book-panel a:hover { background: var(--recessed); color: var(--ink); }
+.book-panel a[aria-current="page"] {
+	font-weight: 600;
+	color: var(--ink);
+	background: var(--recessed);
+	border-inline-start-color: var(--accent);
+}
+.book-panel :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.book-empty { color: var(--muted); font-size: 12px; }
+.book-pagination {
+	display: flex;
+	justify-content: space-between;
+	max-width: var(--article-width);
+	gap: 16px;
+	margin-block: 32px 20px;
+	padding-top: 16px;
+	border-top: 1px solid var(--line);
+}
+.book-neighbor {
+	display: grid;
+	min-width: 0;
+	max-width: 48%;
+	overflow-wrap: anywhere;
+	text-decoration: none;
+}
+.book-neighbor:last-child { margin-inline-start: auto; text-align: end; }
+.book-neighbor > span:first-child { font-size: 11px; color: var(--muted); }
+.book-neighbor:hover > span:last-child { text-decoration: underline; }
+@media (forced-colors: active) {
+	.book-panel a[aria-current="page"] { text-decoration: underline; }
+}
+@media (max-width: 480px) {
+	.book-pagination { flex-direction: column; }
+	.book-neighbor { max-width: 100%; }
+	.book-neighbor:last-child { margin-inline-start: 0; text-align: start; }
+}
+@media (min-width: 760px) {
+	#book-navigation { top: 24px; margin-bottom: 0; }
+	.book-toolbar, .book-panel-heading button { display: none; }
+	.book-panel {
+		position: static;
+		width: 100%;
+		height: calc(100dvh - 48px);
+		max-height: none;
+		padding: 0 12px 0 0;
+		border: 0;
+		box-shadow: none;
+	}
+}
