@@ -1,6 +1,6 @@
 # Agent setup guide
 
-Follow [README.md](README.md) for installation, browser and canvas launch, and troubleshooting.
+Follow [README.md](README.md) for installation and launch. The [setup reference](docs/setup.md) covers versions, existing checkouts, content validation, troubleshooting, and development checks.
 
 ## When asked to install or open the explorer
 
@@ -15,4 +15,4 @@ Finish with the selected checkout, launch URL or canvas instance, and verificati
 
 ## When changing the viewer
 
-Edit the viewer source clone, then update the managed installation. Guidance, tokens, styles, book metadata, and product fixtures belong in the selected VS Code checkout. Follow the README's development checks and run focused tests for changed behavior.
+Edit the viewer source clone, then update the managed installation. Guidance, tokens, styles, book metadata, and product fixtures belong in the selected VS Code checkout. Follow the setup reference's development checks and run focused tests for changed behavior.

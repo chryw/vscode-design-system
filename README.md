@@ -1,125 +1,53 @@
 # VS Code design-system explorer
 
-A source-backed browser for the work-in-progress VS Code design system. Browse guidance, inspect product tokens, and try live component examples from a selected VS Code checkout.
-
-This repository contains the viewer and its tools. The [`chryw/design-system-exploration` branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration) contains the guidance, book navigation, tokens, styles, and product fixtures.
+Browse design guidance, inspect tokens, and try live VS Code components. The viewer lives here; the content lives on the [`chryw/design-system-exploration` branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration).
 
 ## Get started
 
-Use the explorer in a browser or as a canvas inside a compatible Copilot session.
+You'll need Git, Node.js, and pnpm. See [setup details](docs/setup.md#requirements) for versions.
 
-### 1. Get the viewer and the content
-
-Install [Git](https://git-scm.com/downloads), then run these commands from a directory where you keep projects:
+**1. Get the viewer and the content**
 
 ```sh
 git clone https://github.com/chryw/vscode-design-system.git
 git clone --branch chryw/design-system-exploration --single-branch https://github.com/microsoft/vscode.git vscode-design-exploration
 ```
 
-If you already have the viewer or a prepared VS Code checkout with `.github/design-system/book.json`, reuse it and substitute its path below. [compatibility.json](compatibility.json) records a tested product revision.
-
-### 2. Prepare the content checkout
-
-Use the Node.js version in the VS Code checkout's `.nvmrc` and the pnpm version in its `package.json` `packageManager` field. If you use nvm, `nvm install` followed by `nvm use` inside that checkout selects its Node.js version. Otherwise use your usual Node.js version manager. See [pnpm installation](https://pnpm.io/installation) if pnpm isn't available.
+**2. Prepare and open the book**
 
 ```sh
 cd vscode-design-exploration
 pnpm install
-node ../vscode-design-system/scripts/book.mjs validate --root .
-```
-
-Validation should report `valid: true` and no diagnostics.
-
-To use live component examples, also prepare client output:
-
-```sh
 pnpm run build-fast --client-only
-```
-
-The viewer starts this checkout's Component Explorer when a live example comes into view. Skip dependency restoration or client preparation when that checkout is already prepared and unchanged.
-
-For dependency setup problems, see the checkout's [contribution guidance](https://github.com/microsoft/vscode/wiki/How-to-Contribute) and any organization-specific setup instructions.
-
-### 3. Open in a browser
-
-From the VS Code checkout used in step 2:
-
-```sh
 node ../vscode-design-system/scripts/book.mjs serve --root .
 ```
 
-Open the `url` printed in the terminal. Keep that terminal running while you browse; press **Ctrl+C** to stop the server. It serves only on this machine's loopback interface.
+Open the URL printed in your terminal. Keep the terminal running while you browse; press **Ctrl+C** to stop.
 
-You should see the book's navigation and articles. Open **Motion** and scroll to a live example to check that Component Explorer is ready.
+Already have a prepared VS Code checkout? [Use it instead](docs/setup.md#use-an-existing-checkout).
 
-### Or: install as a Copilot canvas
+## Open inside VS Code
 
-Use a VS Code or Agents window session backed by Copilot SDK with canvas extension support.
-
-From the VS Code checkout used in step 2:
+To use the book as a canvas in a Copilot session with canvas support, run this from the same VS Code checkout:
 
 ```sh
 node ../vscode-design-system/scripts/install.mjs --workspace .
 ```
 
-Open **that VS Code checkout** as the session workspace, then ask its Copilot chat:
+Open that checkout in VS Code or the Agents window, then ask Copilot:
 
-> Reload extensions, discover the `vscode-design-system` canvas, and open it for this checkout. List its topics to verify the installation.
-
-The installer copies viewer assets into `.github/extensions/vscode-design-system/` and adds a local Git exclusion.
-
-New sessions discover workspace extensions at startup; an existing session needs its extension providers reloaded. Keep only one active registration for `vscode-design-system`.
-
-**Using an isolated Agents worktree?** Prepare and install into that worktree, not only its parent checkout. Discovery follows the session workspace. The canvas's `root` input selects a content checkout; it doesn't install an extension there.
+> Reload extensions and open the `vscode-design-system` canvas for this checkout.
 
 ## Let an agent handle setup
 
-Ask an agent:
+Paste this into your agent chat:
 
 > Install and open https://github.com/chryw/vscode-design-system.
 
-[AGENTS.md](AGENTS.md) covers setup, launch, and verification using this guide.
+[AGENTS.md](AGENTS.md) provides the agent setup workflow.
 
-## Troubleshooting
+## Working on the design system
 
-| What you see | What to check |
-| --- | --- |
-| Missing book or source files | Select the exploration checkout, not the viewer clone or an unrelated VS Code branch. Check for `.github/design-system/book.json`. |
-| Missing TypeScript, MCP, or other modules | Restore dependencies in the selected VS Code checkout, not in this viewer repository. |
-| Articles load but examples don't | Prepare client output in that checkout, then scroll the example into view. Inspect the reported preview error before starting another server. |
-| Canvas not discovered | Confirm the chat supports SDK canvases, install into its actual workspace/worktree, and reload providers. Otherwise use the browser route. |
-| Installer refuses replacement | It protects tracked, unmanaged, or locally edited installations. Preserve edits before updating; don't bypass the checks. |
+Make viewer changes here and guidance, token, style, or fixture changes in the VS Code checkout.
 
-## Update and uninstall
-
-From the directory containing the viewer clone, pull updates:
-
-```sh
-git -C vscode-design-system pull --ff-only
-```
-
-For canvas installations, run the installer again from that clone with `--workspace /absolute/path/to/vscode-checkout --update`, then reload extension providers. For browser use, stop and restart the serving command. Update the product checkout separately; viewer updates never fetch or modify product sources.
-
-To uninstall a canvas, remove only the installed `.github/extensions/vscode-design-system/` directory, then reload providers. The installer leaves its local exclusion rule in Git's `info/exclude`; remove that exact rule if desired. Private view state remains under `extension-data/vscode-design-system/` in `COPILOT_HOME`, or `~/.copilot` when unset, and is isolated by checkout, book, and panel. The browser route doesn't install an extension.
-
-## Develop and collaborate
-
-Make viewer changes here and guidance, token, style, or fixture changes in the selected VS Code checkout.
-
-Saved guidance and product-source edits use topic refresh. Book catalog or fixture-binding changes require a provider reload, or a server restart for the browser route. After viewer changes, update the managed installation and reload; never edit the generated installed copy.
-
-From the viewer source clone:
-
-```sh
-node --check extension.mjs
-node scripts/test.mjs --root /absolute/path/to/vscode-checkout
-node scripts/book.mjs read --root /absolute/path/to/vscode-checkout --topic motion --limit 12000
-node scripts/book.mjs documents --root /absolute/path/to/vscode-checkout --query "motion"
-```
-
-The test runner executes against the explicit checkout while loading tests and viewer code from this clone. Browser checks use that checkout's Playwright dependency.
-
-For a portable snapshot, `node scripts/export.mjs /absolute/path/to/book.html --root /absolute/path/to/vscode-checkout` uses the selected checkout's prepared Rspack and Playwright tooling. See [private review publishing](docs/private-review.md) for access-controlled deployment.
-
-See [architecture](docs/architecture.md) and the [document protocol](docs/documents.md). Authoring conventions live in the selected checkout's `.github/design-system/authoring.md`, not in this viewer.
+See the [setup reference](docs/setup.md) for updates, troubleshooting, and development commands.
