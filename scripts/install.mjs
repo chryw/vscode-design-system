@@ -31,7 +31,7 @@ function digest(root) {
 	return hash.digest('hex');
 }
 
-export function install(workspace, { update = false, source = packageRoot } = {}) {
+export function install(workspace, { update = false, source = packageRoot, rename = renameSync } = {}) {
 	const root = canonicalRoot(workspace);
 	readRepository(root);
 	const target = contained(root, relativeTarget);
@@ -43,6 +43,7 @@ export function install(workspace, { update = false, source = packageRoot } = {}
 	mkdirSync(lock);
 	let staging;
 	let backup;
+	let preserveRecovery = false;
 	try {
 		if (existsSync(target)) {
 			if (lstatSync(target).isSymbolicLink()) { throw new Error('Refusing to replace a symlink installation'); }
@@ -67,13 +68,22 @@ export function install(workspace, { update = false, source = packageRoot } = {}
 			mkdirSync(path.dirname(excludeFile), { recursive: true });
 			appendFileSync(excludeFile, `\n# Private design-system canvas installation\n/${relativeTarget}/\n`);
 		} else if (ignored.status !== 0) { throw new Error('Could not inspect local Git exclusion rules'); }
-		if (existsSync(target)) { backup = path.join(lock, 'previous'); renameSync(target, backup); }
-		try { renameSync(staging, target); staging = undefined; }
-		catch (error) { if (backup) { renameSync(backup, target); backup = undefined; } throw error; }
+		if (existsSync(target)) { backup = path.join(lock, 'previous'); rename(target, backup); }
+		try { rename(staging, target); staging = undefined; }
+		catch (error) {
+			if (backup) {
+				try { rename(backup, target); backup = undefined; }
+				catch (rollbackError) {
+					preserveRecovery = true;
+					throw new AggregateError([error, rollbackError], `Installation and rollback failed. The previous installation is preserved at ${backup}`);
+				}
+			}
+			throw error;
+		}
 		return { installed: target, viewerVersion: version, root, canvasId: 'vscode-design-system', input: { root } };
 	} finally {
 		if (staging) { rmSync(staging, { recursive: true, force: true }); }
-		rmSync(lock, { recursive: true, force: true });
+		if (!preserveRecovery) { rmSync(lock, { recursive: true, force: true }); }
 	}
 }
 

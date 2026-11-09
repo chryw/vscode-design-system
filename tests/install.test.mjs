@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { install } from '../scripts/install.mjs';
@@ -46,4 +46,23 @@ test('installation refuses existing workspace code rather than replacing it', t 
 	execFileSync('git', ['add', '.github/extensions/vscode-design-system/extension.mjs'], { cwd: root });
 	assert.throws(() => install(root, { update: true }), /already tracks a canvas/);
 	assert.equal(readFileSync(path.join(target, 'extension.mjs'), 'utf8'), 'existing code');
+});
+
+test('a failed replacement and rollback preserve the previous installation for recovery', t => {
+	const { root } = createDocumentCheckout(t);
+	execFileSync('git', ['init', '-q'], { cwd: root });
+	const { installed } = install(root);
+	const previous = readFileSync(path.join(installed, 'extension.mjs'), 'utf8');
+	const backup = path.join(`${installed}.install-lock`, 'previous');
+	assert.throws(() => install(root, {
+		update: true,
+		rename: (from, to) => {
+			if (to === installed) { throw new Error('Simulated destination failure'); }
+			renameSync(from, to);
+		},
+	}), /previous installation is preserved/);
+	assert.deepEqual({
+		destinationExists: existsSync(installed),
+		previous: readFileSync(path.join(backup, 'extension.mjs'), 'utf8'),
+	}, { destinationExists: false, previous });
 });

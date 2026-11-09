@@ -61,4 +61,3 @@ export function parseJsonc(text) {
 	}
 	return JSON.parse(chars.join(''));
 }
-
