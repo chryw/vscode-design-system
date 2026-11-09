@@ -1,13 +1,15 @@
 # Private review deployment
 
+This optional workflow publishes access-controlled snapshots. It requires GitHub CLI and an authenticated account with access to the destination repository. It isn't needed for the public viewer's [installation and local browsing](../README.md#get-started).
+
 ## Private repository snapshots
 
 Personal EMU repositories can hold review snapshots but cannot host Pages websites. The repository-only publisher uploads the complete interactive book, a book-source archive, and revision metadata as a private GitHub release. It downloads and checks every asset before making the release available. It doesn't create unsigned code commits or change the active CLI login.
 
 ```sh
 node .github/extensions/vscode-design-system/scripts/publish.mjs \
-  --repository github.com/cherwan_microsoft/vscode-design-system \
-  --account cherwan_microsoft \
+  --repository github.com/YOUR_ACCOUNT/YOUR_REVIEW_REPOSITORY \
+  --account YOUR_ACCOUNT \
   --repository-only --watch
 ```
 
@@ -25,7 +27,7 @@ The deployed book includes all chapters and mapped interactive product fixtures.
 
 ## Prepare the enterprise repository
 
-Use the correct host and existing EMU login; for this account, that's `github.com` and `cherwan_microsoft`. Create a private repository in an approved enterprise organization, initialize it with a README, enable Issues, and set its default branch to `main`. Clone it into a dedicated directory, configure the verified Git identity and signing key there, and keep commit signing enabled. Don't reuse or modify the VS Code worktree's origin.
+Use your enterprise host and existing EMU login. Create a private repository in an approved enterprise organization, initialize it with a README, enable Issues, and set its default branch to `main`. Clone it into a dedicated directory, configure the verified Git identity and signing key there, and keep commit signing enabled. Don't reuse or modify the VS Code worktree's origin.
 
 In repository **Settings → Pages**, choose **GitHub Actions** and confirm that the website is private. Give reviewers read access to the repository and contributors the appropriate additional access. This guide doesn't assume an organization or grant access to unspecified people.
 
@@ -34,7 +36,7 @@ Run the publisher's read-only preflight:
 ```sh
 node .github/extensions/vscode-design-system/scripts/publish.mjs \
   --repository github.com/ORGANIZATION/vscode-design-system \
-  --account cherwan_microsoft \
+  --account YOUR_ACCOUNT \
   --check
 ```
 
@@ -43,7 +45,7 @@ node .github/extensions/vscode-design-system/scripts/publish.mjs \
 ```sh
 node .github/extensions/vscode-design-system/scripts/publish.mjs \
   --repository github.com/ORGANIZATION/vscode-design-system \
-  --account cherwan_microsoft \
+  --account YOUR_ACCOUNT \
   --checkout /absolute/path/to/private-review-clone \
   --watch
 ```
