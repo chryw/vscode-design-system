@@ -1,6 +1,6 @@
 # Private review deployment
 
-This optional workflow publishes access-controlled snapshots. It requires GitHub CLI and an authenticated account with access to the destination repository. It isn't needed for the public viewer's [installation and local browsing](../README.md#get-started).
+Publish access-controlled snapshots using GitHub CLI and an authenticated account with access to the destination repository.
 
 ## Private repository snapshots
 
