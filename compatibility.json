@@ -4,5 +4,5 @@
 	"bookVersion": 1,
 	"productRepository": "https://github.com/microsoft/vscode",
 	"productBranch": "chryw/design-system-exploration",
-	"productCommit": "33285bf9538fa73c8ad101e83f7ad85554214163"
+	"productCommit": "efdf98520a785090b4af3e2ad0f6bc078cd96bb0"
 }

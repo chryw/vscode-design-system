@@ -28,11 +28,13 @@ Already have a prepared VS Code checkout? [Use it instead](docs/setup.md#use-an-
 
 ## Open inside VS Code
 
-To use the book as a canvas in a Copilot session with canvas support, run this from the same VS Code checkout:
+To use the book as a canvas in a Copilot session with canvas support, run this from `vscode-design-exploration`, the VS Code checkout containing the content branch:
 
 ```sh
 node ../vscode-design-system/scripts/install.mjs --workspace .
 ```
+
+This installs the canvas into that checkout's `.github/extensions/vscode-design-system/` directory, which is locally ignored by Git. Keep the viewer clone separate.
 
 Open that checkout in VS Code or the Agents window, then ask Copilot:
 

@@ -120,7 +120,7 @@ function readMotionResponses(ts, parametersText, generatedText, source) {
 	const generated = motionModule(ts, generatedText, motionResponseFiles[1]);
 	const responsePresets = generated.literal(generated.constants.get('motionResponsePresets'));
 	const digest = generated.literal(generated.constants.get('motionResponseSourceDigest'));
-	const expectedDigest = `sha256:${createHash('sha256').update(parametersText).digest('hex')}`;
+	const expectedDigest = `sha256:${createHash('sha256').update(parametersText.replace(/\r\n/g, '\n')).digest('hex')}`;
 	if (digest !== expectedDigest) {
 		throw new Error('Motion response exports are stale. Run node .github/skills/motion-design/scripts/generate-motion-responses.mjs.');
 	}

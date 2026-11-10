@@ -264,6 +264,29 @@ test('generated response pairs are digest-checked and resolve source references 
 	}), /response sources are incomplete/);
 });
 
+test('CRLF motion sources match LF exports and still reject changed parameters', () => {
+	const original = context();
+	const parameters = original.read(motionResponseFiles[0]).replace(/\r\n/g, '\n');
+	const generated = original.read(motionResponseFiles[1]).replace(/\r\n/g, '\n');
+	const responses = readMotionDefinitions(context({
+		[motionResponseFiles[0]]: parameters,
+		[motionResponseFiles[1]]: generated,
+	})).responses;
+	for (const sourceEnding of ['\n', '\r\n']) {
+		for (const outputEnding of ['\n', '\r\n']) {
+			const overrides = {
+				[motionResponseFiles[0]]: parameters.replace(/\n/g, sourceEnding),
+				[motionResponseFiles[1]]: generated.replace(/\n/g, outputEnding),
+			};
+			assert.deepEqual(readMotionDefinitions(context(overrides)).responses, responses);
+			assert.throws(() => readMotionDefinitions(context({
+				...overrides,
+				[motionResponseFiles[0]]: overrides[motionResponseFiles[0]].replace('"frequencyHz": 6', '"frequencyHz": 7'),
+			})), /exports are stale/);
+		}
+	}
+});
+
 test('canonical presets project product token bindings from actual source defaults', () => {
 	const original = context();
 	const definitions = readMotionDefinitions(original);

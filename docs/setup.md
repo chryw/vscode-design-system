@@ -5,7 +5,7 @@ Start with the [README](../README.md) to open the book in a browser or install i
 ## Requirements
 
 - Git.
-- The Node.js version in the selected VS Code checkout's `.nvmrc`. With nvm, run `nvm install` and `nvm use` inside that checkout.
+- The Node.js version in the selected VS Code checkout's `.nvmrc`, installed directly or through your preferred version manager.
 - The pnpm version in that checkout's `package.json` `packageManager` field. See [pnpm installation](https://pnpm.io/installation) if needed.
 - For the canvas route, a VS Code or Agents window session backed by Copilot SDK with canvas extension support.
 
@@ -15,7 +15,7 @@ For dependency setup problems, see VS Code's [contribution guidance](https://git
 
 ## Use an existing checkout
 
-Choose a VS Code checkout containing `.github/design-system/book.json`. Keep the viewer source clone in a separate directory. [compatibility.json](../compatibility.json) records a tested product revision.
+Choose a VS Code checkout on the [exploration branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration) containing `.github/design-system/book.json`. Keep the viewer source clone in a separate directory. [compatibility.json](../compatibility.json) records a tested product revision.
 
 From the viewer clone, pass the checkout explicitly:
 
@@ -32,6 +32,8 @@ Install into the chat's actual VS Code workspace or isolated worktree:
 ```sh
 node scripts/install.mjs --workspace /absolute/path/to/vscode-checkout
 ```
+
+On Windows, use your checkout path, for example `--workspace "C:/src/vscode-design-exploration"`.
 
 The installer copies assets into `.github/extensions/vscode-design-system/` and adds a local Git exclusion. New sessions discover workspace extensions at startup; existing sessions need their extension providers reloaded. Keep only one active registration for `vscode-design-system`.
 
