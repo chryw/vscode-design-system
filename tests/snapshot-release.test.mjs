@@ -10,6 +10,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { publishSnapshot, readSnapshot, sha256, validateSnapshotTag } from '../scripts/release-snapshot.mjs';
 import { buildSnapshotPages } from '../scripts/build-snapshot-pages.mjs';
+import { linkSnapshotRelease } from '../scripts/link-snapshot-release.mjs';
 
 async function snapshot(root, tag, text, overrides = {}) {
 	const directory = path.join(root, tag);
@@ -136,5 +137,50 @@ test('failed upload verification leaves the release as a draft', async () => {
 		};
 		await assert.rejects(publishSnapshot(directory, { repository: 'team/book', github }), /checksum/);
 		assert.deepEqual(mutations, ['create', 'download']);
+	} finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('deployed versioned snapshots link the exact software release without replacing notes or duplicating links', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'snapshot-release-link-'));
+	try {
+		const { directory, manifest } = await snapshot(root, 'snapshot-v1.2.3', '<h1>Released</h1>', {
+			viewer: { version: '1.2.3', commit: 'a'.repeat(40), modified: false },
+		});
+		await writeFile(path.join(directory, 'index.html'), '<h1>Released</h1>');
+		let body = 'Existing release notes.';
+		let writes = 0;
+		let sha = manifest.viewer.commit;
+		const github = args => {
+			if (args[0] === 'api') { return JSON.stringify({ sha }); }
+			if (args[1] === 'view') { return JSON.stringify({ body, isDraft: false }); }
+			assert.deepEqual(args.slice(0, 3), ['release', 'edit', 'v1.2.3']);
+			body = args[args.indexOf('--notes') + 1];
+			writes++;
+			return '';
+		};
+		const input = { directory, repository: 'team/book', pagesUrl: 'https://team.github.io/book/', github };
+		const linked = await linkSnapshotRelease(input);
+		assert.match(body, /^Existing release notes\./);
+		assert.match(body, /https:\/\/team\.github\.io\/book\/snapshots\/snapshot-v1\.2\.3\//);
+		assert.equal((await linkSnapshotRelease(input)).changed, false);
+		assert.deepEqual({ linked: linked.linked, tag: linked.tag, writes }, { linked: true, tag: 'v1.2.3', writes: 1 });
+		sha = 'b'.repeat(40);
+		await assert.rejects(linkSnapshotRelease(input), /exact software release revision/);
+		sha = manifest.viewer.commit;
+		await writeFile(path.join(directory, 'index.html'), 'Corrupted');
+		await assert.rejects(linkSnapshotRelease(input), /strictly equal/);
+		assert.equal(writes, 1);
+	} finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('non-versioned snapshots do not change software releases', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'snapshot-unlinked-'));
+	try {
+		const { directory } = await snapshot(root, 'snapshot-review', 'Review', {
+			viewer: { version: '1.2.3', commit: 'a'.repeat(40), modified: false },
+		});
+		const result = await linkSnapshotRelease({ directory, repository: 'team/book', pagesUrl: 'https://team.github.io/book/',
+			github: () => { throw new Error('Must not contact GitHub'); } });
+		assert.equal(result.linked, false);
 	} finally { await rm(root, { recursive: true, force: true }); }
 });

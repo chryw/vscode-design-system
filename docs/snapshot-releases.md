@@ -4,6 +4,8 @@ A snapshot is a frozen, self-contained book with interactive examples. Readers n
 
 The prepared product checkout builds the snapshot locally using the existing exporter. GitHub Actions only verifies and deploys the finished release assets, so deployment needs no product build, npm credentials, or extra repository secrets.
 
+For the complete software-and-snapshot workflow, use the repository's [release skill](../.github/skills/release/SKILL.md). Use `snapshot-v<software-version>` for a release companion. After successful deployment, the Action adds its browser link to the matching software release without replacing existing notes; the snapshot's viewer commit must match that release exactly.
+
 ## Set up Pages once
 
 1. Commit and push this release tooling and workflow to the viewer repository before publishing a snapshot.

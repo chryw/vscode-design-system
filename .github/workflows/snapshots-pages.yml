@@ -37,6 +37,8 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
@@ -46,3 +48,25 @@ jobs:
     steps:
       - uses: actions/deploy-pages@v4
         id: deployment
+
+  link-software-release:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assemble verified release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/build-snapshot-pages.mjs --repository "$REPOSITORY" --output "$RUNNER_TEMP/snapshot-site"
+      - name: Link deployed snapshot from its software release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PAGES_URL: ${{ needs.deploy.outputs.page_url }}
+        run: node scripts/link-snapshot-release.mjs --directory "$RUNNER_TEMP/snapshot-site" --repository "$REPOSITORY" --pages-url "$PAGES_URL"
