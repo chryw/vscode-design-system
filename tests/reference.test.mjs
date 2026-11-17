@@ -234,6 +234,23 @@ test('visual scales and scoped coverage reflect source changes rather than hardc
 	assert.throws(() => createReferenceModel({ ...spacing, documents: {} }, ['shape']), /needs the covered source/);
 });
 
+test('new authored guidance topics retain source scope without claiming product adoption', async t => {
+	const system = await reader(t)('illustration');
+	const source = system.authored.markdownSource;
+	const guidance = { ...system, page: { ...system.page, id: 'management-study' } };
+	assert.deepEqual(createReferenceModel(guidance, ['management-study']).topics, {
+		'management-study': [{
+			expected: 'Authored guidance',
+			status: 'not-assessed',
+			summary: 'This topic provides authored guidance. Product-wide implementation and adoption have not been assessed.',
+			scope: [source],
+		}],
+	});
+	assert.throws(() => createReferenceModel(guidance, ['unknown-topic']), /Unsupported reference assessment topic/);
+	assert.throws(() => createReferenceModel({ ...guidance, sourceFiles: [] }, ['management-study']), /Unsupported reference assessment topic/);
+	assert.throws(() => createReferenceModel({ ...guidance, page: { ...guidance.page, renderer: 'foundations' } }, ['management-study']), /Unsupported reference assessment topic/);
+});
+
 test('elevation reads live tier guidance, registered radii, and actual shadow sources', async t => {
 	const system = await reader(t)('elevation');
 	assert.match(system.elevation.tiers.text, /Control.*cornerRadius-small/);
@@ -258,7 +275,7 @@ test('elevation reads live tier guidance, registered radii, and actual shadow so
 		id, contrast: id.startsWith('Default High Contrast'),
 		editor: themes.themeGallery.find(theme => theme.id === id).palette.editor,
 	})));
-	assert.ok(system.sourceFiles.includes('src/vs/platform/theme/common/elevation.design.md'));
+	assert.ok(system.sourceFiles.includes('.github/design-system/guidance/elevation.design.md'));
 	assert.ok(system.sizes.some(token => token.id === 'cornerRadius.xLarge'));
 });
 

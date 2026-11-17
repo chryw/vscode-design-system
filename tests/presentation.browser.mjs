@@ -15,9 +15,88 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import path from 'node:path';
 import { readPage } from '../adapters/vscode/groups/authored.mjs';
 import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
+import { createDocumentCheckout } from './document-helpers.mjs';
 
 const root = workspaceRoot;
 const widths = [320, 390, 500, 800, 1440];
+
+test('topic footers align source links and show only explicitly curated further reading', { timeout: 60000 }, async t => {
+	const fixture = createDocumentCheckout(t);
+	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'book.json'), 'utf8'));
+	const references = [
+		{ title: 'Text spacing', url: 'https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html', description: 'Check the required user text-spacing overrides.' },
+		{ title: `Variable font axes: ${'LongUnbrokenReferenceTitle'.repeat(4)}`, url: 'https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview', description: 'Understand font-axis interpolation and how it relates to the weight specimen.' },
+	];
+	fixture.write('.github/design-system/book.json', JSON.stringify({ ...book, references: { typography: references } }));
+	const panel = await createExplorer(root, { bookRoot: fixture.bookRoot, scope: { operation: 'all', active: 'typography' } });
+	let browser;
+	try {
+		browser = await chromium.launch({ headless: true });
+		const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="typography"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		const footer = article.locator('.topic-actions');
+		const sources = footer.locator('.source-documents');
+		const reading = footer.locator('.topic-references');
+		await sources.locator('summary').focus();
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('Tab');
+		await expect(sources.getByRole('link', { name: 'Typography', exact: true })).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(sources.getByRole('link', { name: /^View source:/ })).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(reading.locator('summary')).toBeFocused();
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('Tab');
+		await expect(reading.getByRole('link', { name: /^Text spacing/ })).toBeFocused();
+		assert.deepEqual(await sources.locator('a').evaluateAll(links => links.map(link => link.textContent)), ['Typography', 'View source']);
+		assert.deepEqual(await reading.locator('li').evaluateAll(items => items.map(item => ({
+			title: item.querySelector('a').textContent, url: item.querySelector('a').href, description: item.querySelector('p').textContent,
+			target: item.querySelector('a').target, rel: item.querySelector('a').rel,
+		}))), references.map(reference => ({ ...reference, target: '_blank', rel: 'noopener noreferrer' })));
+		for (const colorScheme of ['light', 'dark']) {
+			for (const forcedColors of ['none', 'active']) {
+				await page.emulateMedia({ colorScheme, forcedColors });
+				for (const width of [320, 800, 1440]) {
+					await page.setViewportSize({ width, height: 900 });
+					assert.deepEqual(await footer.evaluate(footer => {
+						const bounds = element => element.getBoundingClientRect();
+						const items = [...footer.querySelectorAll('li')];
+						const sourceLinks = [...footer.querySelectorAll('.source-documents a')];
+						const focused = document.activeElement;
+						return {
+							disclosuresAligned: [...footer.children].every(child => Math.abs(bounds(child).left - bounds(footer).left) < 1),
+							linksAligned: items.every(item => Math.abs(bounds(item).left - bounds(items[0]).left) < 1),
+							sourceStacked: bounds(sourceLinks[1]).top >= bounds(sourceLinks[0]).bottom,
+							noOverflow: document.documentElement.scrollWidth <= innerWidth,
+							focusVisible: focused.matches(':focus-visible') && getComputedStyle(focused).outlineStyle !== 'none',
+						};
+					}), { disclosuresAligned: true, linksAligned: true, sourceStacked: true, noOverflow: true, focusVisible: true },
+					`${colorScheme}, ${forcedColors}, ${width}px`);
+				}
+			}
+		}
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(sources).toHaveAttribute('open', '');
+		await expect(reading).toHaveAttribute('open', '');
+		panel.setScope({ operation: 'all', active: 'illustration' });
+		await expect(page.locator('[data-topic="illustration"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(page.locator('[data-topic="illustration"] .topic-references')).toBeHidden();
+		await page.locator('[data-topic="illustration"] .source-documents > summary').click();
+		await expect(page.locator('[data-topic="illustration"] .source-documents a')).toHaveCount(1);
+		panel.setScope({ operation: 'all', active: 'documentation' });
+		await expect(page.locator('[data-topic="documentation"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(page.locator('[data-topic="documentation"] .topic-actions')).toBeHidden();
+		assert.deepEqual(errors, []);
+	} finally {
+		await browser?.close();
+		await panel.close();
+	}
+});
 
 test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
 	const read = file => readFileSync(path.join(root, file), 'utf8');
@@ -110,6 +189,9 @@ test('docs-style navigation separates chapters, reading, and a sticky section ou
 		const article = page.locator('[data-topic="typography"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const outline = article.getByRole('navigation', { name: 'On this page' });
+		assert.equal(await article.evaluate(article =>
+			Boolean(article.querySelector('.article-outline').compareDocumentPosition(article.querySelector('.topic-intro'))
+				& Node.DOCUMENT_POSITION_FOLLOWING)), true);
 		const geometry = () => article.evaluate(article => {
 			const bounds = selector => article.querySelector(selector).getBoundingClientRect();
 			const content = bounds('.topic-content');
@@ -699,6 +781,8 @@ test('component articles keep behavior and APIs without authoring commentary', {
 			await expect(article.locator('.component-doc-section h2')).toHaveText(['Usage', 'Accessibility', 'API']);
 			assert.ok(await article.locator('.component-api-table tbody tr').count() > 0);
 			await expect(article).not.toContainText(/not React props|new React|newly invented|This documents|primitive tag|proposed motion standard|existing fixture/);
+			await article.locator('.source-documents > summary').click();
+			await expect(article.getByRole('link', { name: /^View source:/ })).toBeVisible();
 			await expect(article.getByRole('link', { name: /^View source:/ })).not.toHaveAttribute('aria-description', /deployed product/);
 		}
 	} finally {
@@ -845,7 +929,7 @@ test('the full book browses a flat component inventory without an overview page 
 		await browse.focus();
 		await page.keyboard.press('Enter');
 		const components = page.locator('.book-panel nav > .book-group').filter({ has: page.getByText('Components', { exact: true }) });
-		assert.deepEqual(await components.getByRole('link').allTextContents(), visibleComponents.map(item => item.title));
+		assert.deepEqual(await components.getByRole('link').allTextContents(), catalog.filter(item => item.group === 'Components' && !item.hidden).map(item => item.title));
 		await expect(components.locator('h3, ul ul')).toHaveCount(0);
 		await expect(page.locator('.card, iframe, [data-topic="components"]')).toHaveCount(0);
 		assert.equal(requests.includes('/api/fixtures'), false);

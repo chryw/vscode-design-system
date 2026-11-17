@@ -48,7 +48,7 @@ export function createBookRuntime(defaultRoot, { home } = {}) {
 			if (!instance.panel && !instance.starting) {
 				instance.starting = createExplorer(root, {
 					stateStorageFactory: (checkout, repository) => new ViewStateStorage(checkout, {
-						home, view: instanceId, book: repository.projection.mode === 'basic' ? 'vscode-design-system-basic' : 'vscode-design-system',
+						home, repository, view: instanceId, book: repository.projection.mode === 'basic' ? 'vscode-design-system-basic' : 'vscode-design-system',
 					}),
 					onCheckoutSelected: checkout => selection.write(checkout),
 					scope: input.topics === undefined

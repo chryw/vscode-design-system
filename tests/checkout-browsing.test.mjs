@@ -14,6 +14,7 @@ import { readDocument } from '../runtime/headless.mjs';
 import { listCheckouts } from '../adapters/vscode/checkouts.mjs';
 import { createBookRuntime } from '../runtime/lifecycle.mjs';
 import { CheckoutStorage } from '../runtime/checkout-storage.mjs';
+import { ViewStateStorage } from '../runtime/state-storage.mjs';
 
 test('ordinary VS Code checkouts expose saved documentation without exploration metadata or tokens', async t => {
 	const fixture = createDocumentCheckout(t);
@@ -123,6 +124,8 @@ test('a curated branch can remove saved topics without preventing the same panel
 	panel.setView({ theme: 'Light 2026' }, 'motion');
 	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'book.json'), 'utf8'));
 	book.topics = book.topics.filter(topic => topic.id !== 'motion');
+	if (book.components?.after === 'motion') { book.components.after = 'tokens'; }
+	if (book.references) { delete book.references.motion; }
 	fixture.write('.github/design-system/book.json', JSON.stringify(book));
 	panel.selectCheckout({ root: fixture.root });
 	const checkouts = await (await fetch(new URL('/api/checkouts', panel.url))).json();
@@ -142,5 +145,90 @@ test('plugin packaging declares a native canvas entry without copying product co
 		name: manifest.name, extensions: manifest.extensions, version: manifest.version,
 		entry: readFileSync(new URL('extensions/vscode-design-system/extension.mjs', root), 'utf8').includes("import '../../extension.mjs'"),
 		release: marketplace.plugins[0].version,
-	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.2.0', entry: true, release: manifest.version });
+	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.3.0', entry: true, release: manifest.version });
+});
+
+test('same-checkout catalog refresh preserves navigation, adopts additions and moves, and rejects broken candidates transactionally', async t => {
+	const fixture = createDocumentCheckout(t);
+	const manifest = '.github/design-system/book.json';
+	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
+	const topic = id => ({
+		id, title: id, section: id, group: 'Guidance', aliases: [`old-${id}`],
+		renderer: 'guidance', page: `pages/${id}.json`, compare: true, fixture: false,
+	});
+	const writeTopic = (id, source, copy) => {
+		fixture.write(source, `# ${id}\n\n## Introduction\n\n${copy}\n\n## Usage\n\n${copy}\n`);
+		fixture.write(`.github/design-system/pages/${id}.json`, JSON.stringify({
+			version: 1, id, renderer: 'guidance', source, content: {},
+			sections: [{ id: `${id}-usage`, key: 'usage', heading: 'Usage' }],
+		}));
+	};
+	writeTopic('routing-study', 'src/vs/feature/routing.md', 'First saved source.');
+	const selectedBook = { ...book, components: undefined, references: {}, defaultTopic: 'routing-study', topics: [topic('routing-study')] };
+	fixture.write(manifest, JSON.stringify(selectedBook));
+	const storage = new ViewStateStorage(fixture.root, { home: path.join(fixture.root, 'private-home'), view: 'routing-test' });
+	const panel = await createExplorer(fixture.root, { stateStorage: storage, watchCheckout: false });
+	t.after(() => panel.close());
+	panel.setScope({ topics: ['old-routing-study'], active: 'old-routing-study' });
+	panel.setView({ theme: 'Light 2026', anchor: 'routing-study-usage' });
+	const before = panel.state;
+	const origin = new URL(panel.url).origin;
+	const first = await panel.inspectTopic('old-routing-study', true);
+	writeTopic('routing-study', 'src/vs/feature/relocated.md', 'Moved and updated source.');
+	rmSync(path.join(fixture.root, 'src/vs/feature/routing.md'));
+	await panel.refreshTopic();
+	const moved = await panel.inspectTopic(undefined, true);
+	writeTopic('second-study', 'src/vs/feature/second.md', 'New topic source.');
+	fixture.write(manifest, JSON.stringify({ ...selectedBook, topics: [...selectedBook.topics, topic('second-study')] }));
+	const oldStore = panel.store;
+	panel.selectCheckout({ root: fixture.root });
+	assert.deepEqual({
+		first: first.data.authored.sections.usage.description.trim(),
+		moved: moved.data.authored.sections.usage.description.trim(),
+		state: panel.state, origin: new URL(panel.url).origin, oldClosed: oldStore.closed,
+		newTopic: (await panel.inspectTopic('old-second-study', true)).data.authored.intro.trim(),
+	}, {
+		first: 'First saved source.', moved: 'Moved and updated source.', state: before, origin, oldClosed: true, newTopic: 'New topic source.',
+	});
+	panel.setScope({ operation: 'add', topics: ['second-study'], layout: 'compare' });
+	const beforeInvalid = panel.state;
+	const goodStore = panel.store;
+	fixture.write(manifest, JSON.stringify({ ...selectedBook, topics: [topic('routing-study'), { ...topic('second-study'), renderer: 'motion' }] }));
+	assert.throws(() => panel.selectCheckout({ root: fixture.root }), /Invalid book topic/);
+	assert.deepEqual({ state: panel.state, sameStore: panel.store === goodStore, closed: goodStore.closed },
+		{ state: beforeInvalid, sameStore: true, closed: false });
+	fixture.write(manifest, JSON.stringify({ ...selectedBook, defaultTopic: 'second-study', topics: [topic('second-study')] }));
+	panel.selectCheckout({ root: fixture.root });
+	assert.deepEqual(panel.state.scope, { mode: 'focused', topics: ['second-study'], active: 'second-study', layout: 'single' });
+	panel.setView({ theme: 'Dark 2026' });
+	assert.deepEqual(new ViewStateStorage(fixture.root, { home: path.join(fixture.root, 'private-home'), view: 'routing-test' }).read().state.scope,
+		panel.state.scope);
+});
+
+test('catalog rejects ambiguous topic routes and renderer contracts before serving content', t => {
+	const fixture = createDocumentCheckout(t);
+	const manifest = '.github/design-system/book.json';
+	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
+	const topic = { id: 'routing-study', section: 'routing-study', group: 'Guidance', title: 'Routing study',
+		renderer: 'guidance', aliases: ['previous-study'], page: 'pages/routing-study.json', fixture: false, compare: true };
+	const writeTopics = topics => fixture.write(manifest, JSON.stringify({
+		...book, components: undefined, references: {}, defaultTopic: 'routing-study', topics,
+	}));
+	writeTopics([topic]);
+	const repository = readRepository(fixture.root);
+	assert.deepEqual({
+		alias: repository.getTopic('previous-study').id,
+		route: repository.topicId({ section: 'previous-study' }),
+		scope: repository.validateScope({ topics: ['previous-study'], active: 'previous-study' }).active,
+	}, { alias: topic.id, route: topic.id, scope: topic.id });
+	for (const change of [{ section: 'another-section' }, { renderer: 'motion' }, { renderer: 'unknown' }]) {
+		writeTopics([{ ...topic, ...change }]);
+		assert.throws(() => readRepository(fixture.root), /Invalid book topic/);
+	}
+	writeTopics([topic, { ...topic, id: 'previous-study', section: 'previous-study', aliases: [] }]);
+	assert.throws(() => readRepository(fixture.root), /Conflicting topic alias/);
+	writeTopics([topic, { ...topic, id: 'second-study', section: 'second-study' }]);
+	assert.throws(() => readRepository(fixture.root), /Conflicting topic alias/);
+	writeTopics([{ ...topic, aliases: ['components'] }]);
+	assert.throws(() => readRepository(fixture.root), /Conflicting topic alias/);
 });

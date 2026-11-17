@@ -20,16 +20,20 @@ export function copilotHome() {
 }
 
 export class ViewStateStorage {
-	constructor(checkout, { home = copilotHome(), book = bookId, view } = {}) {
+	constructor(checkout, { home = copilotHome(), book = bookId, view, repository = readRepository(checkout) } = {}) {
 		if (view !== undefined && (typeof view !== 'string' || !view || view.length > 512)) {
 			throw new Error('Invalid saved book view identity');
 		}
 		this.identity = { checkout: realpathSync(checkout), book, ...(view === undefined ? {} : { view }) };
-		this.repository = readRepository(checkout);
+		this.home = home;
+		this.repository = repository;
 		this.directory = path.join(home, 'extension-data', bookId);
 		const key = createHash('sha256').update(JSON.stringify(this.identity)).digest('hex');
 		this.file = path.join(this.directory, `${key}.json`);
 		this.lock = `${this.file}.lock`;
+	}
+	withRepository(repository) {
+		return new ViewStateStorage(this.identity.checkout, { home: this.home, book: this.identity.book, view: this.identity.view, repository });
 	}
 	read() {
 		try {

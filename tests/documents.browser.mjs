@@ -52,7 +52,7 @@ test('documents share the chapter title, introduction and outline order without 
 					const intro = article.querySelector('.topic-intro');
 					const outline = article.querySelector('.article-outline');
 					const body = article.querySelector('.topic-content');
-					const order = [metadata, title, ...(intro.hidden ? [] : [intro]), outline, body];
+					const order = [metadata, title, outline, ...(intro.hidden ? [] : [intro]), body];
 					return order.every((element, index) => !index || Boolean(order[index - 1].compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING))
 						&& metadata.getBoundingClientRect().left === title.getBoundingClientRect().left
 						&& document.documentElement.scrollWidth <= innerWidth;
@@ -253,9 +253,11 @@ test('canonical token guidance is self-contained with optional source access mat
 		await expect(guidance.getByRole('heading', { name: 'Using tokens', exact: true })).toBeVisible();
 		await expect(guidance).toContainText('Structural measurements are not automatically design tokens.');
 		await expect(guidance.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(0);
-		await page.locator('.source-documents > summary').focus();
+		await page.getByRole('navigation', { name: 'Book tools', exact: true }).getByRole('link', { name: 'Source library', exact: true }).focus();
 		await page.keyboard.press('Enter');
-		await page.locator('.source-documents').getByRole('link', { name: 'Design-token usage in CSS', exact: true }).click();
+		await page.getByRole('searchbox', { name: 'Search sources', exact: true }).fill('Design-token usage in CSS');
+		await page.getByRole('searchbox', { name: 'Search sources', exact: true }).press('Enter');
+		await page.getByRole('link', { name: 'Design-token usage in CSS', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Design-token usage in CSS', level: 1, exact: true })).toBeVisible();
 		await page.getByRole('navigation', { name: 'On this page', exact: true }).getByRole('link', { name: 'Choose by role', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Choose by role', exact: true })).toBeFocused();

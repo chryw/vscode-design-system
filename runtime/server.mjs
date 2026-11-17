@@ -153,18 +153,21 @@ export async function createExplorer(root, options = {}) {
 		const nextRepository = readRepository(nextRoot, { bookRoot: nextBookRoot });
 		const nextContent = contentAssets(nextBookRoot);
 		const nextRevision = checkoutRevision(nextRoot);
-		const nextStorage = options.stateStorageFactory?.(nextRoot, nextRepository);
+		const sameBook = nextRoot === canonical && nextRepository.projection.mode === repository.projection.mode;
+		const nextStorage = options.stateStorageFactory?.(nextRoot, nextRepository)
+			?? (sameBook ? storage?.withRepository?.(nextRepository) ?? storage : undefined);
 		const nextRestored = nextStorage?.read();
 		const nextSaved = nextRestored?.state;
 		const available = new Set(nextRepository.catalog.map(topic => topic.id));
 		const active = available.has(scope.active) ? scope.active : nextRepository.projection.book.defaultTopic;
-		const nextState = validateState(nextSaved ?? {
+		const nextState = validateState(sameBook ? state() : nextSaved ?? {
 			scope: nextRepository.validateScope({ operation: 'all', active, layout: 'single' }),
 			views: Object.fromEntries([...views].filter(([id]) => available.has(id)).map(([id, value]) => [id, {
 				...value, section: nextRepository.getTopic(id).section, controlId: nextRepository.getTopic(id).controlId ?? '',
 				documentId: '', documentScope: '', anchor: '', documentOffset: 0,
 			}])),
-		}, nextRepository);
+		}, nextRepository, { previousTopics: sameBook ? catalog.map(topic => topic.id) : undefined });
+		const nextUnavailableTopics = sameBook ? catalog.filter(topic => !available.has(topic.id)).map(topic => topic.id) : nextRestored?.unavailableTopics ?? [];
 		const nextStore = createStore(nextRoot, nextRepository, nextBookRoot);
 		try {
 			nextStore.setSubscribed(nextRepository.visibleTopicIds(nextState.scope));
@@ -187,7 +190,7 @@ export async function createExplorer(root, options = {}) {
 		book = repository.projection.book;
 		content = nextContent;
 		storage = nextStorage;
-		unavailableTopics = nextRestored?.unavailableTopics ?? [];
+		unavailableTopics = nextUnavailableTopics;
 		store = nextStore;
 		revision = nextRevision;
 		scope = nextState.scope;

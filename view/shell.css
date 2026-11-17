@@ -6,12 +6,12 @@ body { margin: 0; }
 .explorer-heading { overflow-wrap: anywhere; }
 .explorer-heading > div { min-width: 0; }
 .book-title { font-size: 15px; font-weight: 600; }
-.checkout-details { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.checkout-details { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-top: 4px; font-size: 11px; color: var(--muted); }
 .checkout-details p { max-width: 90ch; }
 .checkout-details button { padding: 2px 6px; font-size: 12px; flex-shrink: 0; }
 .checkout-details details { min-width: 0; max-width: 100%; }
 .checkout-details summary { cursor: pointer; }
-#checkout-form { display: grid; gap: 8px; padding-block: 12px; max-width: 65ch; }
+#checkout-form { position: absolute; z-index: 3; inset-block-start: calc(100% + 8px); inset-inline-start: 0; display: grid; gap: 8px; width: min(520px, calc(100vw - 48px)); max-height: 60dvh; overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: var(--outer-radius); background: var(--page); color: var(--ink); }
 #checkout-form select, #checkout-form input { min-width: 0; width: 100%; box-sizing: border-box; }
 #checkout-form button { justify-self: start; }
 #checkout-form [hidden] { display: none; }
@@ -34,8 +34,12 @@ body { margin: 0; }
 	}
 	main.design-reference { min-width: 0; max-width: 1280px; padding: 0; }
 	.evidence-key { color: var(--muted); font-size: 11px; }
-	.topic-actions { font-size: var(--book-detail-size); padding-top: 24px; border-top: 1px solid var(--line); }
-	.topic-actions:has(> [hidden]:only-child) { display: none; }
+	.topic-actions { display: grid; gap: 16px; font-size: var(--book-detail-size); padding-top: 24px; border-top: 1px solid var(--line); }
+	.topic-actions > details { min-width: 0; }
+	.topic-actions ul { display: grid; gap: 12px; list-style: none; padding-inline-start: 16px; margin-block: 12px 0; }
+	.topic-actions li { min-width: 0; overflow-wrap: anywhere; }
+	.topic-actions .source-action { font-size: inherit; }
+	.topic-actions li p { margin-top: 4px; max-width: var(--article-measure); }
 	.topic-metadata { display: grid; gap: 8px; margin-bottom: 16px; font-size: var(--book-detail-size); }
 	.topic-metadata pre { max-height: 30dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 	.topic-context {

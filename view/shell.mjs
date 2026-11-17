@@ -10,7 +10,7 @@ import { createBookNavigation } from './book-navigation.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { documentURL } from './documents.mjs';
 import { setRepository } from './context.mjs';
-import { bookNavigation } from '../model/catalog.mjs';
+import { bookNavigation, UnknownTopicError } from '../model/catalog.mjs';
 
 const lifetime = new AbortController();
 const panes = new Map();
@@ -124,7 +124,15 @@ function syncArticleLinks(element) {
 		if (link.getAttribute('href').startsWith('#')) { continue; }
 		const url = new URL(link.href);
 		if (url.origin !== location.origin || url.pathname !== '/' || !url.searchParams.has('section')) { continue; }
-		const id = topicId(Object.fromEntries(url.searchParams));
+		let id;
+		try { id = topicId(Object.fromEntries(url.searchParams)); }
+		catch (error) {
+			if (!(error instanceof UnknownTopicError)) { throw error; }
+			const unavailable = node('span', `${link.textContent} (topic unavailable in this checkout)`);
+			unavailable.title = error.message;
+			link.replaceWith(unavailable);
+			continue;
+		}
 		url.searchParams.set('mode', state.scope.mode);
 		url.searchParams.set('topics', state.scope.mode === 'all' ? state.scope.topics.join(',') : id);
 		url.searchParams.set('layout', 'single');

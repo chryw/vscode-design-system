@@ -54,7 +54,6 @@ export function mountReference(root, props, host) {
 	let snapshot;
 	let query = props.query;
 	let reloading = false;
-	let sourceAction;
 	let anchorShown = false;
 	const groupOpen = new Map();
 	const previewState = new Map();
@@ -68,17 +67,18 @@ export function mountReference(root, props, host) {
 	const heading = node('h1');
 	const guidance = node('div', undefined, 'topic-intro');
 	let metadata;
-	const actions = node('footer', undefined, 'tools topic-actions');
+	const actions = node('footer', undefined, 'topic-actions');
 	const sourceDocuments = node('details', undefined, 'source-documents');
-	sourceDocuments.hidden = true;
-	actions.append(sourceDocuments);
+	const references = node('details', undefined, 'topic-references');
+	actions.hidden = true;
+	actions.append(sourceDocuments, references);
 	const outline = node('nav', undefined, 'article-outline');
 	outline.setAttribute('aria-label', 'On this page');
 	outline.hidden = true;
 	const header = node('div', undefined, 'topic-heading');
 	header.append(heading);
 	const context = node('div', undefined, 'topic-context');
-	context.append(header, guidance, outline);
+	context.append(header, outline, guidance);
 	root.replaceChildren(context, problem, content, actions, status);
 	const measureContext = () => {
 		const height = context.getBoundingClientRect().height;
@@ -236,31 +236,41 @@ export function mountReference(root, props, host) {
 			}
 			const unavailable = props.section === 'components' && system.controls[0].content === 'tbd';
 			guidance.hidden = unavailable || !guidance.hasChildNodes();
-			if (!unavailable && !['colors', 'spacing'].includes(props.section) && policy.source && system.sourceFiles.includes(policy.source.file)) {
-				const source = sourceLink(policy.source, 'View source');
-				if (sourceAction) {
-					sourceAction.replaceWith(source);
-				} else {
-					actions.append(source);
-				}
-				sourceAction = source;
-			} else if (sourceAction) {
-				sourceAction.remove();
-				sourceAction = undefined;
-			}
 			sourceDocuments.replaceChildren();
-			sourceDocuments.hidden = !system.sourceDocuments?.length;
-			if (!sourceDocuments.hidden) {
-				sourceDocuments.append(node('summary', 'Source documents'));
-				const list = node('ul');
-				for (const document of system.sourceDocuments) {
-					const item = node('li');
-					const link = node('a', document.title);
-					link.href = documentURL(document.id);
-					item.append(link); list.append(item);
-				}
-				sourceDocuments.append(list);
+			const sourceList = node('ul');
+			const primary = system.primarySourceDocument;
+			if (primary) {
+				const item = node('li');
+				const link = node('a', primary.title);
+				link.href = documentURL(primary.id);
+				item.append(link);
+				sourceList.append(item);
 			}
+			if (!unavailable && !['colors', 'spacing'].includes(props.section) && policy.source
+				&& policy.source.file !== primary?.source.file && system.sourceFiles.includes(policy.source.file)) {
+				const item = node('li');
+				item.append(sourceLink(policy.source, 'View source'));
+				sourceList.append(item);
+			}
+			sourceDocuments.hidden = !sourceList.hasChildNodes();
+			if (!sourceDocuments.hidden) { sourceDocuments.append(node('summary', 'Sources'), sourceList); }
+			references.replaceChildren();
+			references.hidden = !system.topicReferences?.length;
+			if (!references.hidden) {
+				const list = node('ul');
+				for (const reference of system.topicReferences) {
+					const item = node('li');
+					const link = node('a', reference.title);
+					link.href = reference.url;
+					link.target = '_blank';
+					link.rel = 'noopener noreferrer';
+					link.setAttribute('aria-label', `${reference.title} (opens in a new tab)`);
+					item.append(link, node('p', reference.description, 'muted'));
+					list.append(item);
+				}
+				references.append(node('summary', 'Further reading'), list);
+			}
+			actions.hidden = sourceDocuments.hidden && references.hidden;
 			measureContext();
 			showAnchor();
 			host.onSnapshot(system);

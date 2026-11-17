@@ -138,6 +138,8 @@ test('catalog and scope validation are metadata-only, bounded and exact', async 
 			utilities: ['documentation'], groupedLibrary: false, headless: 'utility', defaultPlacement: 'topic',
 		});
 		const book = readBook(path.join(root, '.github/design-system'));
+		assert.ok(topics.findLastIndex(topic => topic.group === 'Foundations') < topics.findIndex(topic => topic.group === 'Components'),
+			'Read the complete foundation sequence before component references');
 		for (const navigation of ['unknown', false, null]) {
 			assert.throws(() => validateBook({ ...book, topics: book.topics.map((topic, index) => index ? topic : { ...topic, navigation }) }), /topic/);
 		}
@@ -186,6 +188,30 @@ test('each checkout supplies its own catalog and viewer projection without a pac
 	} finally { await basic.close(); }
 });
 
+test('topic references are explicit, ordered and validated for authored and generated topics', t => {
+	const fixture = createDocumentCheckout(t);
+	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'book.json'), 'utf8'));
+	const first = { title: 'Text spacing', url: 'https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html', description: 'Check the required user text-spacing overrides.' };
+	const second = { title: 'Variable fonts', url: 'https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview', description: 'Understand font-axis interpolation.' };
+	const list = references => {
+		fixture.write('.github/design-system/book.json', JSON.stringify({ ...book, references }));
+		return listTopics(fixture.root).topics;
+	};
+	const topics = list({ typography: [second, first], 'component-button': [first] });
+	assert.deepEqual(['typography', 'component-button', 'spacing'].map(id => topics.find(topic => topic.id === id).references),
+		[[second, first], [first], []]);
+	for (const references of [
+		null, [], { typography: null }, { typography: [null] }, { typography: [{ ...first, description: ' ' }] },
+		{ typography: [{ ...first, extra: true }] }, { typography: [{ ...first, url: 'not a URL' }] },
+		{ typography: [{ ...first, url: 'javascript:alert(1)' }] }, { typography: [{ ...first, url: 'http://example.com' }] },
+		{ typography: [{ ...first, url: 'https://user:password@example.com' }] },
+		{ typography: [first, { ...first, url: first.url.replace('www.w3.org', 'WWW.W3.ORG:443') }] },
+		{ 'component-no-such-topic': [first] },
+	]) {
+		assert.throws(() => list(references), /reference/i);
+	}
+});
+
 test('Typography excludes unrelated readers, Spacing reuses registrations, all stays lazy', async () => {
 	const store = new TopicStore(root);
 	try {
@@ -195,6 +221,14 @@ test('Typography excludes unrelated readers, Spacing reuses registrations, all s
 		assert.equal(store.metrics.parses.sizes, 1);
 		assert.ok(reads.every(file => !file.startsWith('extensions/') && !/codiconsLibrary|componentFixtures|button\.ts|switch\.css/.test(file)));
 		assert.deepEqual(Object.keys(store.metrics.parses).sort(), ['guidance', 'sizes', 'sourceDocuments', 'typography']);
+		assert.deepEqual({
+			primary: typography.data.primarySourceDocument.id,
+			provenanceRetained: typography.data.sourceDocuments.length > 1 && typography.data.sourceDocuments.every(document =>
+				typography.data.resources.guidance.some(resource => resource.file === document.id)),
+		}, {
+			primary: 'src/vs/platform/theme/common/sizes/typography.design.md',
+			provenanceRetained: true,
+		});
 		assert.equal(store.documentLibrary, undefined);
 		store.setSubscribed(['typography', 'spacing']);
 		const spacing = await store.read('spacing', settings);

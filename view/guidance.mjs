@@ -6,8 +6,9 @@
 import {node,example} from './ui.mjs';
 import {chapterContent, sectionContent} from './page-content.mjs';
 import {markdown} from './markdown.mjs';
+import { documentMarkup } from './documents.mjs';
 
-export function renderSimplePage(content, system) {
+export function renderSimplePage(content, system, host) {
 	const page = system.view.section;
 	if (page === 'patterns') {
 		for (const document of system.documents[page]) { content.append(markdown(document.text, 2)); }
@@ -42,7 +43,18 @@ export function renderSimplePage(content, system) {
 		return content.children.length;
 	}
 	if (page !== 'principles') {
-		if (system.sourceSections?.length) { return system.sourceSections.length; }
+		const sections = Object.values(chapterContent(system).sections);
+		for (const section of sections) {
+			const element = node('section');
+			element.append(node('h2', section.title), node('p', section.description, 'muted'));
+			for (const paragraph of section.paragraphs) {
+				element.append(documentMarkup({ id: system.authored.markdownSource, markdown: paragraph }, {
+					level: 3, resolveResource: host?.documentResource,
+				}));
+			}
+			content.append(element);
+		}
+		if (sections.length || system.sourceSections?.length) { return sections.length + (system.sourceSections?.length ?? 0); }
 		content.append(node('p', 'Documentation and examples are not available yet.', 'reference-empty'));
 		return 0;
 	}

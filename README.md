@@ -2,72 +2,100 @@
 
 Browse design guidance from your current VS Code checkout, or choose another local clone or worktree. The viewer is an independent Copilot plugin. The [`chryw/design-system-exploration` branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration) provides the full curated book, token references, and live examples; other branches provide a source library without requiring exploration metadata.
 
+The viewer and the content update separately: plugin updates change the browsing UI; your selected checkout supplies the guidance, tokens, styles, and examples. This is a local viewer, not a hosted website.
+
+## Quick setup with an agent
+
+Open a chat in the VS Code checkout you want to browse and paste:
+
+> Set up or update https://github.com/chryw/vscode-design-system for this checkout, following its README and AGENTS.md. Use the native plugin manager where supported and open the canvas in this session, reusing its existing panel here; otherwise use the documented browser route. Do not pull or switch my product branch. For native canvas setup, verify the loaded provider comes from the installed plugin. Confirm the selected checkout and open a source document before finishing.
+
+For a different content checkout, add its absolute path to the prompt. [AGENTS.md](AGENTS.md) provides the setup and verification workflow.
+
 ## Install the canvas plugin
 
-In a Copilot client with plugin and canvas support, register this marketplace and install the plugin once:
+Use a Copilot client with plugin and canvas extension support. The commands below use the Copilot CLI; run them in the environment used by your Copilot session. If your client does not support canvases, use the [browser route](#browser-and-source-development).
+
+**1. Install once**
+
+Previously used the workspace installer? First follow the [migration steps](docs/setup.md#move-from-a-workspace-installation-to-the-plugin): preserve local edits and disable the old workspace provider before enabling the plugin. Keep only one active provider.
 
 ```sh
 copilot plugin marketplace add chryw/vscode-design-system
 copilot plugin install vscode-design-system@vscode-design-system
 ```
 
-The native manager owns viewer updates and honors its automatic-update settings. No viewer clone or per-worktree reinstall is needed. Plugin releases never pull, switch, or modify your product checkout.
+No viewer clone or per-worktree reinstall is needed.
 
-Open your VS Code checkout in a supported Copilot session and ask:
+**2. Open the canvas**
 
-> Open the design-system canvas for this checkout, reusing its existing panel if one exists.
+Open your VS Code checkout in a supported Copilot session, then ask:
 
-Use **Change checkout** to select another local worktree or enter a clone's path. The same panel follows saved changes and external branch changes. To browse a different branch without disrupting your current work, select a worktree already on that branch. The canvas does not switch branches or create worktrees.
+> Open the design-system canvas for this checkout in this session using the installed plugin. Reuse `design-book` in this chat; if none exists here, open `vscode-design-system` with that instance ID and this checkout's absolute path as `root`.
 
-If you previously used the workspace installer, follow the [migration steps](docs/setup.md#move-from-a-workspace-installation-to-the-plugin) to avoid duplicate providers.
+The plugin is installed once, but panels belong to their chat. Another session in the same worktree can open its own panel without reinstalling the plugin or returning to an older chat. Reuse the same panel for topics and refreshes within each chat.
+
+If the plugin is installed but not discovered in an existing chat, ask Copilot to reload extension providers and inspect the loaded source. Native installation should load `plugin:vscode-design-system:vscode-design-system`, not `project:vscode-design-system`. Installation and activation are separate: an existing chat may retain its previous discovery state after a reload. If so, use the client's supported customization refresh or a new supported session and verify again before retiring the old installation.
+
+If opening reports that `design-book` is already owned by a different canvas, that chat still has a legacy-provider binding. Use the host's **Close Canvas** action on its old panel before reopening from the plugin. This does not block opening in another session; see [session and migration guidance](docs/setup.md#keep-one-current-book).
+
+## Browse content from a checkout
+
+- **Current checkout:** the canvas starts from the session's workspace. A previously selected checkout is restored when you reopen the same panel; check the header to confirm what you are browsing.
+- **Another checkout:** choose **Change checkout**, select a local worktree, or choose **Other checkout…** and enter an absolute clone/worktree path. Select **Browse checkout** to switch content in the same panel.
+- **Another branch:** select a worktree already on that branch. The canvas never pulls, switches branches, or creates worktrees. If you change branches externally, it reloads the checkout's catalog.
+- **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; use **Refresh topic** to reread the active topic. Uncommitted catalog or fixture-binding changes require a provider reload.
+
+A checkout with `.github/design-system/book.json` provides curated topics; the exploration branch contains the full book. A checkout without it provides **Source library** for local product Markdown, instructions, skills, and available design guidance. It does not borrow missing content from another branch. Malformed or incompatible sources report errors.
+
+Basic source browsing needs no product build or dependency installation. Some curated readers need checkout dependencies; live examples also need prepared client output. Follow the selected checkout's setup instructions, restoring dependencies only if needed, then run `pnpm run build-fast --client-only` there for live examples. See [requirements](docs/setup.md#requirements) for Node.js and pnpm versions.
+
+## Get updates
+
+**Native plugin:** the native manager handles automatic updates where enabled by your client and policy. To request an update manually:
+
+```sh
+copilot plugin update vscode-design-system@vscode-design-system
+```
+
+If the running canvas still shows the old viewer, ask Copilot to reload extension providers and verify the loaded plugin source before reopening the same panel, preserving its checkout and view. A successful update command alone does not establish that an existing chat has activated it.
+
+**Browser/source checkout:** run `git pull --ff-only` in the viewer clone, then restart its serving command.
+
+**Legacy workspace copy:** pull the viewer clone, run the [workspace update command](#legacy-workspace-installation), then reload providers and reopen the same panel.
+
+**Design-system content:** update the selected product checkout separately through your normal Git workflow, or select a different prepared worktree. A plugin update does not fetch newer product content.
 
 ## Browser and source development
 
-You'll need Git, Node.js, and pnpm. See [setup details](docs/setup.md#requirements) for versions.
-
-**1. Get the viewer and the content**
+Use this route if your client cannot render canvases, or when developing the viewer. You'll need Git and the Node.js version required by the selected checkout.
 
 ```sh
 git clone https://github.com/chryw/vscode-design-system.git
-git clone --branch chryw/design-system-exploration --single-branch https://github.com/microsoft/vscode.git vscode-design-exploration
+cd vscode-design-system
+node scripts/book.mjs serve --root /absolute/path/to/vscode-checkout
 ```
 
-**2. Prepare and open the book**
-
-```sh
-cd vscode-design-exploration
-pnpm install
-pnpm run build-fast --client-only
-node ../vscode-design-system/scripts/book.mjs serve --root .
-```
-
-Open the URL printed in your terminal. Keep the terminal running while you browse; press **Ctrl+C** to stop.
-
-Already have a prepared VS Code checkout? [Use it instead](docs/setup.md#use-an-existing-checkout).
+Keep the viewer clone separate from the product checkout. Open the URL printed in the terminal; keep the server running while you browse and press **Ctrl+C** to stop. The same **Change checkout** control works in the browser. Preparing live examples is optional; see [browsing requirements](#browse-content-from-a-checkout).
 
 ## Legacy workspace installation
 
-For development or clients without native plugin installation, run this from the selected VS Code checkout:
+For development or clients that support workspace canvases but not native plugins, run from a separate viewer clone:
 
 ```sh
-node ../vscode-design-system/scripts/install.mjs --workspace .
+node scripts/install.mjs --workspace /absolute/path/to/vscode-checkout
 ```
 
-This installs the canvas into that checkout's `.github/extensions/vscode-design-system/` directory, which is locally ignored by Git. Keep the viewer clone separate.
+This copies the viewer into that checkout's locally ignored `.github/extensions/vscode-design-system/` directory. Open that checkout in your Copilot session, reload providers if needed, and use the [canvas-opening prompt](#install-the-canvas-plugin).
 
-Open that checkout in VS Code or the Agents window, then ask Copilot:
+To update an existing managed workspace copy, run from the viewer clone:
 
-> Reuse this worktree's existing `vscode-design-system` canvas in its owning chat and refresh it. If none exists, open it once with instance ID `design-book` for this checkout.
+```sh
+git pull --ff-only
+node scripts/install.mjs --workspace /absolute/path/to/vscode-checkout --update
+```
 
-Keep [one current book](docs/setup.md#keep-one-current-book) across chats and sessions; changing topics or updating the viewer should not create more canvases.
-
-## Let an agent handle setup
-
-Paste this into your agent chat:
-
-> Install and open https://github.com/chryw/vscode-design-system.
-
-[AGENTS.md](AGENTS.md) provides the agent setup workflow.
+Reload extension providers and reopen the same panel afterward. The installer refuses to overwrite locally changed or unmanaged installations; preserve those edits before retrying. Keep [one current book](docs/setup.md#keep-one-current-book) rather than creating replacement panels.
 
 ## Working on the design system
 

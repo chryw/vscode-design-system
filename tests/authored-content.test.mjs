@@ -27,13 +27,13 @@ const amend = (file, transform) => candidate => candidate === file ? transform(r
 
 test('the manifest preserves every original visible and archived topic and binds each to a real page', () => {
 	// Reading order can change without changing topic identities or deep links.
-	const originalSemantics = book.topics.filter(topic => topic.id !== 'illustration').map(({ page, renderer, ...topic }) => topic).sort((a, b) => a.id.localeCompare(b.id));
+	const originalSemantics = book.topics.filter(topic => !['illustration', 'modal'].includes(topic.id)).map(({ page, renderer, ...topic }) => topic).sort((a, b) => a.id.localeCompare(b.id));
 	assert.deepEqual({
 		title: book.title, defaultTopic: book.defaultTopic, topics: catalog.length,
 		visible: catalog.filter(topic => !topic.hidden).length,
 		semantics: createHash('sha256').update(JSON.stringify(originalSemantics)).digest('hex'),
 	}, {
-		title: 'Visual Studio Code Design System', defaultTopic: 'principles', topics: 159, visible: 50,
+		title: 'Visual Studio Code Design System', defaultTopic: 'principles', topics: 160, visible: 51,
 		semantics: '148614f227d1af23218b988ce282bf6d539daa85e0b6d2a8b19715d30d686c4e',
 	});
 	for (const entry of catalog) {
@@ -108,7 +108,7 @@ test('guidance-only chapters project authored sections and saved source edits wi
 });
 
 test('elevation guidance and scenario captions come from the owning document and reject incomplete composition', () => {
-	const file = 'src/vs/platform/theme/common/elevation.design.md';
+	const file = '.github/design-system/guidance/elevation.design.md';
 	const updated = readPage(amend(file, text => text.replace(
 		'The editor leads; navigation and tools support it without becoming independent floating layers.',
 		'Changed relationship caption.',

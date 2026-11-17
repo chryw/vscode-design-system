@@ -59,6 +59,7 @@ export async function readTopic(store, id, settings) {
 	const data = {
 		sections, sizes: [], colors: [], themes: [], themeGallery: [], icons: [], motion: [],
 		catalog: store.repository.catalog, repositoryReferences: projection.references, referenceExpectations: projection.expectations,
+		topicReferences: entry.references,
 		typography: { tokens: [], families: [] }, elevation: { cssShadows: [], shadowUsage: [] },
 		documents: {}, controls: [], theme: { id: settings.theme }, chain: [],
 		view: { section, controlId: entry.controlId ?? '', ...settings }, controlGaps: [],
@@ -109,6 +110,7 @@ export async function readTopic(store, id, settings) {
 	const sourceDocuments = [...new Set(dependencies.flatMap(item => item.files))].filter(file => file.endsWith('.md'))
 		.sort((a, b) => Number(b === primarySource) - Number(a === primarySource));
 	if (section !== 'documentation') { Object.assign(data, await use('sourceDocuments', [sourceDocuments])); }
+	data.primarySourceDocument = data.sourceDocuments?.find(document => document.id === primarySource);
 	data.sourceFiles = [...new Set(dependencies.flatMap(item => item.files))];
 	if (data.library?.document) { data.sourceFiles.push(data.library.document.source.file); }
 	data.reference = createReferenceModel(data, ['components', 'tokens', 'accessibility', 'content', 'patterns', 'documentation'].includes(section) ? [] : [section]);

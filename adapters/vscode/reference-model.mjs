@@ -98,6 +98,20 @@ export function createReferenceModel(system, selected) {
 		],
 	};
 	const assessments = (selected ?? Object.keys(topics)).map(id => {
+		if (!Object.hasOwn(topics, id)) {
+			const source = system.authored?.markdownSource;
+			if (system.page?.id !== id || system.page.renderer !== 'guidance'
+				|| system.authored?.status !== 'book-authored' || typeof source !== 'string'
+				|| !system.sourceFiles.includes(source)) {
+				throw new Error(`Unsupported reference assessment topic: ${id}`);
+			}
+			return [id, [{
+				expected: 'Authored guidance',
+				status: 'not-assessed',
+				summary: 'This topic provides authored guidance. Product-wide implementation and adoption have not been assessed.',
+				scope: [source],
+			}]];
+		}
 		const assessment = (expected, status, scope, variant = status) => {
 			const summary = system.referenceNotes?.[id]?.[expected]?.[variant];
 			if (typeof summary !== 'string' || !summary) { throw new Error(`Missing source coverage note: ${id}, ${expected}, ${variant}`); }

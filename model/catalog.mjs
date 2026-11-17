@@ -8,6 +8,43 @@ const renderers = Object.freeze({
 	foundations: 'topics/foundations.mjs', theming: 'topics/theming.mjs', icons: 'topics/icons.mjs',
 	motion: 'topics/motion.mjs', tokens: 'topics/tokens.mjs', components: 'topics/components.mjs', documents: 'topics/documents.mjs',
 });
+const sectionRenderers = {
+	typography: ['typography'], foundations: ['layout', 'spacing', 'shape', 'size', 'stroke', 'colors', 'elevation'],
+	theming: ['theming'], icons: ['iconography'], motion: ['motion'], tokens: ['tokens'],
+	components: ['components'], documents: ['documentation'],
+};
+
+export class UnknownTopicError extends Error { }
+
+function validateReferences(book) {
+	const references = book.references === undefined ? {} : book.references;
+	if (!references || typeof references !== 'object' || Array.isArray(references)) {
+		throw new Error('Invalid book references');
+	}
+	for (const [id, entries] of Object.entries(references)) {
+		if (!/^[a-z][a-z0-9-]*$/.test(id) || !book.components && !book.topics.some(topic => topic.id === id)) {
+			throw new Error(`Unknown reference topic: ${id}`);
+		}
+		if (!Array.isArray(entries)) { throw new Error(`Invalid references for topic: ${id}`); }
+		const targets = new Set();
+		for (const entry of entries) {
+			if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+				|| Object.keys(entry).some(key => !['title', 'url', 'description'].includes(key))
+				|| ['title', 'url', 'description'].some(key => typeof entry[key] !== 'string' || !entry[key].trim())) {
+				throw new Error(`Invalid reference for topic: ${id}`);
+			}
+			let url;
+			try { url = new URL(entry.url); }
+			catch { throw new Error(`Invalid reference URL for topic: ${id}`); }
+			if (url.protocol !== 'https:' || url.username || url.password) {
+				throw new Error(`References require HTTPS URLs without credentials: ${id}`);
+			}
+			if (targets.has(url.href)) { throw new Error(`Duplicate reference URL for topic: ${id}`); }
+			targets.add(url.href);
+		}
+	}
+	return references;
+}
 
 export function validateBook(book) {
 	const components = book?.components;
@@ -22,6 +59,7 @@ export function validateBook(book) {
 			|| book.topics.some(topic => topic.section === 'components'))) {
 		throw new Error('Invalid design-system book manifest');
 	}
+	const references = validateReferences(book);
 	return book.topics.map(topic => {
 		if (!topic || typeof topic.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(topic.id)
 			|| typeof topic.title !== 'string' || !topic.title || typeof topic.section !== 'string'
@@ -32,10 +70,14 @@ export function validateBook(book) {
 			|| topic.hidden !== undefined && typeof topic.hidden !== 'boolean'
 			|| topic.navigation !== undefined && !['topic', 'utility'].includes(topic.navigation)
 			|| topic.page !== undefined && !/^pages\/[a-z][a-z0-9-]*\.json$/.test(topic.page)
+			|| topic.section !== 'components' && topic.section !== topic.id
+			|| topic.renderer !== 'guidance' && !sectionRenderers[topic.renderer]?.includes(topic.section)
+			|| topic.renderer === 'guidance' && Object.values(sectionRenderers).some(sections => sections.includes(topic.section))
 			|| topic.section === 'components' && (topic.id !== `component-${topic.controlId}` || !['ready', 'tbd'].includes(topic.content))) {
 			throw new Error(`Invalid book topic: ${topic?.id}`);
 		}
-		return { ...topic, rendererKind: topic.renderer, renderer: renderers[topic.renderer] };
+		return { ...topic, references: Object.hasOwn(references, topic.id) ? references[topic.id] : [],
+			rendererKind: topic.renderer, renderer: renderers[topic.renderer] };
 	});
 }
 
@@ -49,6 +91,16 @@ export function bookNavigation(catalog) {
 
 export function createCatalog(manifest, componentAliases) {
 	const catalog = validateBook(manifest);
+	const aliases = new Map(componentAliases);
+	for (const topic of catalog.filter(topic => topic.section !== 'components')) {
+		for (const alias of topic.aliases) {
+			if (alias === 'components' || catalog.some(entry => entry.id === alias && entry.id !== topic.id)
+				|| aliases.has(alias) && aliases.get(alias) !== topic.id) {
+				throw new Error(`Conflicting topic alias: ${alias}`);
+			}
+			aliases.set(alias, topic.id);
+		}
+	}
 	const sections = [
 		...catalog.filter(item => item.section !== 'components').map(item => ({ id: item.id, title: item.title, searchable: ['tokens', 'iconography'].includes(item.id) })),
 		{ id: 'components', title: 'Components' },
@@ -57,9 +109,9 @@ export function createCatalog(manifest, componentAliases) {
 		return getTopic(view.section === 'components' ? `component-${view.controlId || 'button'}` : view.section).id;
 	}
 	function getTopic(id) {
-		const canonical = id === 'components' ? 'component-button' : componentAliases.get(id) ?? id;
+		const canonical = id === 'components' ? 'component-button' : aliases.get(id) ?? id;
 		const entry = catalog.find(item => item.id === canonical);
-		if (!entry) { throw new Error(`Unknown topic: ${id}`); }
+		if (!entry) { throw new UnknownTopicError(`Unknown topic: ${id}`); }
 		return entry;
 	}
 	function visibleTopicIds(scope) {
