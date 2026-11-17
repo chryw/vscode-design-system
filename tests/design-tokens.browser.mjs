@@ -129,7 +129,7 @@ test('the curated token reference explains choices and keeps implementation inve
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${width}px`);
 		}
 		await expect(article.locator('.token-list a')).toHaveCount(0);
-		await expect(article.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(1);
+		await expect(article.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(0);
 		await page.getByRole('searchbox', { name: 'Search topics', exact: true }).fill('Iconography');
 		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'Iconography', exact: true }).click();
 		await expect(page.locator('[data-topic="iconography"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');

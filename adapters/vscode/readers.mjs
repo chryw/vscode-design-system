@@ -13,7 +13,8 @@ import { createTopicResources } from './topic-resources.mjs';
 
 export function canonicalRoot(root) {
 	const result = realpathSync(root);
-	if (!existsSync(path.join(result, 'src/vs/platform/theme/common/sizes/baseSizes.ts'))) {
+	if (!existsSync(path.join(result, 'src/vs/base/common/lifecycle.ts'))
+		&& !existsSync(path.join(result, 'src/vs/platform/theme/common/sizes/baseSizes.ts'))) {
 		throw new Error('Select a VS Code checkout');
 	}
 	return result;
@@ -63,7 +64,7 @@ export async function readTopic(store, id, settings) {
 		view: { section, controlId: entry.controlId ?? '', ...settings }, controlGaps: [],
 		codiconFontAvailable: existsSync(path.join(store.root, 'node_modules/@vscode/codicons/dist/codicon.ttf')),
 	};
-	Object.assign(data, await use('guidance', [section]));
+	if (projection.mode !== 'basic') { Object.assign(data, await use('guidance', [section])); }
 	if (['typography', 'spacing', 'shape', 'size', 'stroke', 'tokens', 'layout', 'elevation'].includes(section)) {
 		Object.assign(data, await use('sizes'));
 	}

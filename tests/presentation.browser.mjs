@@ -325,7 +325,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			theming: ['Keep meaning in high contrast', 'Theme comparisons'],
 			spacing: ['Make relationships visible', 'Give each interval one owner', 'Choose a spacing pattern', 'Spacing between controls', 'When space gets tight', 'Spacing ramp'],
 		};
-		for (const id of ['principles', 'typography', 'shape', 'size', 'stroke', 'layout', 'elevation', 'theming', 'accessibility', 'content', 'component-button', 'component-menu', 'motion', 'colors', 'spacing', 'tokens', 'iconography']) {
+		for (const id of ['principles', 'illustration', 'typography', 'shape', 'size', 'stroke', 'layout', 'elevation', 'theming', 'accessibility', 'content', 'component-button', 'component-menu', 'motion', 'colors', 'spacing', 'tokens', 'iconography']) {
 			panel.setScope({ operation: 'replace', topics: [id], active: id, layout: 'single' });
 			await page.goto(panel.url);
 			const article = page.locator(`article[data-topic="${panel.state.scope.active}"]`);
@@ -335,7 +335,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			await expect(article.locator('h1')).toHaveCount(1);
 			await expect(article.locator('.scope, .system-gap, .slot-placeholder')).toHaveCount(0);
 			await expect(article.locator('.topic-content')).not.toContainText(/Why this topic is reserved|Curation notes and audit gaps|Content slot:|To curate:|not a complete migration audit/);
-			assert.equal(await article.locator('.topic-content a.source-action').evaluateAll(links => links.filter(link => !link.closest('.source-guidance, .motion-doc-analysis')).length), 0);
+			await expect(article.locator('.topic-content a.source-action')).toHaveCount(0);
 			assert.ok(await article.locator('.topic-heading a.source-action').count() <= 1, id);
 			const headingEntries = await article.locator('.topic-content h2').evaluateAll(headings => headings
 				.filter(heading => !heading.closest('.control-stage') || heading.closest('[data-topic]').dataset.topic.startsWith('component-'))
@@ -741,7 +741,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await page.goto(panel.url);
 		const preview = page.locator('.control-stage');
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
-		await expect(page.locator('select')).toHaveCount(0);
+		await expect(page.locator('.topic-content select')).toHaveCount(0);
 		await expect(page.getByRole('button', { name: /Refresh|Reload|Reconnect|Select default/ })).toHaveCount(1);
 		await expect(page.getByRole('group', { name: 'Variant', exact: true })).toBeVisible();
 		const frame = await page.locator('.component-preview').elementHandle();

@@ -7,6 +7,7 @@ import { createExplorer } from './server.mjs';
 import { canonicalRoot } from './store.mjs';
 import { ViewStateStorage } from './state-storage.mjs';
 import { bookTitle } from './book.mjs';
+import { CheckoutStorage } from './checkout-storage.mjs';
 
 export function createBookRuntime(defaultRoot, { home } = {}) {
 	const instances = new Map();
@@ -34,26 +35,31 @@ export function createBookRuntime(defaultRoot, { home } = {}) {
 	};
 	return {
 		required,
-		rootFor: instanceId => instances.get(instanceId)?.root ?? canonicalRoot(defaultRoot),
+		rootFor: instanceId => instances.get(instanceId)?.panel?.root ?? instances.get(instanceId)?.root ?? canonicalRoot(defaultRoot),
 		async open(instanceId, input = {}) {
 			if (!input || typeof input !== 'object' || Array.isArray(input)
 				|| Object.keys(input).some(key => !['root', 'topics', 'active', 'layout'].includes(key))
 				|| input.root !== undefined && (typeof input.root !== 'string' || !input.root)) { throw new Error('Invalid design-system input'); }
 			let instance = instances.get(instanceId);
-			const root = canonicalRoot(input.root ?? instance?.root ?? defaultRoot);
-			if (instance && instance.root !== root) { throw new Error('Instance checkout cannot change; open a different instance'); }
+			const selection = instance?.selection ?? new CheckoutStorage(defaultRoot, instanceId, { home });
+			const root = canonicalRoot(instance ? input.root ?? instance.panel?.root ?? instance.root : selection.read() ?? input.root ?? defaultRoot);
 			if (instance?.closing) { await instance.closing; instance = instances.get(instanceId); }
-			if (!instance) { instance = { root }; instances.set(instanceId, instance); }
+			if (!instance) { instance = { root, selection }; instances.set(instanceId, instance); }
 			if (!instance.panel && !instance.starting) {
 				instance.starting = createExplorer(root, {
-					stateStorage: new ViewStateStorage(root, { home, view: instanceId }),
+					stateStorageFactory: (checkout, repository) => new ViewStateStorage(checkout, {
+						home, view: instanceId, book: repository.projection.mode === 'basic' ? 'vscode-design-system-basic' : 'vscode-design-system',
+					}),
+					onCheckoutSelected: checkout => selection.write(checkout),
 					scope: input.topics === undefined
-						? { operation: 'all', active: input.active ?? 'principles', layout: input.layout ?? 'single' }
+						? { operation: 'all', ...(input.active === undefined ? {} : { active: input.active }), layout: input.layout ?? 'single' }
 						: { topics: input.topics, active: input.active, layout: input.layout ?? 'single' },
 				}).then(panel => { instance.panel = panel; }).finally(() => { instance.starting = undefined; });
 			}
 			await instance.starting;
 			if (instance.closing || instances.get(instanceId) !== instance) { throw new Error('Design system closed during startup'); }
+			if (input.root !== undefined && instance.panel.root !== root) { instance.panel.selectCheckout({ root }); }
+			instance.root = instance.panel.root;
 			return { title: bookTitle, url: new URL('/', instance.panel.url).href };
 		},
 		async stop(instanceId) { await stop(instanceId); return { title: bookTitle, stopped: true, instanceId }; },

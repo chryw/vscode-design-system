@@ -45,7 +45,11 @@ export class ViewStateStorage {
 				|| record.identity?.view !== this.identity.view) {
 				throw new Error('Unsupported format, version, or book identity');
 			}
-			return { ...record, state: validateState(record.state, this.repository) };
+			if (record.catalog !== undefined && (!Array.isArray(record.catalog) || record.catalog.length > 1000
+				|| record.catalog.some(id => typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id))
+				|| new Set(record.catalog).size !== record.catalog.length)) { throw new Error('Invalid saved topic catalog'); }
+			const unavailableTopics = (record.catalog ?? []).filter(id => !this.repository.catalog.some(topic => topic.id === id));
+			return { ...record, unavailableTopics, state: validateState(record.state, this.repository, { previousTopics: record.catalog }) };
 		} catch (error) {
 			throw new StateStorageError('STATE_READ_FAILED', `Couldn't restore saved design-system state at ${this.file}. Preserve or move that file before retrying: ${error.message}`, error);
 		}
@@ -70,6 +74,7 @@ export class ViewStateStorage {
 			const record = {
 				format: 'vscode-design-system-view', version: 1, identity: this.identity,
 				revision: (previous?.revision ?? 0) + 1, updatedAt: new Date().toISOString(), state,
+				catalog: this.repository.catalog.map(topic => topic.id),
 			};
 			const text = JSON.stringify(record);
 			if (Buffer.byteLength(text) > 1024 * 1024) { throw new Error('Saved view state is too large'); }

@@ -17,6 +17,9 @@ const panes = new Map();
 const target = document.querySelector('#reference');
 const navigation = document.querySelector('#book-navigation');
 const refresh = document.querySelector('#refresh');
+const checkoutChoice = document.querySelector('#checkout-choice');
+const checkoutPath = document.querySelector('#checkout-path');
+const checkoutForm = document.querySelector('#checkout-form');
 const contents = createBookNavigation(navigation, id => {
 	void navigate(id).then(() => focusArticle(id)).catch(error => {
 		problem(error);
@@ -46,6 +49,58 @@ const problem = error => {
 		message.querySelector('p').append(' ', back);
 	}
 };
+async function updateCheckoutChoices() {
+	const result = await request('/api/checkouts', { signal: lifetime.signal });
+	checkoutChoice.replaceChildren(...result.checkouts.map(checkout => {
+		const option = node('option', `${checkout.branch} — ${checkout.root}`);
+		option.value = checkout.root;
+		option.selected = checkout.root === result.checkout;
+		return option;
+	}));
+	const other = node('option', 'Other checkout…');
+	other.value = '';
+	checkoutChoice.append(other);
+	checkoutPath.value = result.checkout;
+	checkoutPath.hidden = true;
+	checkoutPath.required = false;
+	checkoutPath.previousElementSibling.hidden = true;
+	document.querySelector('#checkout-mode').textContent = result.mode === 'basic'
+		? 'Source library: this checkout has no curated design book. Browse local documentation; curated topics and live examples are unavailable.'
+		: result.unavailableTopics?.length ? 'Some saved topics are unavailable on this branch. Showing the available content.' : '';
+}
+checkoutChoice.addEventListener('change', () => {
+	const other = !checkoutChoice.value;
+	checkoutPath.hidden = !other;
+	checkoutPath.previousElementSibling.hidden = !other;
+	checkoutPath.required = other;
+	if (other) { checkoutPath.focus(); }
+}, { signal: lifetime.signal });
+let checkoutRefresh;
+function reloadCheckout() {
+	checkoutRefresh ??= (async () => {
+		for (const pane of panes.values()) { pane.reference.dispose(); pane.element.remove(); }
+		panes.clear();
+		setRepository(await request('/api/repository', { signal: lifetime.signal }));
+		catalog = (await request('/api/catalog', { signal: lifetime.signal })).topics;
+		reconcile(await request('/api/state', { signal: lifetime.signal }));
+		history.replaceState(null, '', urlFor(state.scope.active));
+		await updateCheckoutChoices();
+		document.querySelector('#shell-problem')?.remove();
+	})().finally(() => { checkoutRefresh = undefined; });
+	return checkoutRefresh;
+}
+checkoutForm.addEventListener('submit', async event => {
+	event.preventDefault();
+	const button = checkoutForm.querySelector('button');
+	button.disabled = true;
+	try {
+		await post('/api/checkout', { root: checkoutChoice.value || checkoutPath.value });
+		await reloadCheckout();
+		document.querySelector('#checkout-picker').open = false;
+		document.querySelector('#checkout-picker summary').focus();
+	} catch (error) { problem(error); }
+	finally { button.disabled = false; }
+}, { signal: lifetime.signal });
 const urlFor = id => {
 	const entry = catalog.find(item => item.id === id);
 	const view = state.views[id] ?? {};
@@ -208,9 +263,11 @@ async function start() {
 	setRepository(await request('/api/repository', { signal: lifetime.signal }));
 	catalog = (await request('/api/catalog', { signal: lifetime.signal })).topics;
 	await applyURL();
+	await updateCheckoutChoices();
 	events = new EventSource('/api/events');
 	events.onmessage = event => {
 		const update = JSON.parse(event.data);
+		if (update.kind === 'checkout') { void reloadCheckout().catch(problem); return; }
 		if (update.kind === 'scope' || update.kind === 'view') {
 			reconcile(update.state);
 			if (!pendingNavigations) { history.replaceState(null, '', urlFor(state.scope.active)); }

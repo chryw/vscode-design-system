@@ -21,7 +21,7 @@ export function defaultView(id, repository = readRepository()) {
 	return { ...initialView(), section: entry.section, controlId: entry.controlId ?? '' };
 }
 
-export function validateState(value, repository = readRepository()) {
+export function validateState(value, repository = readRepository(), { previousTopics } = {}) {
 	const { getTopic, validateScope } = repository;
 	if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['scope', 'views'].includes(key))
 		|| !value.scope || !['all', 'focused'].includes(value.scope.mode)
@@ -31,12 +31,25 @@ export function validateState(value, repository = readRepository()) {
 		|| !value.views || typeof value.views !== 'object' || Array.isArray(value.views)) {
 		throw new Error('Invalid saved book view state');
 	}
+	const available = new Set(repository.catalog.map(topic => topic.id));
+	const unavailable = id => {
+		if (available.has(id)) { return false; }
+		if (previousTopics?.includes(id)) { return true; }
+		getTopic(id);
+		return false;
+	};
+	const topics = value.scope.topics.filter(id => !unavailable(id));
+	const removedTopics = topics.length !== value.scope.topics.length;
+	const activeUnavailable = unavailable(value.scope.active);
+	const active = activeUnavailable ? topics[0] ?? repository.projection.book.defaultTopic : value.scope.active;
 	const scope = validateScope({
 		operation: value.scope.mode === 'all' ? 'all' : 'replace',
-		topics: value.scope.topics, active: value.scope.active, layout: value.scope.layout,
+		topics: topics.length || !removedTopics ? topics : [active], active,
+		layout: removedTopics && value.scope.layout === 'compare' && topics.length !== 2 ? 'single' : value.scope.layout,
 	});
 	const views = {};
 	for (const [id, patch] of Object.entries(value.views)) {
+		if (unavailable(id)) { validateViewPatch(patch); continue; }
 		if (getTopic(id).id !== id) { throw new Error('Saved views must use canonical topic IDs'); }
 		validateViewPatch(patch);
 		const defaults = defaultView(id, repository);

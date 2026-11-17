@@ -243,7 +243,7 @@ test('new authored documents appear live, retain search drafts, render safely, a
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('canonical token guidance is visible in the chapter and opens the same source section as headless reads', { timeout: 60000 }, async () => {
+test('canonical token guidance is self-contained with optional source access matching headless reads', { timeout: 60000 }, async () => {
 	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'tokens' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -252,8 +252,12 @@ test('canonical token guidance is visible in the chapter and opens the same sour
 		const guidance = page.locator('#tokens-usage');
 		await expect(guidance.getByRole('heading', { name: 'Using tokens', exact: true })).toBeVisible();
 		await expect(guidance).toContainText('Structural measurements are not automatically design tokens.');
-		await guidance.getByRole('link', { name: 'Read full specification', exact: true }).click();
+		await expect(guidance.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(0);
+		await page.locator('.source-documents > summary').focus();
+		await page.keyboard.press('Enter');
+		await page.locator('.source-documents').getByRole('link', { name: 'Design-token usage in CSS', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Design-token usage in CSS', level: 1, exact: true })).toBeVisible();
+		await page.getByRole('navigation', { name: 'On this page', exact: true }).getByRole('link', { name: 'Choose by role', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Choose by role', exact: true })).toBeFocused();
 		const id = '.github/instructions/design-tokens.instructions.md';
 		const read = readDocument(checkoutRoot, id, { anchor: 'choose-by-role' });

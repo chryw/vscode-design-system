@@ -179,7 +179,11 @@ test('each checkout supplies its own catalog and viewer projection without a pac
 		});
 	} finally { await Promise.all(panels.map(panel => panel.close())); }
 	rmSync(path.join(second.bookRoot, 'book.json'));
-	await assert.rejects(createExplorer(second.root), /book.json/);
+	const basic = await createExplorer(second.root);
+	try {
+		assert.deepEqual({ mode: basic.store.repository.projection.mode, topics: basic.state.scope.topics },
+			{ mode: 'basic', topics: ['documentation'] });
+	} finally { await basic.close(); }
 });
 
 test('Typography excludes unrelated readers, Spacing reuses registrations, all stays lazy', async () => {
@@ -546,7 +550,11 @@ test('independent panels preserve their own views across reopen and isolate chec
 			otherCheckout: new ViewStateStorage(checkout, { home, view: 'a' }).read(),
 			otherBook: new ViewStateStorage(root, { home, book: 'another-book', view: 'a' }).read(),
 		}, { spacing: 'from a', typography: 'from-b', otherCheckout: undefined, otherBook: undefined });
-		await assert.rejects(runtime.open('a', { root: checkout }), /checkout cannot change/);
+		const previousUrl = runtime.required('a').url;
+		await runtime.open('a', { root: checkout });
+		assert.deepEqual({ root: runtime.rootFor('a'), url: new URL(runtime.required('a').url).origin },
+			{ root: checkout, url: new URL(previousUrl).origin });
+		await runtime.open('a', { root });
 		await runtime.stop('a');
 		assert.equal((await fetch(runtime.required('b').url)).status, 200);
 		await runtime.open('a');

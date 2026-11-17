@@ -7,6 +7,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { validateBook as validateCatalogBook } from '../model/catalog.mjs';
 import { contained, workspaceRoot } from './paths.mjs';
+import { basicBook } from '../adapters/vscode/basic-book.mjs';
 
 export const bookTitle = 'Visual Studio Code Design System';
 export const bookId = 'vscode-design-system';
@@ -27,8 +28,15 @@ export function validateBook(book) {
 }
 
 export function readBook(root = path.join(workspaceRoot, '.github/design-system')) {
-	const file = contained(root, 'book.json');
-	if (statSync(file).size > 1024 * 1024) { throw new Error('Book manifest is too large'); }
+	const file = path.join(root, 'book.json');
+	let stat;
+	try { stat = statSync(file); }
+	catch (error) {
+		if (error.code !== 'ENOENT') { throw error; }
+		return basicBook();
+	}
+	if (stat.size > 1024 * 1024) { throw new Error('Book manifest is too large'); }
+	contained(root, 'book.json');
 	try { return validateBook(JSON.parse(readFileSync(file, 'utf8'))); }
 	catch (error) { throw new Error(`Couldn't read book.json: ${error.message}`); }
 }

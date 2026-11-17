@@ -18,7 +18,19 @@
 			<div class="checkout-details">
 				<p id="checkout" class="meta"></p>
 				<button id="refresh" type="button" disabled>Refresh topic</button>
+				<details id="checkout-picker">
+					<summary>Change checkout</summary>
+					<form id="checkout-form">
+						<label for="checkout-choice">Local worktree</label>
+						<select id="checkout-choice" name="checkout"></select>
+						<label for="checkout-path" hidden>Checkout path</label>
+						<input id="checkout-path" name="path" type="text" autocomplete="off" hidden>
+						<button type="submit">Browse checkout</button>
+						<p>Browse saved files without switching or pulling a Git branch.</p>
+					</form>
+				</details>
 			</div>
+			<p id="checkout-mode" class="meta" role="status"></p>
 		</div>
 	</header>
 	<div class="explorer-layout">

@@ -1,0 +1,12 @@
+{
+	"name": "vscode-design-system",
+	"owner": { "name": "VS Code Design System" },
+	"plugins": [
+		{
+			"name": "vscode-design-system",
+			"description": "Browse design guidance and live source data from your selected VS Code checkout.",
+			"source": "./",
+			"version": "0.2.0"
+		}
+	]
+}

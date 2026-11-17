@@ -57,7 +57,7 @@ Use `guidance` in a page definition to display source text after the chapter's p
 
 Select either an `anchor` or an exact `heading`; omit both to use the document body. `title` is an optional presentation label, not a second copy of the guidance. `id` is a stable, unique article-section ID. The source must be readable within the selected checkout and covered by a discovery scope. Chapter bindings reject extension-owned documents. Add a directory to `documentSources` when introducing a new source location; do not register each file separately.
 
-The shared article frame renders these sections with a **Read full specification** link. Its **Source documents** menu exposes the documents used by the chapter. Definitions, values, and actual component previews remain separate projections of product code.
+The shared article frame renders these sections inline without appending **Read full specification** links that reopen the same guidance in the Source library. Purposeful authored cross-references and external references remain usable. The article's **Source documents** menu provides optional access to the documents used by the chapter. Definitions, values, and actual component previews remain separate projections of product code.
 
 Missing or ambiguous sections fail validation explicitly. Do not repair them by copying the old prose into the renderer. Update the binding when a deliberate source reorganization changes its anchor.
 

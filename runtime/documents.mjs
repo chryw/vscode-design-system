@@ -65,7 +65,8 @@ export class DocumentLibrary {
 		if (changed && this.active) { this.setActive(false); this.setActive(true); }
 	}
 	sourcePath(file) {
-		return file.startsWith(bookPrefix) ? contained(this.bookRoot, file.slice(bookPrefix.length)) : contained(this.root, file);
+		return file.startsWith(bookPrefix) && existsSync(this.bookRoot)
+			? contained(this.bookRoot, file.slice(bookPrefix.length)) : contained(this.root, file);
 	}
 	invalidate(notify = false) {
 		this.index = undefined;

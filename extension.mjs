@@ -14,7 +14,7 @@ const runtime = createBookRuntime(workspaceRoot);
 const inputSchema = {
 	type: 'object', additionalProperties: false,
 	properties: {
-		root: { type: 'string', description: 'VS Code checkout path. An instance remains bound to its first canonical checkout.' },
+		root: { type: 'string', description: 'VS Code checkout path. Defaults to the current workspace; another checkout can be selected in the same canvas.' },
 		topics: { type: 'array', items: { type: 'string' }, uniqueItems: true },
 		active: { type: 'string' }, layout: { type: 'string', enum: ['single', 'compare'] },
 	},
@@ -36,6 +36,9 @@ await joinSession({
 		description: 'Browse source-backed design references, authored specifications and live product examples.',
 		inputSchema,
 		actions: [
+			{ name: 'select_checkout', description: 'Browse another local VS Code checkout or worktree in this canvas without switching its Git branch.',
+				inputSchema: { type: 'object', additionalProperties: false, required: ['root'], properties: { root: { type: 'string', maxLength: 4096 } } },
+				handler: guarded(({ instanceId, input }) => runtime.required(instanceId).selectCheckout(input)) },
 			{ name: 'list_topics', description: 'List compact topic and book-utility metadata without reading product sources or starting fixtures.', handler: guarded(({ instanceId }) => listTopics(runtime.rootFor(instanceId))) },
 			{ name: 'set_scope', description: 'Replace/add selected topics or expose all; comparison takes exactly two topics.', inputSchema: scopeSchema,
 				handler: guarded(({ instanceId, input }) => {

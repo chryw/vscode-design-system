@@ -40,17 +40,10 @@ export function documentMarkup(document, options = {}) {
 }
 
 export function renderSourceSections(target, sections = [], resolveResource) {
-	const linkedDocuments = new Set();
 	for (const document of sections) {
 		const section = node('section', undefined, 'article-section source-guidance');
 		section.id = document.sectionId;
 		section.append(node('h2', document.title), documentMarkup(document, { level: 3, prefix: `${document.sectionId}-`, resolveResource }));
-		if (!linkedDocuments.has(document.id)) {
-			const source = node('a', 'Read full specification', 'source-action');
-			source.href = documentURL(document.id, { anchor: document.anchor });
-			section.append(source);
-			linkedDocuments.add(document.id);
-		}
 		if (document.before) {
 			const next = target.querySelector(`#${CSS.escape(document.before)}`);
 			if (!next) { throw new Error(`Missing guidance placement target: ${document.before}`); }
