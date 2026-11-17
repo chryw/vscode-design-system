@@ -3,13 +3,12 @@ html { min-height: 100%; }
 body { margin: 0; }
 .topic-pane { min-width: 0; width: 100%; max-width: var(--article-width); }
 .topic-pane.design-reference { padding: 0; }
-.explorer-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; overflow-wrap: anywhere; }
+.explorer-heading { overflow-wrap: anywhere; }
 .explorer-heading > div { min-width: 0; }
-.explorer-heading > button { flex-shrink: 0; }
 .book-title { font-size: 15px; font-weight: 600; }
-.checkout-details { font-size: 11px; color: var(--muted); }
-.checkout-details > summary { cursor: pointer; }
-.checkout-details p { max-width: 90ch; margin-top: 8px; }
+.checkout-details { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.checkout-details p { max-width: 90ch; }
+.checkout-details button { padding: 2px 6px; font-size: 12px; flex-shrink: 0; }
 .explorer-layout { margin-top: 24px; }
 .explorer-article { min-width: 0; }
 .explorer-article > main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
@@ -30,6 +29,22 @@ body { margin: 0; }
 	.evidence-key { color: var(--muted); font-size: 11px; }
 	.topic-actions { font-size: var(--book-detail-size); padding-top: 24px; border-top: 1px solid var(--line); }
 	.topic-actions:has(> [hidden]:only-child) { display: none; }
+	.topic-metadata { display: grid; gap: 8px; margin-bottom: 16px; font-size: var(--book-detail-size); }
+	.topic-metadata pre { max-height: 30dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+	.topic-context {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		display: grid;
+		gap: 16px;
+		max-height: 50dvh;
+		overflow: auto;
+		background: var(--page);
+		padding-block: 8px;
+	}
+	@media (max-width: 759px) {
+		:scope.book-layout .topic-context { top: 52px; }
+	}
 	.article-outline { padding-block: 16px; border-block: 1px solid var(--line); font-size: var(--book-detail-size); }
 	.article-outline > p { color: var(--muted); margin-bottom: 8px; }
 	.article-outline ol { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; margin: 0; padding: 0; }
@@ -37,15 +52,17 @@ body { margin: 0; }
 	.article-outline a:hover { color: var(--ink); text-decoration: underline; }
 	.article-outline a[aria-current="location"] { color: var(--ink); font-weight: 600; }
 	@media (min-width: 1200px) {
-		:scope.book-layout .topic-pane:has(> .article-outline:not([hidden])) {
+		:scope.book-layout .topic-pane:has(.article-outline:not([hidden])) {
 			display: grid;
 			grid-template-columns: minmax(0, var(--article-width)) 180px;
-			grid-template-rows: repeat(7, auto);
+			grid-template-rows: repeat(8, auto);
 			column-gap: 32px;
 			max-width: none;
 		}
 		:scope.book-layout .topic-pane > * { grid-column: 1; min-width: 0; }
-		:scope.book-layout .topic-pane > .article-outline {
+		:scope.book-layout .topic-context { display: contents; }
+		:scope.book-layout .topic-context > * { grid-column: 1; min-width: 0; margin-bottom: 16px; }
+		:scope.book-layout .topic-context > .article-outline {
 			grid-column: 2;
 			grid-row: 1 / -1;
 			position: sticky;
@@ -138,14 +155,82 @@ body { margin: 0; }
 	.shape-context { margin: 0; padding: 16px; background: var(--recessed); min-height: 120px; display: grid; grid-template-rows: 1fr auto; align-items: center; }
 	.shape-context > div { background: var(--page); border: 1px solid var(--accent); padding: 12px; display: grid; place-items: center; min-height: 64px; }
 	.shape-context figcaption { margin-top: 12px; font-size: 11px; }
-	.depth-illustration { position: relative; min-height: 200px; background: var(--recessed); padding: 20px; }
-	.depth-base { border: 1px solid var(--line); padding: 20px; height: 150px; }
-	.depth-raised, .depth-overlay { position: absolute; border: 1px solid var(--accent); background: var(--page); padding: 16px; }
-	.depth-raised { left: 15%; top: 72px; width: 55%; }
-	.depth-overlay { right: 8%; top: 28px; width: 35%; }
-	.shadow-scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 24px; padding: 16px; }
-	.shadow-scale figure { margin: 0; min-width: 0; font-size: 11px; }
-	.shadow-sample { padding: 24px 12px; background: var(--page); margin-bottom: 12px; }
+	.elevation-guide .prose { margin: 0; }
+	.elevation-guide .prose > :first-child { margin-top: 0; }
+	.elevation-guide .prose table { width: 100%; }
+	.elevation-guide .prose th, .elevation-guide .prose td { min-width: 140px; }
+	.elevation-preview-controls { display: grid; gap: 12px; padding-block: 16px; border-block: 1px solid var(--line); }
+	.elevation-shadow-preference { display: flex; align-items: center; gap: 8px; font-size: var(--book-detail-size); }
+	.elevation-scenario { margin-top: 32px; }
+	.elevation-scenario > * + * { margin-top: 12px; }
+	.elevation-scenario-summary { font-weight: var(--vscode-fontWeight-semiBold); }
+	.elevation-construction, .elevation-hosting { margin: 24px 0; }
+	.elevation-construction figcaption, .elevation-hosting figcaption { margin-top: 12px; color: var(--muted); font-size: var(--book-detail-size); }
+	.elevation-construction-stage {
+		position: relative; isolation: isolate; padding: 32px 32px 56px;
+		background: var(--vscode-editor-background); color: var(--vscode-editor-foreground);
+		border: var(--vscode-strokeThickness) dashed var(--vscode-panel-border);
+		font-size: var(--vscode-fontSize-body1); line-height: 1.5;
+	}
+	.elevation-construction-surface {
+		position: relative; margin-inline-start: 16%; min-width: 0; padding: 24px 24px 24px 56px;
+		background: var(--vscode-editorHoverWidget-background); color: var(--vscode-editorHoverWidget-foreground);
+		border: var(--vscode-strokeThickness) solid var(--vscode-editorHoverWidget-border);
+		border-radius: var(--vscode-cornerRadius-large); box-shadow: var(--vscode-shadow-lg);
+		overflow-wrap: anywhere;
+	}
+	.elevation-contained-group {
+		margin-top: 16px; padding-top: 16px; border-top: var(--vscode-strokeThickness) solid var(--vscode-editorHoverWidget-border);
+	}
+	.elevation-receiver-label { position: absolute; inset-inline-start: 24px; bottom: 16px; }
+	.elevation-marker {
+		position: absolute; display: grid; place-items: center; width: 24px; height: 24px;
+		border: var(--vscode-strokeThickness) solid var(--vscode-editor-foreground); border-radius: var(--vscode-cornerRadius-circle);
+		background: var(--vscode-editor-background); color: var(--vscode-editor-foreground);
+	}
+	.elevation-marker-1 { inset-inline-start: 16px; top: 24px; }
+	.elevation-marker-2 { inset-inline-end: 20px; top: -12px; }
+	.elevation-marker-3 { inset-inline-end: 20px; bottom: -12px; }
+	.elevation-construction-parts { display: grid; gap: 24px; padding-inline-start: 24px; }
+	.elevation-construction-parts li { padding-inline-start: 8px; min-width: 0; }
+	.elevation-construction-parts li::marker { font-weight: var(--vscode-fontWeight-semiBold); }
+	.elevation-construction-parts .prose { margin-block: 8px; }
+	.elevation-part-tokens { display: flex; flex-wrap: wrap; gap: 8px; }
+	.elevation-hosting-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 24px; }
+	.elevation-hosting-pair > div { min-width: 0; }
+	.elevation-hosting-stage {
+		position: relative; isolation: isolate; height: 232px; padding: 24px; margin-top: 12px;
+		background: var(--vscode-editor-background); color: var(--vscode-editor-foreground);
+		font-size: var(--vscode-fontSize-body1);
+	}
+	.elevation-clipping-container {
+		position: relative; display: grid; align-content: start; gap: 4px; height: 128px; padding: 16px; overflow: hidden;
+		border: var(--vscode-strokeThickness) dashed var(--vscode-editor-foreground);
+	}
+	.elevation-hosted-overlay {
+		position: absolute; z-index: 1; top: 88px; inset-inline: 48px 24px; min-height: 96px; padding: 16px;
+		background: var(--vscode-editorHoverWidget-background); color: var(--vscode-editorHoverWidget-foreground);
+		border: var(--vscode-strokeThickness) solid var(--vscode-editorHoverWidget-border);
+		border-radius: var(--vscode-cornerRadius-large); box-shadow: var(--vscode-shadow-lg);
+		overflow-wrap: anywhere;
+	}
+	.elevation-clipping-container .elevation-hosted-overlay { top: 64px; inset-inline: 24px 0; }
+	.elevation-shadow-scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr)); gap: 24px; margin-block: 16px 24px; }
+	.elevation-shadow-reference { margin: 0; min-width: 0; }
+	.elevation-shadow-stage {
+		display: grid; place-items: center; padding: 40px 24px;
+		background: var(--vscode-editor-background); color: var(--vscode-editorHoverWidget-foreground);
+	}
+	.elevation-shadow-sample {
+		width: 88px; height: 56px; background: var(--vscode-editorHoverWidget-background);
+		border-radius: var(--vscode-cornerRadius-medium); box-shadow: var(--elevation-sample-shadow);
+	}
+	.elevation-shadow-reference figcaption { display: grid; gap: 8px; margin-top: 12px; font-size: var(--book-detail-size); }
+	.elevation-shadow-reference code { overflow-wrap: anywhere; }
+	.elevation-guide[data-part-shadows-off="true"] .elevation-shadow-stage { --vscode-shadow-sm: 0 0 0 0 transparent; }
+	.elevation-guide[data-contrast="true"] .elevation-construction-surface,
+	.elevation-guide[data-contrast="true"] .elevation-hosted-overlay,
+	.elevation-guide[data-contrast="true"] .elevation-shadow-sample { border: var(--vscode-strokeThickness) solid var(--vscode-contrastBorder); box-shadow: none; }
 	.theme-comparisons { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 24px; margin-block: 16px; }
 	.theme-comparison { margin: 0; min-width: 0; }
 	.theme-semantic-example { border: 1px solid; padding: 12px; min-height: 130px; font-size: 12px; }

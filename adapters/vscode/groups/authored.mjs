@@ -29,13 +29,18 @@ export function markdownSection(text, heading, file) {
 	return result;
 }
 
-export function resolveContent(value, read, depth = 0) {
+export function resolveContent(value, read, { source } = {}) {
+	if (source !== undefined) { sourcePath(source); }
+	return resolveContentValue(value, read, 0, source);
+}
+
+function resolveContentValue(value, read, depth, source) {
 	if (depth > 20) { throw new Error('Book content nesting exceeds the supported depth'); }
 	if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) { return value; }
-	if (Array.isArray(value)) { return value.map(item => resolveContent(item, read, depth + 1)); }
+	if (Array.isArray(value)) { return value.map(item => resolveContentValue(item, read, depth + 1, source)); }
 	if (!value || typeof value !== 'object') { throw new Error('Invalid book content value'); }
 	if (Object.hasOwn(value, '$text')) {
-		const reference = value.$text;
+		const reference = typeof value.$text === 'string' ? { file: source, heading: value.$text } : value.$text;
 		if (Object.keys(value).length !== 1 || !reference || typeof reference !== 'object'
 			|| Object.keys(reference).some(key => !['file', 'heading', 'paragraph', 'list'].includes(key))
 			|| typeof reference.file !== 'string' || !reference.file.endsWith('.md')
@@ -61,7 +66,7 @@ export function resolveContent(value, read, depth = 0) {
 	if (Object.keys(value).some(key => key.startsWith('$') || ['__proto__', 'constructor', 'prototype'].includes(key))) {
 		throw new Error('Unsupported book content binding');
 	}
-	return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolveContent(child, read, depth + 1)]));
+	return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolveContentValue(child, read, depth + 1, source)]));
 }
 
 export function readContent(read, file) {
@@ -80,7 +85,7 @@ function validateChapter(authored, topic) {
 		principles: ['practice'], typography: ['composition', 'emphasis', 'styles', 'metrics', 'families'],
 		spacing: ['grouping', 'ownership', 'patterns', 'product', 'responsive', 'ramp'],
 		shape: ['roles', 'scale'], size: ['glyphs', 'reference'], stroke: ['usage', 'reference'],
-		layout: ['hierarchy', 'responsive'], elevation: ['tiers', 'shadows', 'guidance', 'role'],
+		layout: ['hierarchy', 'responsive'], elevation: ['tiers', 'anatomy', 'scenarios', 'shadows', 'guidance', 'role'],
 		theming: ['guidance', 'comparison'], colors: ['usage', 'surfaces', 'accent', 'feedback', 'states', 'palette'],
 	};
 	if (authored.id !== topic || authored.status !== 'book-authored' || !text(authored.intro) || !authored.sections || Array.isArray(authored.sections)
@@ -91,7 +96,18 @@ function validateChapter(authored, topic) {
 		|| topic === 'spacing' && (!rows(authored.relationships, 2) || !rows(authored.ownership, 2) || !text(authored.preview?.control) || !text(authored.preview?.summary))
 		|| topic === 'shape' && (!Array.isArray(authored.contexts) || !authored.contexts.length || authored.contexts.some(context =>
 			!context || !['control', 'contained', 'overlay'].includes(context.kind) || !text(context.label) || !text(context.token)))
-		|| topic === 'elevation' && !rows(authored.roles, 3)
+		|| topic === 'elevation' && (!text(authored.markdownSource)
+			|| !authored.construction || !text(authored.construction.caption) || !rows([authored.construction.labels], 3)
+			|| !Array.isArray(authored.construction.parts) || authored.construction.parts.length !== 3
+			|| authored.construction.parts.some(part => !part || !text(part.title) || !text(part.description)
+				|| !Array.isArray(part.tokens) || !part.tokens.length || !part.tokens.every(text))
+			|| !authored.hosting || !text(authored.hosting.caption) || !rows([authored.hosting.labels], 4)
+			|| !Array.isArray(authored.scenarios) || authored.scenarios.length !== 4
+			|| authored.scenarios.some((scenario, index) => !scenario
+				|| scenario.id !== ['navigation', 'inspection', 'picker', 'decision'][index]
+				|| !text(scenario.title) || !text(scenario.description) || !text(scenario.caption))
+			|| !Array.isArray(authored.shadowRoles) || authored.shadowRoles.length !== 4
+			|| authored.shadowRoles.some((role, index) => !role || role.id !== ['sm', 'md', 'lg', 'xl'][index] || !text(role.description)))
 		|| topic === 'theming' && !text(authored.specimen)
 		|| topic === 'colors' && (!rows(authored.roles, 2) || !rows(authored.statusRoles, 2)
 			|| !['surfaces', 'accent', 'feedback', 'states'].every(id => rows([authored.previews?.[id]], 2)))
@@ -128,6 +144,9 @@ export function readPage(read, topic) {
 	}
 	const authored = readContent(read, page.content);
 	validateChapter(authored, topic);
+	if (topic === 'elevation' && !page.sources.some(reference => reference.file === authored.markdownSource)) {
+		throw new Error(`Elevation Markdown source must be listed in page sources: ${authored.markdownSource}`);
+	}
 	const sourceBindings = page.guidance ?? [];
 	if (!Array.isArray(sourceBindings) || sourceBindings.length > 20 || new Set(sourceBindings.map(binding => binding?.id)).size !== sourceBindings.length) {
 		throw new Error(`Invalid source-section bindings: ${topic}`);

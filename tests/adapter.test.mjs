@@ -55,6 +55,18 @@ test('exact SDK adapter opens idempotently, scopes, stops and reopens without a 
 		assert.equal(full.scope.mode, 'all');
 		assert.equal(full.scope.active, 'principles');
 		assert.equal(full.scope.topics.length, catalog.filter(item => !item.hidden).length);
+		const readAction = declaration.actions.find(item => item.name === 'read_topic');
+		const guidance = await Promise.all(['motion', 'typography', 'spacing', 'component-button'].map(topic =>
+			readAction.handler({ instanceId: 'complete-system-default', input: { topic, limit: 1000 } })));
+		assert.deepEqual(guidance.map(topic => ({
+			topic: topic.topic,
+			source: topic.guidance[0].file,
+		})), [
+			{ topic: 'motion', source: 'src/vs/platform/theme/common/motion/motion.design.md' },
+			{ topic: 'typography', source: 'src/vs/platform/theme/common/sizes/typography.design.md' },
+			{ topic: 'spacing', source: 'src/vs/platform/theme/common/sizes/spacing.design.md' },
+			{ topic: 'component-button', source: 'src/vs/base/browser/ui/button/button.design.md' },
+		]);
 		await declaration.actions.find(item => item.name === 'set_scope').handler({ instanceId: 'complete-system-default', input: { topics: ['typography'] } });
 		await declaration.onClose({ instanceId: 'complete-system-default' });
 		const [first, concurrent] = await Promise.all([

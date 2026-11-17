@@ -11,10 +11,13 @@ import { chromium, expect } from './playwright.mjs';
 import { createBrowserHost } from './explorer-browser-host.mjs';
 import { mockFixtureRenderer } from './browser-helpers.mjs';
 import { motionRecipeExamples } from '../view/motion-recipes.mjs';
-import { motionGuidanceFile, motionPageFile, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
+import { motionPageFile, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
 import { readFileSync } from 'node:fs';
 
 const root = workspaceRoot;
+const motionPage = JSON.parse(readFileSync(`${root}/${motionPageFile}`, 'utf8'));
+const motionGuidanceFile = motionPage.source;
+const motionImplementationFile = motionPage.sources[0].file;
 
 test('playback and reduced motion remain directly accessible without restarting the player', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
@@ -85,14 +88,16 @@ test('direct product interaction finishes the player and stale or reset messages
 test('Motion renders source guidance and composition without implementation clutter', { timeout: 30000 }, async () => {
 	const read = file => readFileSync(`${root}/${file}`, 'utf8');
 	const spec = read(motionGuidanceFile)
-		.replace('Motion helps people acknowledge a change', 'Motion explains a meaningful change')
-		.replace('Make changes easier to understand.', 'Clarify meaningful change.')
-		.replace('.surface {', '.surface.updated-reference {');
+		.replace('Motion helps people acknowledge a change', 'Motion explains a meaningful change');
+	const implementation = read(motionImplementationFile).replace('.surface {', '.surface.updated-reference {');
+	const exampleFile = 'src/vs/platform/theme/common/motion/motion-examples.md';
+	const examples = read(exampleFile).replace('The change is easier to understand than its immediate, still alternative', 'Clarify meaningful change.');
 	const composition = JSON.parse(read(motionPageFile));
 	composition.sections[0].blocks.reverse();
 	const context = {
 		root, source: file => ({ file, line: 1 }),
-		read: file => file === motionGuidanceFile ? spec : file === motionPageFile ? JSON.stringify(composition) : read(file),
+		read: file => file === motionGuidanceFile ? spec : file === motionImplementationFile ? implementation
+			: file === exampleFile ? examples : file === motionPageFile ? JSON.stringify(composition) : read(file),
 	};
 	const authored = readMotionPage(context, readMotionDefinitions(context));
 	const panel = await createBrowserHost(root, { scope: { operation: 'replace', topics: ['motion'], active: 'motion', layout: 'single' } });
@@ -109,9 +114,14 @@ test('Motion renders source guidance and composition without implementation clut
 		await page.goto(panel.url);
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('.topic-intro')).toContainText('Motion explains a meaningful change');
-		assert.deepEqual(await page.locator('#motion-principles > h3').allTextContents(), ['Accessible', 'Consistent', 'Responsive', 'Natural', 'Purposeful']);
+		assert.deepEqual(await page.locator('#motion-principles > h3').allTextContents(), ['Principles in practice', 'Motion styles', 'When to use motion']);
 		await expect(page.locator('#motion-principles')).toContainText('Clarify meaningful change.');
 		await expect(page.locator('#motion-principles')).not.toContainText('Keep attention on the task, not on the transition.');
+		await expect(page.locator('#motion-principles')).toContainText('Would the change be harder to understand without motion?');
+		await expect(page.locator('#motion-practices')).toContainText('The 1-second and 3-second boundaries are starting points');
+		await expect(page.locator('#motion-review')).toContainText('Pause decorative updates when hidden or offscreen');
+		await expect(page.locator('#motion-accessibility')).toContainText('Do not force a streaming surface back to the latest output');
+		await expect(page.locator('#motion-review')).toContainText('normal and reduced motion');
 		assert.match(motionRecipeExamples(authored).find(recipe => recipe.id === 'surface').code, /^\.surface\.updated-reference \{/);
 		assert.equal(await page.locator('.motion-doc pre, .motion-doc-code').count(), 0);
 	} finally {
@@ -166,7 +176,7 @@ test('duration studies isolate source timing, compare together, and keep product
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const { data } = await (await page.request.get(new URL('/api/topic?id=motion', panel.url).href)).json();
 		const study = page.locator('#motion-duration');
-		assert.equal(await page.locator('.motion-doc table').count(), 0);
+		assert.equal(await study.locator('table').count(), 0);
 		assert.equal(await page.locator('#motion-timing iframe, #motion-timing [data-motion-example]').count(), 0);
 		assert.deepEqual(await study.locator('[data-duration-example] > span').allTextContents(),
 			data.motionDocumentation.page.durations.map(entry => `${entry.title} · ${data.motionDocumentation.tokens.find(token => token.id === entry.tokens[0]).value}`));
@@ -202,21 +212,17 @@ test('duration studies isolate source timing, compare together, and keep product
 		assert.equal(await page.locator('.motion-doc-curve > header > p').count(), data.motionDocumentation.page.easings.length);
 		assert.equal(await page.locator('.motion-doc-curve > .motion-doc-caption').count(), 0);
 		assert.equal(await page.locator('.motion-doc a[href^="#motion-"]').evaluateAll(links => links.every(link => document.getElementById(link.hash.slice(1)))), true);
-		const menuLink = page.getByRole('link', { name: 'menu example', exact: true }).first();
-		await menuLink.focus();
-		await page.keyboard.press('Enter');
-		await expect(page.locator('#motion-example-anchored-menu')).toBeFocused();
 		assert.equal(await page.locator('[data-motion-curve] input[type="checkbox"]').count(), 0);
-		assert.equal(await page.locator('[data-motion-property="scale"] .motion-doc-specimen-target').count(), 1);
+		await expect(page.locator('#motion-foundations')).toContainText('Choose the least change that explains the relationship.');
 		assert.equal(await page.locator('.motion-doc [data-motion-preset], #motion-authoring, #motion-presets').count(), 0);
-		assert.doesNotMatch(await page.locator('.motion-doc').textContent(), /Component binding|Preset contract|Default tokens|interpolation-error|Source ownership|Analytic peak speed|travel\/s|Analysis unavailable/);
+		assert.doesNotMatch(await page.locator('.motion-doc').textContent(), /Preset contract|Default tokens|interpolation-error|Source ownership|Analytic peak speed|travel\/s|Analysis unavailable/);
 		await page.locator('.source-documents > summary').click();
 		assert.equal(new URL(await page.locator('.source-documents').getByRole('link', { name: 'Motion', exact: true }).getAttribute('href')).searchParams.get('documentId'), motionGuidanceFile);
 		await study.getByRole('link', { name: 'Design tokens', exact: true }).click();
 		const reference = page.locator('[data-topic="tokens"] #tokens-motion');
 		await expect(reference).toBeFocused();
 		await expect(reference).toHaveAttribute('open', '');
-		for (const id of ['motion.duration.none', 'motion.duration.faster', 'motion.duration.fast', 'motion.duration.normal', 'motion.duration.gentle', 'motion.duration.slow', 'motion.duration.ultraSlow']) {
+		for (const id of ['motion.duration.none', 'motion.duration.short', 'motion.duration.medium', 'motion.duration.long']) {
 			await expect(reference.locator('th').getByText(id, { exact: true })).toHaveCount(1);
 		}
 	} finally {
@@ -225,7 +231,7 @@ test('duration studies isolate source timing, compare together, and keep product
 	}
 });
 
-test('ongoing activity exposes its shape and reduced-motion controls directly', { timeout: 30000 }, async () => {
+test('ongoing activity keeps the matrix and reduced-motion controls without the retired ring option', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -239,10 +245,10 @@ test('ongoing activity exposes its shape and reduced-motion controls directly', 
 		const fixture = await handle.contentFrame();
 		assert.equal(await example.locator('details, dl').count(), 0);
 		await example.getByRole('checkbox', { name: 'Reduced motion', exact: true }).check();
-		await example.getByRole('radio', { name: 'Ring', exact: true }).check();
-		await example.getByRole('button', { name: 'Play: Agent working status', exact: true }).click();
+		await expect(example.getByRole('radio')).toHaveCount(0);
+		await example.getByRole('button', { name: 'Play: Ongoing agent work', exact: true }).click();
 		await expect.poll(() => fixture.evaluate(() => window.fixtureInput.motion)).toMatchObject({
-			action: 'working', sequence: 2, paused: false, reduced: true, playbackRate: 1, variant: 'ring',
+			action: 'working', sequence: 1, paused: false, reduced: true, playbackRate: 1,
 		});
 		assert.equal(await handle.evaluate(element => element.isConnected), true);
 	} finally {
@@ -264,14 +270,14 @@ test('motion explains intent with canvas-owned independent playback and one toke
 		const article = page.locator('[data-topic="motion"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.getByRole('navigation', { name: 'Topics', exact: true })).toBeVisible();
-		assert.deepEqual(await article.locator('.motion-doc > section > h2').allTextContents(), ['Principles', 'Foundations', 'Best practices', 'Accessibility']);
+		assert.deepEqual(await article.locator('.motion-doc > section > h2').allTextContents(), ['Purpose and restraint', 'Product patterns', 'Timing and properties', 'Presets and tokens', 'Accessibility', 'Evaluate and improve']);
 		assert.deepEqual(await article.locator('.motion-doc > section').evaluateAll(sections => sections.map(section => section.id)),
-			['motion-principles', 'motion-foundations', 'motion-practices', 'motion-accessibility']);
-		assert.equal(await article.locator('#motion-practices [data-motion-example]').count(), 0);
-		await expect(article.locator('#motion-practices')).toContainText('Name the benefit.');
+			['motion-principles', 'motion-practices', 'motion-foundations', 'motion-implementation', 'motion-accessibility', 'motion-review']);
+		assert.equal(await article.locator('#motion-review [data-motion-example]').count(), 0);
+		await expect(article.locator('#motion-review')).toContainText('Name the benefit and the alternative.');
 		assert.deepEqual(await article.locator('#motion-timing > h4').allTextContents(), ['Duration', 'Easing']);
 		assert.equal(await article.locator('.article-outline a').evaluateAll(links => links.every(link => document.getElementById(decodeURIComponent(link.hash.slice(1))))), true);
-		const exampleIds = ['fade', 'selection', 'listening-color', 'input-focus', 'control', 'anchored-menu', 'disclosure', 'delayed-content', 'compact-activity', 'agent-activity', 'progress', 'unknown-progress', 'notification', 'working-logo', 'image-generation', 'blobby', 'completion'];
+		const exampleIds = ['selection', 'anchored-menu', 'disclosure', 'delayed-content', 'agent-activity', 'progress', 'notification', 'completion'];
 		for (const id of exampleIds) {
 			const example = article.locator(`[data-motion-example="${id}"]`);
 			await example.evaluate(element => element.scrollIntoView());
@@ -284,42 +290,33 @@ test('motion explains intent with canvas-owned independent playback and one toke
 			const header = example.querySelector('header');
 			return header?.querySelector('p') && !!(header.compareDocumentPosition(example.querySelector('.motion-doc-viewer')) & Node.DOCUMENT_POSITION_FOLLOWING);
 		})), true);
-		assert.equal(await article.locator('[data-motion-property]:not([data-motion-property="scale"])').evaluateAll(properties => properties.every(property => {
-			const header = property.querySelector('header');
-			const caption = property.querySelector('.motion-doc-caption');
-			const viewer = property.querySelector('.motion-doc-viewer');
-			return header && caption && viewer && !header.contains(caption)
-				&& !!(viewer.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING);
-		})), true);
-		assert.equal(await article.locator('[data-motion-example] .motion-doc-viewer > .motion-doc-stage + .motion-doc-preview-tools').count(), 16);
-		assert.deepEqual(await article.locator('#motion-foundations .motion-doc-specimen-item h4').allTextContents(), ['Fade', 'Scale', 'Position', 'Color']);
-		assert.deepEqual(await article.locator('[data-motion-property]').evaluateAll(items => items.map(item => item.dataset.motionProperty)), ['fade', 'scale', 'position', 'color']);
+		assert.equal(await article.locator('[data-motion-example] .motion-doc-viewer > .motion-doc-stage + .motion-doc-preview-tools').count(), exampleIds.length);
+		await expect(article.locator('#motion-foundations')).toContainText('Choose the least change that explains the relationship.');
+		assert.equal(await article.locator('[data-motion-property]').count(), 0);
 		assert.equal(await article.locator('.motion-doc-property-list').count(), 0);
-		assert.equal(await article.locator('[data-motion-property] iframe').count(), 3);
-		assert.equal(await article.locator('[data-motion-property="scale"] .motion-doc-specimen-target').count(), 1);
 		assert.equal(await article.locator('.motion-doc-property').count(), 0);
-		assert.deepEqual(await article.locator('#motion-principles > h3').allTextContents(), ['Purposeful', 'Natural', 'Responsive', 'Consistent', 'Accessible']);
+		assert.deepEqual(await article.locator('#motion-principles > h3').allTextContents(), ['When to use motion', 'Motion styles', 'Principles in practice']);
 		assert.equal(await article.locator('#motion-principles dl').count(), 0);
-		assert.deepEqual(await article.locator('#motion-transitions > [data-motion-recipe] > h4').allTextContents(), ['Appear and dismiss', 'Changes in layout', 'Replace content without losing context']);
-		assert.deepEqual(await article.locator('#motion-foundations > h3').allTextContents(), ['Visual changes']);
+		assert.deepEqual(await article.locator('#motion-transitions > [data-motion-recipe] > h4').allTextContents(), ['Appear and dismiss', 'Changes in layout']);
+		assert.deepEqual(await article.locator('#motion-foundations > h3').allTextContents(), ['Choose what changes']);
 		assert.equal(await article.locator('#motion-timing > h3').textContent(), 'Timing');
-		assert.equal(await article.locator('[data-motion-curve]').count(), 4);
+		assert.equal(await article.locator('[data-motion-curve]').count(), 2);
 		assert.equal(await article.locator('[data-motion-diagram]').count(), 0);
 		assert.equal(await article.getByRole('heading', { name: 'State without movement' }).count(), 0);
 		assert.equal(await article.locator('.motion-doc-viewer .motion-doc-parameters, .motion-doc-viewer .motion-doc-endpoints, .motion-doc-viewer .motion-doc-caption, .motion-doc-viewer output').count(), 0);
 		assert.doesNotMatch(await article.innerText(), /Illustrative example/);
 		assert.doesNotMatch(await article.innerText(), /From parameters to components|ICodeEditor|Edge entrance/);
-		await expect(article.locator('#motion-accessibility')).toContainText('same content, state, and available actions');
+		await expect(article.locator('#motion-accessibility')).toContainText('while retaining content and state');
 		await expect(article.locator('#motion-accessibility')).toContainText('Screen-reader announcements and motion preferences are separate');
 		assert.equal(await article.locator('.motion-doc .token-copy, .motion-doc input[type="range"], .motion-doc-playback-state').count(), 0);
 		assert.equal(await article.locator('#motion-practices table, #motion-accessibility table').count(), 0);
 		assert.equal(await article.getByRole('combobox', { name: /^Playback speed:/ }).count(), 0);
 		assert.equal(await article.locator('.motion-doc pre, .motion-doc select').count(), 0);
 		assert.equal(await article.getByRole('link', { name: 'Open in Component Explorer', exact: true }).count(), 0);
-		assert.equal(await article.getByRole('checkbox', { name: 'Reduced motion', exact: true }).count(), 16);
-		assert.equal(await article.locator('.motion-doc-viewer > .motion-doc-preview-tools .motion-doc-reduced').count(), 16);
+		assert.equal(await article.getByRole('checkbox', { name: 'Reduced motion', exact: true }).count(), exampleIds.length);
+		assert.equal(await article.locator('.motion-doc-viewer > .motion-doc-preview-tools .motion-doc-reduced').count(), exampleIds.length);
 		assert.equal(await article.getByRole('radio', { name: /^(Preset|Current|No motion|Proposed motion|Existing motion)$/ }).count(), 0);
-		assert.deepEqual(await article.locator('#motion-foundations [data-motion-example]').evaluateAll(examples => examples.map(example => example.dataset.motionExample)), exampleIds);
+		assert.deepEqual(await article.locator('#motion-practices [data-motion-example]').evaluateAll(examples => examples.map(example => example.dataset.motionExample)), exampleIds);
 		assert.equal(await article.locator('.motion-doc details').count(), 0);
 		assert.doesNotMatch(await article.innerText(), /Phase\s?2|Phase\s?1|Further guidance|Motion in components/i);
 		assert.equal(await article.getByRole('radio', { name: /Dark|Light|Contrast/ }).count(), 0);
@@ -347,24 +344,22 @@ test('motion explains intent with canvas-owned independent playback and one toke
 		await expect.poll(() => fixture.evaluate(() => window.fixtureInput.motion)).toMatchObject({ action: 'reset', sequence: 2, paused: false });
 		await fixture.evaluate(() => parent.postMessage({ type: 'vscode-motion-preview:ended', sequence: 1 }, '*'));
 		await expect(fade.getByRole('button', { name: 'Play: Menu transition', exact: true })).toBeVisible();
-		const control = article.locator('[data-motion-example="control"]');
-		await control.getByRole('button', { name: 'Play: Toggle feedback', exact: true }).click();
+		const control = article.locator('[data-motion-example="selection"]');
+		await control.getByRole('button', { name: 'Play: Selection feedback', exact: true }).click();
 		const controlFixture = await (await control.locator('iframe').elementHandle()).contentFrame();
-		await expect.poll(() => controlFixture.evaluate(() => window.fixtureInput.motion)).toMatchObject({ action: 'toggle', sequence: 1, paused: false });
-		await control.getByRole('button', { name: 'Pause: Toggle feedback', exact: true }).click();
-		await control.getByRole('button', { name: 'Play: Toggle feedback', exact: true }).click();
-		await expect.poll(() => controlFixture.evaluate(() => window.fixtureInput.motion)).toMatchObject({ action: 'toggle', sequence: 1, paused: false });
+		await expect.poll(() => controlFixture.evaluate(() => window.fixtureInput.motion)).toMatchObject({ action: 'advance', sequence: 1, paused: false });
+		await control.getByRole('button', { name: 'Pause: Selection feedback', exact: true }).click();
+		await control.getByRole('button', { name: 'Play: Selection feedback', exact: true }).click();
+		await expect.poll(() => controlFixture.evaluate(() => window.fixtureInput.motion)).toMatchObject({ action: 'advance', sequence: 1, paused: false });
 		assert.deepEqual(await article.locator('iframe').evaluateAll(frames => frames.map(frame => frame.src)), before);
 		assert.equal(await article.locator('iframe').evaluateAll(frames => frames.every((frame, index) => frame === window.motionFrames[index])), true);
 		await expect(article.locator('[data-motion-example="notification"]')).toContainText('without taking focus');
 		await expect(article.locator('[data-motion-example="anchored-menu"] .preview-status')).toHaveText('Menu transition · Live preview');
 		await expect(article.locator('[data-motion-example="anchored-menu"] .preview-status')).not.toBeVisible();
-		await expect(article.locator('#motion-practices')).toContainText('Respond before waiting.');
+		await expect(article.locator('#motion-review')).toContainText('Choose the closest product pattern.');
 		await expect(article.locator('#motion-transitions')).toContainText('reading anchor');
 		assert.doesNotMatch(await article.locator('#motion-progress').innerText(), /[0-9]+ms/);
-		await expect(article.locator('[data-motion-example="agent-activity"]').getByRole('radio', { name: 'Matrix', exact: true })).toBeChecked();
-		await article.locator('[data-motion-example="agent-activity"]').getByRole('radio', { name: 'Ring', exact: true }).check();
-		await expect(article.locator('[data-motion-example="agent-activity"]').getByRole('radio', { name: 'Ring', exact: true })).toBeChecked();
+		await expect(article.locator('[data-motion-example="agent-activity"]').getByRole('radio')).toHaveCount(0);
 		for (const width of [320, 390, 720, 800, 1000, 1440]) {
 			await page.setViewportSize({ width, height: 900 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${width}px`);
@@ -392,14 +387,14 @@ test('single-button players retain their final state until an explicit non-playi
 		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 		await mockFixtureRenderer(page, root, motionControls.map(control => control.id));
 		await page.goto(panel.url);
-		const response = page.locator('[data-motion-curve="motion.easing.linear"]');
+		const response = page.locator('[data-motion-curve="motion.progress.update.easing"]');
 		await expect(response).toBeVisible();
 		const target = response.locator('circle');
-		await response.getByRole('button', { name: 'Play: Interpolate reported progress', exact: true }).focus();
+		await response.getByRole('button', { name: 'Play: Constant-rate interpolation', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(response).toHaveAttribute('data-playback-state', 'finished');
 		await expect(target).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 16)');
-		await expect(response.getByRole('button', { name: 'Reset: Interpolate reported progress', exact: true })).toBeFocused();
+		await expect(response.getByRole('button', { name: 'Reset: Constant-rate interpolation', exact: true })).toBeFocused();
 		await page.waitForTimeout(3000);
 		await expect(target).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 16)');
 		await page.keyboard.press('Enter');
@@ -424,7 +419,7 @@ test('single-button players retain their final state until an explicit non-playi
 			}), true);
 		}
 		assert.equal(await easing.getByRole('radio').count(), 0);
-		const easeOut = page.locator('[data-motion-curve="motion.surface.easing"]');
+		const easeOut = page.locator('[data-motion-curve="motion.state.change.easing"]');
 		await easeOut.scrollIntoViewIfNeeded();
 		assert.equal(await easing.evaluateAll(elements => elements.every(element =>
 			element.getAnimations({ subtree: true }).every(animation => animation.playState === 'paused'))), true);
@@ -438,15 +433,15 @@ test('single-button players retain their final state until an explicit non-playi
 			durationToken: binding.tokens[0],
 			durations: Array(2).fill(data.motionDocumentation.tokens.find(token => token.id === binding.tokens[0]).number),
 		})));
-		await easeOut.getByRole('button', { name: 'Play: Arrive and settle', exact: true }).click();
-		await page.getByRole('heading', { name: 'Motion', level: 1, exact: true }).scrollIntoViewIfNeeded();
+		await easeOut.getByRole('button', { name: 'Play: Prompt response and quiet settling', exact: true }).click();
+		await page.evaluate(() => scrollTo(0, 0));
 		await expect(easeOut).toHaveAttribute('data-playback-state', 'paused');
 		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await expect.poll(() => target.evaluate(element => element.getAnimations()[0].effect.getTiming().duration)).toBe(0);
 		await expect(target).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 16)');
-		await response.getByRole('button', { name: 'Reset: Interpolate reported progress', exact: true }).click();
+		await response.getByRole('button', { name: 'Reset: Constant-rate interpolation', exact: true }).click();
 		await expect(target).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 144)');
-		await response.getByRole('button', { name: 'Play: Interpolate reported progress', exact: true }).click();
+		await response.getByRole('button', { name: 'Play: Constant-rate interpolation', exact: true }).click();
 		assert.deepEqual(await target.evaluate(element => ({
 			transform: getComputedStyle(element).transform,
 			delay: element.getAnimations()[0].effect.getTiming().delay,
@@ -538,10 +533,9 @@ test('published CSS recipes resolve real parameters and run their documented sta
 		}, { recipes: motionRecipeExamples(model), variables });
 		assert.deepEqual(results, [
 			{ id: 'surface', missing: [], durations: [duration('motion.surface.enter.duration'), duration('motion.surface.enter.duration')], visible: true, reduced: '0s' },
-			{ id: 'layout', missing: [], durations: [duration('motion.disclosure.opacity.duration'), duration('motion.disclosure.duration')].sort((a, b) => a - b), visible: true, reduced: '0s', disclosure: { collapsed: 0, expanded: 96, anchorShift: 0, reflow: 96, closedAgain: 0 } },
-			{ id: 'content', missing: [], durations: [duration('motion.content.duration')], visible: true, reduced: '0s' },
-			{ id: 'feedback', missing: [], durations: [duration('motion.control.duration')], visible: true, reduced: '0s' },
-			{ id: 'notification', missing: [], durations: [duration('motion.toast.duration'), duration('motion.toast.duration')], visible: true, reduced: '0s' },
+			{ id: 'layout', missing: [], durations: [duration('motion.disclosure.content.duration'), duration('motion.disclosure.geometry.duration')].sort((a, b) => a - b), visible: true, reduced: '0s', disclosure: { collapsed: 0, expanded: 96, anchorShift: 0, reflow: 96, closedAgain: 0 } },
+			{ id: 'content', missing: [], durations: [duration('motion.content.enter.duration')], visible: true, reduced: '0s' },
+			{ id: 'feedback', missing: [], durations: [duration('motion.state.change.duration')], visible: true, reduced: '0s' },
 		]);
 	} finally { await browser.close(); }
 });
@@ -580,22 +574,22 @@ test('motion diagrams and controls use product tokens, Codicons, and matching fi
 					.map(target => getComputedStyle(target).backgroundColor);
 				return { targets, expected: expectedColors };
 			}, {
-				colors: Array(4).fill(data.motionAppearance[scheme].find(token => token.id === 'editor.background').value),
+				colors: Array(data.motionDocumentation.page.easings.length).fill(data.motionAppearance[scheme].find(token => token.id === 'editor.background').value),
 			});
 			assert.deepEqual(measurements.targets, measurements.expected);
-			const button = page.getByRole('button', { name: 'Play: Interpolate reported progress', exact: true });
+			const button = page.getByRole('button', { name: 'Play: Constant-rate interpolation', exact: true });
 			await expect(button).toHaveClass(/monaco-button monaco-text-button default-colors secondary/);
 			await expect(button.locator('.codicon-play')).toHaveText(String.fromCodePoint(Number.parseInt(data.icons.find(icon => icon.id === 'play').code, 16)));
 			assert.ok((await page.locator('.motion-doc > style').textContent()).includes(data.motionAppearance.buttonCss));
-			const control = page.locator('[data-motion-example="control"]');
+			const control = page.locator('[data-motion-example="selection"]');
 			await control.scrollIntoViewIfNeeded();
 			await expect(control.locator('[data-preview-state="ready"]')).toHaveCount(1);
-			assert.equal(new URL(await control.locator('iframe').getAttribute('src')).searchParams.get('fixture'), `motion/Control/${scheme === 'dark' ? 'Dark' : 'Light'}`);
+			assert.equal(new URL(await control.locator('iframe').getAttribute('src')).searchParams.get('fixture'), `${motionControls.find(control => control.id === 'motion-selection').groups[0]}/${scheme === 'dark' ? 'Dark' : 'Light'}`);
 			for (const width of [320, 720]) {
 				await page.setViewportSize({ width, height: 900 });
 				assert.equal(await page.locator('[data-topic="motion"]').evaluate(root => {
-					const viewer = root.querySelector('[data-motion-example="control"] .motion-doc-viewer').getBoundingClientRect();
-					const elements = root.querySelectorAll('.topic-intro, .topic-heading, #motion-foundations > p:first-of-type, [data-motion-example="control"] header');
+					const viewer = root.querySelector('[data-motion-example="selection"] .motion-doc-viewer').getBoundingClientRect();
+					const elements = root.querySelectorAll('.topic-intro, .topic-heading, #motion-foundations > p:first-of-type, [data-motion-example="selection"] header');
 					return [...elements].every(element => {
 						const bounds = element.getBoundingClientRect();
 						return Math.abs(bounds.left - viewer.left) < 1 && bounds.right >= viewer.right - 1;

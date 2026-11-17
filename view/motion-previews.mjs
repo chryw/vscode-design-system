@@ -193,7 +193,7 @@ export function renderPropertySpecimen(parent, model, { id, title, shape = 'squa
 	viewer.append(stage);
 	diagramPlayer(viewer, model, title, [{
 		element: target, frames: frames(model),
-		duration: response?.durationMs ?? Number.parseFloat(tokenValue(model, tokens?.[0] ?? 'motion.duration.slow')),
+		duration: response?.durationMs ?? Number.parseFloat(tokenValue(model, tokens?.[0] ?? 'motion.duration.long')),
 		easing: response?.easing ?? tokenValue(model, tokens?.[1] ?? 'motion.easing.linear'),
 	}], signal);
 	parent.append(viewer);
@@ -354,7 +354,7 @@ function createMotionScene(stage, model, kind, { duration, direction = 'inline-s
 		const target = node('div', undefined, 'motion-doc-layout-details');
 		stack.append(node('div', undefined, 'motion-doc-specimen-bar'), target, node('div', undefined, 'motion-doc-specimen-bar'));
 		stage.append(stack);
-		tracks = [track(target, [{ height: '0px' }, { height: 'calc(var(--vscode-spacing-size320) * 2)' }], 'motion.disclosure.duration', 'motion.disclosure.easing')];
+		tracks = [track(target, [{ height: '0px' }, { height: 'calc(var(--vscode-spacing-size320) * 2)' }], 'motion.disclosure.geometry.duration', 'motion.disclosure.geometry.easing')];
 	} else if (kind === 'layout') {
 		stage.dataset.direction = direction;
 		const layout = node('div', undefined, 'motion-doc-layout-frame');
@@ -369,8 +369,8 @@ function createMotionScene(stage, model, kind, { duration, direction = 'inline-s
 		layout.append(target, main);
 		stage.append(layout);
 		tracks = [
-			track(target, [{ [direction === 'inline-start' ? 'gridTemplateColumns' : 'gridTemplateRows']: '0fr' }, { [direction === 'inline-start' ? 'gridTemplateColumns' : 'gridTemplateRows']: '1fr' }], duration ?? 'motion.disclosure.duration', 'motion.easing.easeInOut'),
-			track(target, [{ opacity: 0 }, { opacity: 1 }], duration ?? 'motion.disclosure.opacity.duration', 'motion.easing.easeInOut'),
+			track(target, [{ [direction === 'inline-start' ? 'gridTemplateColumns' : 'gridTemplateRows']: '0fr' }, { [direction === 'inline-start' ? 'gridTemplateColumns' : 'gridTemplateRows']: '1fr' }], duration ?? 'motion.disclosure.geometry.duration', 'motion.easing.easeInOut'),
+			track(target, [{ opacity: 0 }, { opacity: 1 }], duration ?? 'motion.disclosure.content.duration', 'motion.easing.easeInOut'),
 		];
 	} else if (kind === 'content') {
 		const context = node('div', undefined, 'motion-doc-content-context');
@@ -391,7 +391,7 @@ function createMotionScene(stage, model, kind, { duration, direction = 'inline-s
 		context.append(steps, layers);
 		stage.append(context);
 		tracks = [
-			track(target, [{ opacity: 0 }, { opacity: 1 }], duration ?? 'motion.content.duration', 'motion.easing.linear'),
+			track(target, [{ opacity: 0 }, { opacity: 1 }], duration ?? 'motion.content.enter.duration', 'motion.easing.linear'),
 			{ element: content, frames: [{ opacity: 1 }, { opacity: 0 }], duration: 0, easing: 'linear' },
 			track(steps.children[0], [{ backgroundColor: 'var(--vscode-button-background)' }, { backgroundColor: 'var(--vscode-button-secondaryBackground)' }], 'motion.duration.none', 'motion.easing.linear'),
 			track(steps.children[1], [{ backgroundColor: 'var(--vscode-button-secondaryBackground)' }, { backgroundColor: 'var(--vscode-button-background)' }], 'motion.duration.none', 'motion.easing.linear'),
@@ -405,7 +405,7 @@ function createMotionScene(stage, model, kind, { duration, direction = 'inline-s
 		tracks = [track(target, [
 			{ opacity: 0, transform: 'translateY(100%)' },
 			{ opacity: 1, transform: 'translateY(0)' },
-		], duration ?? 'motion.toast.duration', 'motion.toast.easing')];
+		], duration ?? 'motion.notification.enter.duration', 'motion.notification.enter.easing')];
 	} else {
 		throw new Error(`Unknown motion recipe illustration: ${kind}`);
 	}

@@ -20,6 +20,7 @@ import { readBook, validateBook } from '../runtime/book.mjs';
 import { listTopics, readReference, searchReference } from '../runtime/headless.mjs';
 import { createDocumentCheckout, repositoryRoot } from './document-helpers.mjs';
 import { copyReviewSources } from '../scripts/archive.mjs';
+import { bookNavigation } from '../model/catalog.mjs';
 
 const root = workspaceRoot;
 const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026', query: '', fixtureId: '', anchor: '' };
@@ -38,7 +39,7 @@ test('review sources keep viewer implementation separate from repository data an
 	try {
 		await copyReviewSources(output);
 		const manifest = '.github/design-system/book.json';
-		const guidance = 'src/vs/base/browser/ui/button/button-design.md';
+		const guidance = 'src/vs/base/browser/ui/button/button.design.md';
 		assert.deepEqual({
 			manifest: readFileSync(path.join(output, 'repository', manifest), 'utf8'),
 			guidance: readFileSync(path.join(output, 'repository', guidance), 'utf8'),
@@ -106,6 +107,22 @@ test('catalog and scope validation are metadata-only, bounded and exact', async 
 		assert.equal(panel.state.scope.active, 'principles');
 		assert.equal(panel.state.scope.topics.length, catalog.filter(item => !item.hidden).length);
 		assert.equal((await (await fetch(`${origin}/api/catalog`)).json()).topics.length, catalog.length);
+		const { topics, utilities } = bookNavigation(catalog);
+		const listed = listTopics(root).topics;
+		assert.deepEqual({
+			foundations: topics.filter(item => ['accessibility', 'content'].includes(item.id)).map(item => [item.id, item.group]),
+			utilities: utilities.map(item => item.id),
+			groupedLibrary: topics.some(item => item.id === 'documentation'),
+			headless: listed.find(item => item.id === 'documentation').navigation,
+			defaultPlacement: listed.find(item => item.id === 'typography').navigation,
+		}, {
+			foundations: [['accessibility', 'Foundations'], ['content', 'Foundations']],
+			utilities: ['documentation'], groupedLibrary: false, headless: 'utility', defaultPlacement: 'topic',
+		});
+		const book = readBook(path.join(root, '.github/design-system'));
+		for (const navigation of ['unknown', false, null]) {
+			assert.throws(() => validateBook({ ...book, topics: book.topics.map((topic, index) => index ? topic : { ...topic, navigation }) }), /topic/);
+		}
 		assert.deepEqual(panel.store.metrics, { reads: {}, parses: {}, bytes: 0 });
 		panel.setScope({ operation: 'all', layout: 'single' });
 		assert.deepEqual(panel.store.metrics, { reads: {}, parses: {}, bytes: 0 });
@@ -425,7 +442,7 @@ test('roots reject symlink escapes and separate instances keep independent cache
 		assert.throws(() => { first.store.root = directory; }, TypeError);
 		for (const file of ['.github/skills/design-philosophy/SKILL.md', '.github/instructions/design-tokens.instructions.md',
 			'.github/skills/ux-css-layout/SKILL.md',
-			'src/vs/platform/theme/common/sizes/spacing.md',
+			'src/vs/platform/theme/common/sizes/spacing.design.md',
 			'src/vs/sessions/contrib/automations/browser/media/automationDialog.css',
 			'src/vs/workbench/contrib/chat/browser/aiCustomization/media/agentGlobalConfigurationSettings.css',
 			'src/vs/workbench/test/browser/componentFixtures/baseUI.fixture.ts',
@@ -621,18 +638,20 @@ test('authored sources use the selected repository data root and keep independen
 test('headless read and search return bounded source-backed results without fixture discovery', async () => {
 	const read = await readReference(root, 'typography', { limit: 1000 });
 	const motion = await readReference(root, 'motion', { limit: 1000 });
+	const button = await readReference(root, 'component-button', { limit: 1000 });
 	const search = await searchReference(root, 'fontSize', { topics: ['typography'], limit: 3 });
 	assert.ok(read.sources.length && read.guidance.length && JSON.stringify(read).length < 8000);
 	assert.deepEqual({ file: read.guidance[0].file, anchor: read.guidance[0].anchor },
-		{ file: '.github/instructions/design-tokens.instructions.md', anchor: 'font-size' });
-	assert.equal(motion.guidance[0].file, 'src/vs/platform/theme/common/motion/MOTION.md');
+		{ file: 'src/vs/platform/theme/common/sizes/typography.design.md', anchor: 'ui-type-roles' });
+	assert.equal(motion.guidance[0].file, 'src/vs/platform/theme/common/motion/motion.design.md');
+	assert.equal(button.guidance[0].file, 'src/vs/base/browser/ui/button/button.design.md');
 	assert.deepEqual({ matches: search.results.length, bounded: search.truncated, sourceBacked: search.results.every(result => result.file && result.line > 0) },
 		{ matches: 3, bounded: true, sourceBacked: true });
 	await assert.rejects(searchReference(root, ''), /2–200/);
 });
 
 test('headless reads prioritize Motion definitions and component APIs over rendering dependencies', async () => {
-	const motion = await readReference(root, 'motion');
+	const motion = await readReference(root, 'motion', { limit: 24000 });
 	const button = await readReference(root, 'component-button');
 	assert.deepEqual({
 		motionKinds: [...new Set(motion.definitions.map(item => item.definitionKind))].sort(),
@@ -680,11 +699,11 @@ test('headless search reports optional missing sources while returning available
 			writeFileSync(target, readFileSync(store.sourcePath(file)));
 		}
 	} finally { store.close(); }
-	const guidance = path.join(checkout, 'src/vs/platform/theme/common/motion/MOTION.md');
+	const guidance = path.join(checkout, 'src/vs/platform/theme/common/motion/motion.design.md');
 	writeFileSync(guidance, `${readFileSync(guidance, 'utf8')}\n\nheadless-missing-source-probe\n`);
 	const result = await searchReference(checkout, 'headless-missing-source-probe', { topics: ['motion'] });
 	assert.deepEqual({
-		foundGuidance: result.results.some(item => item.file.endsWith('/MOTION.md') && item.text.includes('headless-missing-source-probe')),
+		foundGuidance: result.results.some(item => item.file.endsWith('/motion.design.md') && item.text.includes('headless-missing-source-probe')),
 		unavailableSources: result.unavailableSources,
 		incomplete: result.incomplete,
 		truncated: result.truncated,

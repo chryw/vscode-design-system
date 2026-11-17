@@ -36,7 +36,7 @@ await joinSession({
 		description: 'Browse source-backed design references, authored specifications and live product examples.',
 		inputSchema,
 		actions: [
-			{ name: 'list_topics', description: 'List compact topic metadata without reading product sources or starting fixtures.', handler: guarded(({ instanceId }) => listTopics(runtime.rootFor(instanceId))) },
+			{ name: 'list_topics', description: 'List compact topic and book-utility metadata without reading product sources or starting fixtures.', handler: guarded(({ instanceId }) => listTopics(runtime.rootFor(instanceId))) },
 			{ name: 'set_scope', description: 'Replace/add selected topics or expose all; comparison takes exactly two topics.', inputSchema: scopeSchema,
 				handler: guarded(({ instanceId, input }) => {
 					const panel = runtime.required(instanceId);

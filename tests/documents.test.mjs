@@ -6,9 +6,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EventEmitter } from 'node:events';
-import { readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { documentExcerpt, documentSection, parseDocument, resolveDocumentReference } from '../model/documents.mjs';
+import { documentExcerpt, documentSection, documentView, parseDocument, resolveDocumentReference } from '../model/documents.mjs';
 import { initialView, readViewURL, validateViewFields, viewProperties, writeViewURL } from '../model/view-state.mjs';
 import { DocumentLibrary } from '../runtime/documents.mjs';
 import { createExplorer } from '../runtime/server.mjs';
@@ -73,6 +73,37 @@ test('discovery watches additions and closes its bounded source watchers when in
 			watched.push({ directory, options, callback, watcher });
 			return watcher;
 		},
+	});
+
+	test('renamed design specifications retain document bookmarks without duplicate search entries', t => {
+		const fixture = checkout(t);
+		const old = 'src/vs/feature/old-design.md';
+		const canonical = 'src/vs/feature/feature.design.md';
+		fixture.write(canonical, '# Feature design\n\n## Usage\n\nKeep the original intent.\n');
+		const file = path.join(fixture.bookRoot, 'book.json');
+		const book = JSON.parse(readFileSync(file, 'utf8'));
+		book.documentAliases = { [old]: canonical };
+		writeFileSync(file, JSON.stringify(book));
+		const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
+		try {
+			const index = library.snapshot();
+			assert.deepEqual({
+				read: library.read(old, { anchor: 'usage' }).id,
+				selected: documentView(index, { documentId: old }).document.id,
+				portable: documentView(JSON.parse(JSON.stringify(index)), { documentId: old }).document.id,
+				results: library.list({ query: 'Feature design' }).results.map(document => document.id),
+				diagnostics: index.diagnostics,
+			}, { read: canonical, selected: canonical, portable: canonical, results: [canonical], diagnostics: [] });
+			fixture.write(old, '# Conflicting copy\n');
+			assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'alias-shadows-document'), true);
+			rmSync(path.join(fixture.root, old));
+			rmSync(path.join(fixture.root, canonical));
+			assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'missing-alias-target'), true);
+		} finally { library.close(); }
+		for (const aliases of [null, [], { [old]: '../outside.md' }, { [old]: canonical, [canonical]: old }]) {
+			writeFileSync(file, JSON.stringify({ ...book, documentAliases: aliases }));
+			assert.throws(() => new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot }), /Invalid document aliases/);
+		}
 	});
 	try {
 		library.setActive(true);

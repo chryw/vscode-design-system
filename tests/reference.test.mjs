@@ -248,6 +248,19 @@ test('elevation reads live tier guidance, registered radii, and actual shadow so
 	for (const token of system.reference.scales.shadows) { assert.ok(sourceLine(token.source).includes(token.value)); }
 	assert.equal(system.reference.topics.elevation[0].status, 'source-defined');
 	assert.equal(createReferenceModel({ ...system, elevation: { ...system.elevation, shadowUsage: [] } }, ['elevation']).topics.elevation[2].status, 'not-assessed');
+	const relocated = 'src/vs/platform/theme/common/elevation-guide.md';
+	const relocatedSystem = { ...system, authored: { ...system.authored, markdownSource: relocated }, sourceFiles: [...system.sourceFiles, relocated] };
+	assert.deepEqual(createReferenceModel(relocatedSystem, ['elevation']).topics.elevation[1].scope, [relocated]);
+	const themes = await reader(t)('theming');
+	assert.deepEqual(system.elevation.palettes.map(palette => ({
+		id: palette.id, contrast: palette.highContrast,
+		editor: palette.tokens.find(token => token.id === 'editor.background').value,
+	})), corePaletteThemes.map(({ id }) => ({
+		id, contrast: id.startsWith('Default High Contrast'),
+		editor: themes.themeGallery.find(theme => theme.id === id).palette.editor,
+	})));
+	assert.ok(system.sourceFiles.includes('src/vs/platform/theme/common/elevation.design.md'));
+	assert.ok(system.sizes.some(token => token.id === 'cornerRadius.xLarge'));
 });
 
 test('motion distinguishes explanatory topics, implementation observations, and product tokens', async t => {

@@ -12,11 +12,12 @@ export function motionTokenCategory(token) {
 }
 
 export function motionTokenGroups(tokens) {
-	const order = ['Duration scale', 'Easing', 'Feedback', 'Presence', 'Activity', 'Completion', 'Existing component signals'];
+	const order = ['Duration scale', 'Easing', 'Response pairs', 'Feedback', 'Presence', 'Activity', 'Completion', 'Existing component signals'];
 	const groups = Map.groupBy(tokens, token => {
 		if (/^motion\.attention\./.test(token.id)) { return 'Existing component signals'; }
-		if (/^motion\.(control|selection|press|border)\./.test(token.id)) { return 'Feedback'; }
-		if (/^motion\.(surface|fade|content|toast|disclosure|scrollbar)\./.test(token.id)) { return 'Presence'; }
+		if (/^motion\.response\./.test(token.id)) { return 'Response pairs'; }
+		if (/^motion\.(state|hover|control|selection|press|border)\./.test(token.id)) { return 'Feedback'; }
+		if (/^motion\.(surface|visibility|fade|content|notification|toast|disclosure|scrollbar)\./.test(token.id)) { return 'Presence'; }
 		if (/^motion\.(progress|spinner|matrix|logo|voice)\./.test(token.id)) { return 'Activity'; }
 		if (/^motion\.confetti\./.test(token.id)) { return 'Completion'; }
 		if (token.kind === 'duration') { return 'Duration scale'; }

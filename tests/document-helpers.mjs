@@ -17,6 +17,7 @@ export function createDocumentCheckout(t) {
 	const bookRoot = path.join(directory, '.github/design-system');
 	cpSync(repositoryRoot, bookRoot, { recursive: true });
 	const book = JSON.parse(readFileSync(path.join(repositoryRoot, 'book.json'), 'utf8'));
+	delete book.documentAliases;
 	book.documentSources = [
 		{ id: 'product', title: 'Product documentation', root: 'src/vs', origin: 'product' },
 		{ id: 'instructions', title: 'Instructions', root: '.github/instructions', origin: 'instruction' },

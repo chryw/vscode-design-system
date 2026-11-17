@@ -15,6 +15,40 @@ import { mockFixtureControl, mockFixtureRenderer } from './browser-helpers.mjs';
 const root = workspaceRoot;
 const widths = [320, 390, 500, 800, 1440];
 
+test('Illustration uses the shared book frame, source sections, and keyboard outline', { timeout: 30000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'illustration' } });
+	let browser;
+	try {
+		browser = await chromium.launch({ headless: true });
+		const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="illustration"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(article.locator('h1')).toHaveText('Illustration');
+		await expect(article.locator('.reference-empty, .guide-doc')).toHaveCount(0);
+		await expect(article.locator('.source-guidance > h2')).toHaveText(['Principles', 'Usage', 'Visual style', 'Accessibility', 'Build and review']);
+		const outline = article.getByRole('navigation', { name: 'On this page' });
+		await outline.getByRole('link', { name: 'Visual style', exact: true }).focus();
+		await page.keyboard.press('Enter');
+		await expect(article.locator('#illustration-style')).toBeFocused();
+		await expect(article.getByRole('link', { name: 'Motion', exact: true })).toHaveAttribute('href', /documentId=src%2Fvs%2Fplatform%2Ftheme%2Fcommon%2Fmotion%2Fmotion\.design\.md/);
+		for (const theme of ['Dark 2026', 'Light 2026', 'High Contrast Dark', 'High Contrast Light']) {
+			panel.setView({ theme });
+			for (const width of [390, 1440]) {
+				await page.setViewportSize({ width, height: 900 });
+				await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${theme}, ${width}px`);
+			}
+		}
+		assert.deepEqual(errors, []);
+	} finally {
+		await browser?.close();
+		await panel.close();
+	}
+});
+
 test('docs-style navigation separates chapters, reading, and a sticky section outline', { timeout: 30000 }, async () => {
 	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'typography' } });
 	let browser;
@@ -66,6 +100,63 @@ test('docs-style navigation separates chapters, reading, and a sticky section ou
 	}
 });
 
+test('compact topic context stays visible and recoverable errors do not displace readable content', { timeout: 30000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'typography' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 800, height: 900 } });
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="typography"]');
+		const content = article.locator('.topic-content');
+		await expect(content).toHaveAttribute('data-topic-state', 'ready');
+		await expect(page.locator('.checkout-details')).not.toHaveJSProperty('tagName', 'DETAILS');
+		await expect(page.locator('#checkout')).toBeVisible();
+		await expect(page.locator('.checkout-details').getByRole('button', { name: 'Refresh topic', exact: true })).toBeVisible();
+		for (const width of [390, 800, 1199]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.evaluate(() => scrollTo(0, 0));
+			const link = article.getByRole('navigation', { name: 'On this page' }).getByRole('link', { name: 'Emphasis', exact: true });
+			await link.focus();
+			await page.keyboard.press('Enter');
+			await expect(article.locator('#typography-emphasis')).toBeFocused();
+			const geometry = await article.evaluate(article => {
+				const context = article.querySelector('.topic-context').getBoundingClientRect();
+				const section = article.querySelector('#typography-emphasis').getBoundingClientRect();
+				return {
+					contextVisible: context.top >= 0 && context.bottom < innerHeight,
+					sectionVisible: section.top >= context.bottom && section.top < innerHeight,
+					overflow: document.documentElement.scrollWidth > innerWidth,
+				};
+			});
+			assert.deepEqual(geometry, { contextVisible: true, sectionVisible: true, overflow: false }, `${width}px`);
+			await expect(article.locator('h1')).toBeVisible();
+			await expect(article.locator('.topic-intro')).toBeVisible();
+		}
+		const original = await content.locator('.typography-style-list').elementHandle();
+		await page.route('**/api/topic?*', route => route.fulfill({ status: 503, body: 'Source unavailable. Keep reading the last loaded topic.' }));
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		const problem = article.locator('#problem');
+		await expect(problem).toBeVisible();
+		await expect(problem.locator('summary')).toContainText('showing last loaded content');
+		assert.equal(await problem.evaluate(element => element.open), false);
+		assert.ok(await problem.evaluate(element => element.getBoundingClientRect().height) < 70);
+		await problem.locator('summary').focus();
+		await page.keyboard.press('Enter');
+		await expect(problem.locator('p')).toBeVisible();
+		await expect(problem).toContainText('Source unavailable');
+		assert.equal(await original.evaluate(element => element.isConnected), true);
+		await page.unroute('**/api/topic?*');
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(problem).toBeHidden();
+		await expect(content).toHaveAttribute('data-topic-state', 'ready');
+		await page.route('**/api/refresh', route => route.fulfill({ status: 503, body: 'Checkout read failed' }));
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(page.locator('#shell-problem > summary')).toBeVisible();
+		assert.equal(await page.locator('#shell-problem').evaluate(element => element.open), false);
+		await expect(content).toHaveAttribute('data-topic-state', 'ready');
+	} finally { await browser.close(); await panel.close(); }
+});
+
 test('chapters keep a readable hierarchy and a stable left edge at every article width', { timeout: 60000 }, async () => {
 	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'typography' } });
 	let browser;
@@ -114,8 +205,14 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 			if (id === 'typography') {
 				assert.equal(await article.locator('.typography-style-row').evaluateAll(rows => rows.every(row =>
 					row.firstElementChild.classList.contains('typography-style-meta'))), true);
-				assert.equal(await article.locator('.source-guidance').first().evaluate(section =>
-					section.previousElementSibling.id === 'typography-families'), true);
+				assert.deepEqual(await article.locator('.source-guidance').evaluateAll(sections => Object.fromEntries(
+					sections.filter(section => ['typography-role-guidance', 'typography-weight-guidance', 'typography-reading-guidance'].includes(section.id))
+						.map(section => [section.id, section.nextElementSibling.id]),
+				)), {
+					'typography-role-guidance': 'typography-styles',
+					'typography-weight-guidance': 'typography-emphasis',
+					'typography-reading-guidance': 'typography-families',
+				});
 			}
 			const links = article.locator('.article-outline a');
 			assert.equal(await links.evaluateAll(links => links.every((link, index) => {
@@ -143,10 +240,12 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 		await jump.focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('#typography-composition')).toBeFocused();
-		await page.getByRole('link', { name: 'Next: Colors', exact: true }).focus();
+		await page.setViewportSize({ width: 1440, height: 900 });
+		const topics = page.getByRole('navigation', { name: 'Topics', exact: true });
+		await topics.getByRole('link', { name: 'Colors', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="colors"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await page.getByRole('link', { name: 'Previous: Typography', exact: true }).focus();
+		await topics.getByRole('link', { name: 'Typography', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="typography"] h1')).toBeFocused();
 		assert.deepEqual(errors, []);
@@ -172,7 +271,8 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			size: ['Choose a glyph size', 'Size reference'],
 			stroke: ['Use strokes to define boundaries', 'Stroke reference'],
 			layout: ['Arrange the primary task', 'Adapt to available space'],
-			elevation: ['Surface hierarchy', 'High contrast', 'Shadow scale'],
+			elevation: ['Choose the surface relationship', 'What makes elevation', 'Use the existing shadow scale',
+				'Apply elevation to real tasks', 'Compose a reusable surface', 'Keep surfaces accessible and responsive'],
 			theming: ['Keep meaning in high contrast', 'Theme comparisons'],
 			spacing: ['Make relationships visible', 'Give each interval one owner', 'Choose a spacing pattern', 'Spacing between controls', 'When space gets tight', 'Spacing ramp'],
 		};
@@ -188,21 +288,45 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			await expect(article.locator('.topic-content')).not.toContainText(/Why this topic is reserved|Curation notes and audit gaps|Content slot:|To curate:|not a complete migration audit/);
 			assert.equal(await article.locator('.topic-content a.source-action').evaluateAll(links => links.filter(link => !link.closest('.source-guidance, .motion-doc-analysis')).length), 0);
 			assert.ok(await article.locator('.topic-heading a.source-action').count() <= 1, id);
-			const majorHeadings = await article.locator('.topic-content h2').evaluateAll(headings => headings
+			const headingEntries = await article.locator('.topic-content h2').evaluateAll(headings => headings
 				.filter(heading => !heading.closest('.control-stage') || heading.closest('[data-topic]').dataset.topic.startsWith('component-'))
-				.map(heading => heading.textContent));
+				.map(heading => ({ title: heading.textContent, sourceGuidance: Boolean(heading.closest('.source-guidance')) })));
+			const majorHeadings = headingEntries.map(heading => heading.title);
 			const data = panel.store.topics.get(panel.state.scope.active).envelope.data;
 			const sequence = id === 'motion'
 				? data.motionDocumentation.page.sections.map(section => section.title ?? data.motionDocumentation.sections[section.heading].title)
 				: sequences[id];
 			if (sequence) {
-				assert.deepEqual(majorHeadings.filter(title => title !== 'Reading metrics'),
-					[...sequence, ...(data.sourceSections ?? []).map(section => section.title)], id);
+				assert.deepEqual(headingEntries.filter(heading => !heading.sourceGuidance && heading.title !== 'Reading metrics')
+					.map(heading => heading.title), sequence, id);
+			}
+			for (const section of data.sourceSections ?? []) {
+				await expect(article.locator(`#${section.sectionId} > h2`)).toHaveText(section.title);
+				assert.equal(await article.evaluate((article, section) => {
+					const guide = article.querySelector(`#${CSS.escape(section.sectionId)}`);
+					let next = guide.nextElementSibling;
+					while (next?.classList.contains('source-guidance')) { next = next.nextElementSibling; }
+					return section.before ? next?.id === section.before : next === null;
+				}, { sectionId: section.sectionId, before: section.before }), true, `${id}: ${section.sectionId} placement`);
 			}
 			if (id === 'shape') {
 				assert.deepEqual(await article.locator('.radius-scale figure').evaluateAll(items => items.map(item => ({
 					id: item.dataset.scaleToken, value: item.querySelector('.radius-example').style.borderRadius,
 				}))), data.reference.scales.radii.map(token => ({ id: token.id, value: token.value })));
+			}
+			if (id === 'elevation') {
+				await expect(article.locator('.topic-content')).not.toContainText(/Lessons from other systems|\bAtlassian\b|\bFluent (?:2|UI)\b/i);
+				const sourceLink = await article.getByRole('link', { name: 'workbench styles' }).getAttribute('href');
+				assert.equal(new URL(sourceLink, page.url()).searchParams.get('id'), data.authored.markdownSource);
+				assert.equal((await page.request.get(new URL(sourceLink, page.url()).href)).status(), 200);
+				const relocated = 'src/vs/platform/theme/common/elevation-guide.md';
+				const relocatedLink = await page.evaluate(async ({ data, relocated }) => {
+					const { renderElevation } = await import('/elevation.mjs');
+					const target = document.createElement('div');
+					renderElevation(target, { ...data, authored: { ...data.authored, markdownSource: relocated } }, { previewState: new Map() });
+					return target.querySelector('.elevation-guide a').getAttribute('href');
+				}, { data: { view: data.view, authored: data.authored, sizes: data.sizes, elevation: data.elevation }, relocated });
+				assert.equal(new URL(relocatedLink, page.url()).searchParams.get('id'), relocated);
 			}
 			if (id === 'size') {
 				assert.deepEqual(await article.locator('.glyph-context .codicon-glyph').evaluateAll(items => items.map(item => item.style.fontSize)),
@@ -216,6 +340,12 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			assert.equal(await article.getByRole('navigation', { name: 'On this page', exact: true }).count(), majorHeadings.length >= 2 ? 1 : 0, id);
 			assert.equal(await article.locator('.topic-content a').evaluateAll(links => links.filter(link => !link.closest('.source-guidance, .motion-doc-analysis')).every(link => {
 				if (['Open in Component Explorer', 'View Figma specification'].includes(link.textContent.trim())) { return true; }
+				if (link.closest('.elevation-guide, .component-doc-section .prose')) {
+					const url = new URL(link.href);
+					return url.protocol === 'https:' || url.origin === location.origin
+						&& (url.pathname === '/api/document-resource'
+							|| url.pathname === '/' && url.searchParams.get('section') === 'documentation' && Boolean(url.searchParams.get('documentId')));
+				}
 				if (!link.closest('.motion-doc')) { return false; }
 				if (/^#motion-[a-z0-9-]+$/.test(link.getAttribute('href'))) { return Boolean(document.getElementById(link.hash.slice(1))); }
 				const url = new URL(link.href);
@@ -287,6 +417,99 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 	}
 });
 
+test('elevation studies preserve overlay separation, keyboard choices, and source tokens across themes', { timeout: 60000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'replace', topics: ['elevation'], active: 'elevation' } });
+	let browser;
+	try {
+		browser = await chromium.launch({ headless: true });
+		const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="elevation"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(article.locator('.elevation-scenario')).toHaveCount(4);
+		await expect(article.locator('.elevation-scenario figure, .elevation-study, .depth-illustration')).toHaveCount(0);
+		await expect(article.locator('.elevation-construction-parts > li')).toHaveCount(3);
+		await expect(article.locator('.elevation-construction figcaption')).toContainText("1 pairs the overlay's fill and text");
+		await expect(article.locator('.elevation-hosting figcaption')).toContainText("owner's supported overlay host");
+		const partShadows = article.getByRole('checkbox', { name: 'Turn off part shadows' });
+		const samples = () => article.evaluate(article => {
+			const style = selector => getComputedStyle(article.querySelector(selector));
+			return {
+				part: style('[data-scale-token="--vscode-shadow-sm"] .elevation-shadow-sample').boxShadow,
+				overlay: style('.elevation-construction-surface').boxShadow,
+				boundary: style('.elevation-construction-surface').borderTopColor,
+				contained: style('.elevation-contained-group').boxShadow,
+				reference: style('[data-scale-token="--vscode-shadow-lg"] .elevation-shadow-sample').boxShadow,
+			};
+		});
+		const normal = await samples();
+		await partShadows.focus();
+		await page.keyboard.press('Space');
+		const disabled = await samples();
+		assert.deepEqual({
+			partSuppressed: disabled.part !== normal.part,
+			overlayPreserved: disabled.overlay === normal.overlay && disabled.overlay !== 'none',
+			containedFlat: disabled.contained === 'none',
+			sourceShadow: disabled.overlay === disabled.reference,
+		}, { partSuppressed: true, overlayPreserved: true, containedFlat: true, sourceShadow: true });
+		for (const { id, label } of corePaletteThemes) {
+			const choice = article.getByRole('radio', { name: label, exact: true });
+			await choice.focus();
+			await page.keyboard.press('Space');
+			await expect(choice).toBeChecked();
+			await expect(choice).toBeFocused();
+			const highContrast = id.startsWith('Default High Contrast');
+			const values = await samples();
+			assert.equal(values.overlay === 'none', highContrast);
+			if (highContrast) { assert.notEqual(values.boundary, 'rgba(0, 0, 0, 0)'); }
+			for (const width of [320, 500, 1000, 1440]) {
+				await page.setViewportSize({ width, height: 900 });
+				assert.equal(await article.evaluate(article => {
+					const studies = article.querySelectorAll('.elevation-construction-stage, .elevation-shadow-stage, .elevation-hosting-stage');
+					const samples = [...article.querySelectorAll('.elevation-shadow-sample')].map(sample => {
+						const style = getComputedStyle(sample);
+						return [style.width, style.height, style.backgroundColor, style.borderRadius].join();
+					});
+					return document.documentElement.scrollWidth <= innerWidth && [...studies].every(study =>
+						study.scrollWidth <= study.clientWidth + 1 && study.scrollHeight <= study.clientHeight + 1)
+						&& new Set(samples).size === 1;
+				}), true, `${label}, ${width}px`);
+				for (const hosted of [false, true]) {
+					const stage = article.locator(`.elevation-hosting-stage[data-hosted="${hosted}"]`);
+					await stage.scrollIntoViewIfNeeded();
+					assert.deepEqual(await stage.evaluate(stage => {
+						const overlay = stage.querySelector('.elevation-hosted-overlay');
+						const bounds = overlay.getBoundingClientRect();
+						const clip = stage.querySelector('.elevation-clipping-container').getBoundingClientRect();
+						return {
+							extendsPastContainer: bounds.bottom > clip.bottom,
+							visibleOutsideContainer: overlay.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.bottom - 8)),
+						};
+					}), { extendsPastContainer: true, visibleOutsideContainer: hosted }, `${label}, ${width}px, hosted=${hosted}`);
+				}
+			}
+		}
+		await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+		const copy = article.locator('[data-scale-token="--vscode-shadow-lg"]').getByRole('button', { name: 'Copy --vscode-shadow-lg CSS variable --vscode-shadow-lg', exact: true });
+		await copy.focus();
+		await page.keyboard.press('Enter');
+		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'var(--vscode-shadow-lg)');
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(partShadows).toBeChecked();
+		await expect(article.getByRole('radio', { name: 'High contrast light', exact: true })).toBeChecked();
+		const outline = article.getByRole('navigation', { name: 'On this page', exact: true });
+		await outline.getByRole('link', { name: 'Implementation', exact: true }).focus();
+		await page.keyboard.press('Enter');
+		await expect(article.locator('#elevation-role')).toBeFocused();
+		assert.deepEqual(errors, []);
+	} finally {
+		await browser?.close();
+		await panel.close();
+	}
+});
+
 test('live stream reconnection rereads visible data and clears only its connection notice', { timeout: 30000 }, async () => {
 	const panel = await createExplorer(root, { scope: { topics: ['typography'] } });
 	let browser;
@@ -312,7 +535,7 @@ test('live stream reconnection rereads visible data and clears only its connecti
 		assert.ok(streams >= 2 && reads >= 2);
 		await expect(page.getByText('Live updates disconnected; reconnecting automatically…', { exact: true })).not.toBeVisible();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(1);
+		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toHaveCount(1);
 	} finally {
 		await browser?.close();
 		await panel.close();
@@ -399,8 +622,8 @@ test('Spacing keeps concise guidance, one token ramp, and an automatic product p
 		await copy.focus();
 		assert.equal(await copy.evaluate(element => getComputedStyle(element).outlineStyle), 'solid');
 		assert.notEqual(await page.locator('.spacing-bar').last().evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
 		await expect(page.locator('.spacing-token-table tbody tr')).toHaveCount(tokens.length);
 		await expect(page.locator('#spacing-example')).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
@@ -480,7 +703,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await expect.poll(() => panel.view.fixtureId).toBe('button/Dark');
 		assert.equal(await frame.evaluate(element => element === document.querySelector('.component-preview')), true);
 		const reads = panel.store.metrics.reads['src/vs/base/browser/ui/button/button.ts'];
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
 		await expect.poll(() => discoveries).toBe(2);
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
@@ -491,20 +714,20 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		}
 		await page.route('**/api/refresh', route => route.fulfill({ status: 503, body: 'Source temporarily unavailable' }));
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
 		await expect(page.locator('#shell-problem')).toContainText('Source temporarily unavailable');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
 		await page.unroute('**/api/refresh');
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		unavailable = true;
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
 		await expect(page.locator('.preview-status')).toContainText('Use Refresh to retry');
 		await expect(page.getByRole('button', { name: /Refresh|Reload|Reconnect|Select default/ })).toHaveCount(1);
 		unavailable = false;
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
 		panel.setView({ fixtureId: 'removed-variant' });
@@ -517,7 +740,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await expect(page.locator('[data-topic="motion"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const motionCount = await page.locator('[data-motion-example]').count();
 		const allMotionReady = async () => {
-			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
 			for (const summary of await page.locator('.motion-doc-reference:not([open]) > summary').all()) {
 				await summary.click();
 			}
@@ -527,21 +750,22 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 			}
 		};
 		await allMotionReady();
-		await page.locator('[data-motion-example="agent-activity"]').getByRole('radio', { name: 'Ring', exact: true }).check();
+		const reducedCount = await page.getByRole('checkbox', { name: 'Reduced motion', exact: true }).count();
+		await page.locator('[data-motion-example="delayed-content"]').getByRole('radio', { name: 'Fast', exact: true }).check();
 		const beforeMotion = discoveries;
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
 		await allMotionReady();
-		await expect(page.locator('[data-motion-example="agent-activity"]').getByRole('radio', { name: 'Ring', exact: true })).toBeChecked();
+		await expect(page.locator('[data-motion-example="delayed-content"]').getByRole('radio', { name: 'Fast', exact: true })).toBeChecked();
 		await expect.poll(() => discoveries).toBe(beforeMotion + motionCount);
 		await page.locator('[data-motion-example="selection"]').getByRole('checkbox', { name: 'Reduced motion', exact: true }).check();
-		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
 		await allMotionReady();
 		await expect.poll(() => discoveries).toBe(beforeMotion + 2 * motionCount);
 		await expect(page.locator('[data-motion-example="selection"]').getByRole('checkbox', { name: 'Reduced motion', exact: true })).toBeChecked();
 		await expect(page.getByRole('button', { name: /^Load / })).toHaveCount(0);
-		await expect(page.getByRole('checkbox', { name: 'Reduced motion', exact: true })).toHaveCount(motionCount - 1);
-		await expect(page.getByRole('group', { name: 'Shape', exact: true })).toHaveCount(1);
+		await expect(page.getByRole('checkbox', { name: 'Reduced motion', exact: true })).toHaveCount(reducedCount);
+		await expect(page.getByRole('group', { name: 'Shape', exact: true })).toHaveCount(0);
 		assert.deepEqual(errors, []);
 	} finally {
 		await browser?.close();
@@ -582,7 +806,7 @@ test('the full book browses a flat component inventory without an overview page 
 		}
 		await page.setViewportSize({ width: 390, height: 900 });
 		await browse.click();
-		await page.getByRole('searchbox', { name: 'Find a topic', exact: true }).fill('Menu');
+		await page.getByRole('searchbox', { name: 'Search topics', exact: true }).fill('Menu');
 		await page.getByRole('link', { name: 'Menu', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="component-menu"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
@@ -658,7 +882,7 @@ test('iconography loads real font faces before committing glyphs and reports fon
 		await failed.route('**/codicon.ttf', route => route.fulfill({ status: 404, body: 'Missing font' }));
 		await failed.goto(panel.url);
 		await expect(failed.locator('.topic-content')).toHaveAttribute('data-topic-state', 'error');
-		await expect(failed.getByRole('alert')).toContainText('Couldn\'t refresh this topic');
+		await expect(failed.getByRole('alert')).toContainText('Couldn\'t load this topic');
 		await expect(failed.locator('.codicon-glyph')).toHaveCount(0);
 	} finally {
 		await browser?.close();
@@ -718,9 +942,9 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.getByRole('navigation', { name: 'On this page' })).toHaveCount(2);
 			panel.setScope({ operation: 'replace', topics: ['spacing', 'typography'], active: 'spacing', layout: 'compare' });
 			await expect(page.locator('#reference')).toHaveClass('comparison-layout');
-			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(1);
-			await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Refresh topics', exact: true })).toHaveCount(1);
+			await page.getByRole('button', { name: 'Refresh topics', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Refresh topics', exact: true })).toBeEnabled();
 			await ready('spacing');
 			await ready('typography');
 			await expect(page.locator('#shell-problem')).toHaveCount(0);
@@ -742,17 +966,16 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			panel.setScope({ operation: 'all', active: 'typography', layout: 'single' });
 			const browse = page.getByRole('button', { name: 'Browse topics', exact: true });
 			const navigation = page.getByRole('navigation', { name: 'Topics', exact: true });
-			const filter = page.getByRole('searchbox', { name: 'Find a topic', exact: true });
+			const filter = page.getByRole('searchbox', { name: 'Search topics', exact: true });
 			await expect(navigation).toBeVisible();
 			await expect(browse).not.toBeVisible();
 			await expect(page.locator('#book-navigation nav a')).toHaveCount(catalog.filter(item => !item.hidden).length);
-			assert.equal(await page.locator('#book-pagination').evaluate(element =>
-				element.getBoundingClientRect().top >= document.querySelector('#reference').getBoundingClientRect().bottom), true);
-			await expect(page.locator('#book-navigation .book-neighbor')).toHaveCount(0);
+			await expect(page.locator('#book-pagination, .book-neighbor')).toHaveCount(0);
+			await expect(page.locator('.book-panel-heading strong')).toHaveCount(0);
 			assert.deepEqual(panel.store.metrics.reads, reads);
-			await page.getByRole('link', { name: 'Next: Colors', exact: true }).click();
+			await navigation.getByRole('link', { name: 'Colors', exact: true }).click();
 			await ready('colors');
-			await page.getByRole('link', { name: 'Previous: Typography', exact: true }).click();
+			await navigation.getByRole('link', { name: 'Typography', exact: true }).click();
 			await ready('typography');
 			await expect(page.locator('[data-topic="typography"] h1')).toBeFocused();
 			await expect(page.locator('#book-navigation select, #scope-controls, .breadcrumbs, .page-jumps')).toHaveCount(0);
@@ -810,7 +1033,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			assert.equal(await page.evaluate(() => document.activeElement.closest('.topic-pane')?.dataset.topic), 'spacing');
 			assert.equal(await link.evaluate(element => element === [...document.querySelectorAll('nav a')].find(item => item.textContent === 'Spacing')), true);
 			assert.deepEqual([...panel.store.subscribed], ['spacing']);
-			await expect(page.locator('#book-navigation nav')).toHaveCount(1);
+			await expect(page.locator('#book-navigation .book-topics')).toHaveCount(1);
 			assert.equal((await (await fetch(new URL('/api/metrics', panel.url))).json()).fixtureRequests, 0);
 			await browse.click();
 			await expect(filter).toHaveValue('');
@@ -822,8 +1045,8 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await search.fill('spacing.size160');
 			await expect(search).toBeFocused();
 			await expect(page.locator('[data-topic="tokens"] #status')).toContainText('matching entries');
-			await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+			await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
 			await expect(search).toHaveValue('spacing.size160');
 			await ready('tokens');
 			await expect(page.locator('.book-panel a[aria-current="page"]')).toHaveText('Design tokens');
@@ -861,12 +1084,13 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 						{ id: 'one', title: 'A very long ordinary article title about an unrelated subject', group: 'A different collection', href: '#one' },
 						{ id: 'two', title: 'Another article', group: 'Another collection', href: '#two' },
 					];
-					contents.update(items, 'one');
+					const tools = [{ id: 'library', title: 'Browse sources', href: '#library' }];
+					contents.update(items, 'one', tools);
 					const link = container.querySelector('a');
 					const filter = container.querySelector('input');
 					filter.value = 'article';
 					filter.dispatchEvent(new Event('input'));
-					contents.update(items.map(item => ({ ...item, href: `${item.href}-updated` })), 'two');
+					contents.update(items.map(item => ({ ...item, href: `${item.href}-updated` })), 'two', tools);
 					const preserved = container.querySelector('a') === link && container.querySelector('input') === filter && filter.value === 'article';
 					const updatedHref = link.getAttribute('href');
 					const fits = document.documentElement.scrollWidth <= innerWidth;
@@ -877,15 +1101,28 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 					const labels = [...container.querySelectorAll('.book-group > summary')].map(element => element.textContent);
 					const current = container.querySelector('[aria-current="page"]').textContent;
 					const closed = !container.querySelector('.book-panel').matches(':popover-open');
+					contents.update(items, 'library', tools);
+					const utility = container.querySelector('.book-utilities a');
+					filter.value = 'no-topic-match';
+					filter.dispatchEvent(new Event('input'));
+					const utilityIndependent = utility.getAttribute('aria-current') === 'page'
+						&& !container.querySelector('.book-topics').contains(utility)
+						&& !utility.hidden && !utility.parentElement.hidden;
+					utility.click();
+					contents.update(items, 'one');
+					const optionalTools = container.querySelector('.book-utilities').hidden;
+					contents.update([], 'library', tools);
+					const toolsOnly = !container.hidden && container.querySelector('.book-topics').hidden
+						&& container.querySelector('[aria-current="page"]').textContent === 'Browse sources';
 					contents.update([], 'one');
 					contents.dispose();
-					return { preserved, updatedHref, fits, modifiedIgnored, selected, labels, current, closed, prevented: ordinary.defaultPrevented, empty: !container.children.length };
+					return { preserved, updatedHref, fits, modifiedIgnored, selected, labels, current, closed, utilityIndependent, optionalTools, toolsOnly, prevented: ordinary.defaultPrevented, empty: !container.children.length };
 				} finally { container.remove(); }
 			});
 			assert.deepEqual(result, {
-				preserved: true, updatedHref: '#one-updated', fits: true, modifiedIgnored: true, selected: ['one'],
+				preserved: true, updatedHref: '#one-updated', fits: true, modifiedIgnored: true, selected: ['one', 'library'],
 				labels: ['A different collection', 'Another collection'], current: 'Another article',
-				closed: true, prevented: true, empty: true,
+				closed: true, utilityIndependent: true, optionalTools: true, toolsOnly: true, prevented: true, empty: true,
 			});
 		});
 		assert.deepEqual(errors, []);

@@ -15,7 +15,7 @@ import { documentExcerpt } from '../model/documents.mjs';
 export function listTopics(root) {
 	const { catalog, projection: { book } } = readRepository(root);
 	return { title: book.title, version: book.version, defaultTopic: book.defaultTopic,
-		topics: catalog.filter(item => !item.hidden).map(({ id, title, group, aliases }) => ({ id, title, group, aliases })) };
+		topics: catalog.filter(item => !item.hidden).map(({ id, title, group, aliases, navigation = 'topic' }) => ({ id, title, group, aliases, navigation })) };
 }
 
 export async function validateReference(root, topics) {
@@ -118,7 +118,10 @@ export async function readReference(root, id, { limit = 12000 } = {}) {
 			file: section.source.file, text: section.markdown, source: section.source, anchor: section.anchor, title: section.title,
 		}));
 		const composedFiles = new Set(composed.map(section => section.file));
-		const chapterSources = result.sources.filter(file => file.endsWith('.md') && (file.startsWith('.github/design-system/') || file.startsWith('src/')));
+		const primarySource = result.data.motionDocumentation?.page.source ?? result.data.page?.sources?.[0]?.file;
+		const chapterSources = result.sources.filter(file => file.endsWith('.md') && (file.startsWith('.github/design-system/') || file.startsWith('src/')))
+			.sort((a, b) => Number(b === primarySource) - Number(a === primarySource)
+				|| Number(b.startsWith('src/')) - Number(a.startsWith('src/')));
 		const documents = [
 			...composed,
 			...chapterSources.filter(file => !composedFiles.has(file)).map(file => ({ file })),

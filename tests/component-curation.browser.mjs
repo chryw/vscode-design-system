@@ -57,3 +57,39 @@ test('the full canvas browses canonical component families and preserves grouped
 		await panel.close();
 	}
 });
+
+test('Button renders source Markdown and API declarations while legacy components remain unchanged', { timeout: 60000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'component-button' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await mockFixtureRenderer(page, root, ['button', 'checkbox']);
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="component-button"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(article.locator('#component-usage code').getByText('onDidClick', { exact: true })).toBeVisible();
+		const example = article.getByRole('link', { name: 'Button and ButtonBar fixtures', exact: true });
+		const sourceUrl = new URL(await example.getAttribute('href'), panel.url);
+		assert.equal(sourceUrl.searchParams.get('id'), 'src/vs/base/browser/ui/button/button.design.md');
+		const source = await page.request.get(sourceUrl.href);
+		assert.equal(source.status(), 200);
+		assert.match(await source.text(), /function renderButtons/);
+		assert.deepEqual(await article.locator('.component-api-table thead th').allTextContents(), ['Member', 'Type', 'Declaration']);
+		const label = article.locator('.component-api-table tbody tr').filter({
+			has: page.getByRole('rowheader', { name: 'label', exact: true }),
+		});
+		await expect(label).toContainText('set label(value: string | IMarkdownString);');
+		const declarations = article.getByRole('region', { name: 'Button API declarations', exact: true });
+		await declarations.focus();
+		await expect(declarations).toBeFocused();
+		await page.setViewportSize({ width: 390, height: 900 });
+		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+		panel.setScope({ operation: 'replace', topics: ['component-checkbox'], active: 'component-checkbox' });
+		const checkbox = page.locator('[data-topic="component-checkbox"]');
+		await expect(checkbox.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		assert.deepEqual(await checkbox.locator('.component-api-table thead th').allTextContents(), ['Member', 'Type', 'Purpose']);
+		assert.deepEqual(errors, []);
+	} finally { await browser.close(); await panel.close(); }
+});

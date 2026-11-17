@@ -61,23 +61,48 @@ export function renderSourceSections(target, sections = [], resolveResource) {
 	}
 }
 
+function takeIntroduction(prose) {
+	const children = [...prose.children];
+	const firstHeading = children.find(element => element.matches('h2'));
+	const introductionHeading = firstHeading?.textContent.trim().toLowerCase() === 'introduction' ? firstHeading : undefined;
+	const bodyHeading = children.find(element => element.matches('h2') && element !== introductionHeading);
+	if (!bodyHeading) { return; }
+	const leading = children.slice(0, children.indexOf(bodyHeading));
+	if (!leading.some(element => element.matches('p')) || leading.some(element =>
+		element !== introductionHeading && !element.matches('p, span[id]'))) { return; }
+	const introduction = node('div', undefined, 'prose');
+	for (const element of leading) {
+		if (element === introductionHeading) {
+			introduction.id = element.id;
+			introduction.dataset.documentAnchor = element.dataset.documentAnchor;
+			element.remove();
+		} else {
+			introduction.append(element);
+		}
+	}
+	return introduction;
+}
+
 export function renderDocumentation(target, system, host = {}) {
 	const { listing, document } = system.library;
 	const view = system.view;
 	const page = node('div', undefined, 'documentation');
 	if (document) {
-		const back = node('a', 'Back to documentation');
+		const context = node('div', undefined, 'topic-metadata');
+		const back = node('a', 'Back to sources');
 		back.href = documentURL('', view);
 		const metadata = node('p', `${listing.scopes.find(scope => scope.id === document.scope)?.title ?? document.origin} · ${document.id}`, 'meta document-path');
-		page.append(back, metadata);
+		context.append(back, metadata);
 		if (document.metadata) {
 			const details = node('details');
 			details.append(node('summary', 'Document metadata'), node('pre', document.metadata));
-			page.append(details);
+			context.append(details);
 		}
-		page.append(documentMarkup(document, { skipTitle: true, prefix: 'document-', view, resolveResource: host.documentResource }));
+		const prose = documentMarkup(document, { skipTitle: true, prefix: 'document-', view, resolveResource: host.documentResource });
+		const introduction = takeIntroduction(prose);
+		page.append(prose);
 		target.append(page);
-		return 1;
+		return { count: 1, context, introduction };
 	}
 	const form = node('form', undefined, 'document-search');
 	form.method = 'get';
@@ -87,7 +112,7 @@ export function renderDocumentation(target, system, host = {}) {
 		const field = node('input');
 		field.type = 'hidden'; field.name = name; field.value = value; form.append(field);
 	}
-	const label = node('label', 'Search documentation');
+	const label = node('label', 'Search sources');
 	const search = node('input');
 	search.type = 'search'; search.name = 'query'; search.maxLength = 200; search.value = listing.query;
 	label.append(search);
@@ -129,7 +154,7 @@ export function renderDocumentation(target, system, host = {}) {
 		}
 	}
 	const pagination = node('nav', undefined, 'tools');
-	pagination.setAttribute('aria-label', 'Documentation pages');
+	pagination.setAttribute('aria-label', 'Source results');
 	for (const [title, offset] of [['Previous results', listing.offset ? Math.max(0, listing.offset - listing.limit) : undefined], ['Next results', listing.nextOffset]]) {
 		if (offset === undefined) { continue; }
 		const link = node('a', title);

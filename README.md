@@ -38,7 +38,9 @@ This installs the canvas into that checkout's `.github/extensions/vscode-design-
 
 Open that checkout in VS Code or the Agents window, then ask Copilot:
 
-> Reload extensions and open the `vscode-design-system` canvas for this checkout.
+> Reuse this worktree's existing `vscode-design-system` canvas in its owning chat and refresh it. If none exists, open it once with instance ID `design-book` for this checkout.
+
+Keep [one current book](docs/setup.md#keep-one-current-book) across chats and sessions; changing topics or updating the viewer should not create more canvases.
 
 ## Let an agent handle setup
 

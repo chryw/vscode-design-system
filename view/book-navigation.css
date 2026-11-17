@@ -43,10 +43,9 @@
 .book-panel-heading {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: end;
 	gap: 12px;
 }
-.book-panel-heading strong { font-size: 13px; font-weight: 600; }
 .book-search {
 	display: grid;
 	gap: 6px;
@@ -55,7 +54,8 @@
 }
 .book-search input { width: 100%; min-width: 0; font-size: 13px; color: var(--ink); }
 .book-search input::placeholder { color: var(--muted); opacity: 1; }
-.book-panel nav { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.book-topics { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.book-utilities { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .book-group + .book-group { margin-top: 12px; }
 .book-group > summary {
 	display: flex;
@@ -104,36 +104,12 @@
 }
 .book-panel :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .book-empty { color: var(--muted); font-size: 12px; }
-.book-pagination {
-	display: flex;
-	justify-content: space-between;
-	max-width: var(--article-width);
-	gap: 16px;
-	margin-block: 32px 20px;
-	padding-top: 16px;
-	border-top: 1px solid var(--line);
-}
-.book-neighbor {
-	display: grid;
-	min-width: 0;
-	max-width: 48%;
-	overflow-wrap: anywhere;
-	text-decoration: none;
-}
-.book-neighbor:last-child { margin-inline-start: auto; text-align: end; }
-.book-neighbor > span:first-child { font-size: 11px; color: var(--muted); }
-.book-neighbor:hover > span:last-child { text-decoration: underline; }
 @media (forced-colors: active) {
 	.book-panel a[aria-current="page"] { text-decoration: underline; }
 }
-@media (max-width: 480px) {
-	.book-pagination { flex-direction: column; }
-	.book-neighbor { max-width: 100%; }
-	.book-neighbor:last-child { margin-inline-start: 0; text-align: start; }
-}
 @media (min-width: 760px) {
 	#book-navigation { top: 24px; margin-bottom: 0; }
-	.book-toolbar, .book-panel-heading button { display: none; }
+	.book-toolbar, .book-panel-heading { display: none; }
 	.book-panel {
 		position: static;
 		width: 100%;

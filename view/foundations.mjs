@@ -8,6 +8,7 @@ import { node, example, exampleViewer, tokenButton } from './ui.mjs';
 import { renderLayout } from './layout.mjs';
 import { visualTokens } from './token-lookup.mjs';
 import { chapterContent, sectionContent, contentText } from './page-content.mjs';
+import { renderElevation } from './elevation.mjs';
 
 function tokenNote(token) {
 	const note = node('div', undefined, 'foundation-token-note');
@@ -23,34 +24,7 @@ export async function renderFoundations(content, system, onView, host, signal) {
 		return example(title, contentText(description, values));
 	};
 	if (page === 'elevation') {
-		const tiers = node('section', undefined, 'article-section component-doc-section');
-		tiers.id = 'elevation-tiers';
-		tiers.append(node('h2', sectionContent(authored, 'tiers').title));
-		const stack = node('div', undefined, 'depth-illustration');
-		const base = node('div', 'Base surface', 'depth-base');
-		const raised = node('div', 'Supporting surface', 'depth-raised');
-		const overlay = node('div', 'Temporary overlay', 'depth-overlay');
-		stack.append(base, raised, overlay);
-		tiers.append(node('p', sectionContent(authored, 'tiers').description), exampleViewer(stack));
-		const shadows = node('section', undefined, 'article-section component-doc-section');
-		shadows.id = 'elevation-shadows';
-		shadows.append(node('h2', sectionContent(authored, 'shadows').title), node('p', sectionContent(authored, 'shadows').description));
-		const scale = node('div', undefined, 'shadow-scale');
-		for (const shadow of system.reference.scales.shadows) {
-			const figure = node('figure');
-			figure.dataset.scaleToken = shadow.css;
-			const sample = node('div', 'Surface', 'shadow-sample');
-			sample.style.boxShadow = shadow.value;
-			figure.append(sample, node('figcaption', shadow.css.replace('--vscode-shadow-', '')));
-			scale.append(figure);
-		}
-		shadows.append(scale);
-		const guidance = node('section', undefined, 'article-section component-doc-section');
-		guidance.id = 'elevation-guidance';
-		guidance.append(node('h2', sectionContent(authored, 'guidance').title),
-			node('p', sectionContent(authored, 'guidance').description));
-		content.append(tiers, guidance, shadows);
-		return 3;
+		return renderElevation(content, system, host);
 	}
 	if (page === 'spacing') {
 		return renderLayout(content, system, host, signal);

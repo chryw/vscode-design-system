@@ -42,6 +42,7 @@ export function renderSimplePage(content, system) {
 		return content.children.length;
 	}
 	if (page !== 'principles') {
+		if (system.sourceSections?.length) { return system.sourceSections.length; }
 		content.append(node('p', 'Documentation and examples are not available yet.', 'reference-empty'));
 		return 0;
 	}

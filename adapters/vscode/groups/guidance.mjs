@@ -24,6 +24,7 @@ export const files = {
 	components: [],
 };
 export function load({ read }, topic) {
+	const page = topic !== 'motion' ? readPage(read, topic) : {};
 	const documents = (files[topic] ?? []).map(name => {
 		const file = name === 'design-tokens' || name === 'coding-guidelines'
 			? `.github/instructions/${name}.instructions.md` : `.github/skills/${name}/SKILL.md`;
@@ -49,6 +50,6 @@ export function load({ read }, topic) {
 	return {
 		documents: { [topic]: documents },
 		referenceNotes: readContent(read, 'content/foundations/source-coverage.json').topics,
-		...(topic !== 'motion' ? readPage(read, topic) : {}),
+		...page,
 	};
 }

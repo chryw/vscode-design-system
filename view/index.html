@@ -15,18 +15,16 @@
 	<header class="explorer-heading">
 		<div>
 			<p class="book-title">Visual Studio Code Design System</p>
-			<details class="checkout-details">
-				<summary>Local checkout</summary>
+			<div class="checkout-details">
 				<p id="checkout" class="meta"></p>
-			</details>
+				<button id="refresh" type="button" disabled>Refresh topic</button>
+			</div>
 		</div>
-		<button id="refresh" type="button" disabled>Refresh</button>
 	</header>
 	<div class="explorer-layout">
 		<div id="book-navigation" hidden></div>
 		<div class="explorer-article">
 			<main id="reference" tabindex="-1"><p role="status">Reading this checkout...</p></main>
-			<div id="book-pagination" hidden></div>
 		</div>
 	</div>
 </body>

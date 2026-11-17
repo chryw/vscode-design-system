@@ -5,7 +5,7 @@
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 
 let navigationId = 0;
-export function createBookNavigation(container, onNavigate, pagerContainer = container) {
+export function createBookNavigation(container, onNavigate) {
 	const document = container.ownerDocument;
 	const lifetime = new AbortController();
 	const wide = document.defaultView.matchMedia('(min-width: 760px)');
@@ -26,24 +26,30 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 	toggle.setAttribute('aria-controls', panel.id);
 	const header = document.createElement('div');
 	header.className = 'book-panel-heading';
-	const title = document.createElement('strong');
-	title.textContent = 'Design system';
 	const close = document.createElement('button');
 	close.type = 'button';
 	close.textContent = 'Close';
 	close.setAttribute('aria-label', 'Close topic navigation');
-	header.append(title, close);
+	header.append(close);
 	const label = document.createElement('label');
 	label.className = 'book-search';
-	label.append('Find a topic');
+	const searchLabel = document.createElement('span');
+	searchLabel.className = 'sr-only';
+	searchLabel.textContent = 'Search topics';
+	label.append(searchLabel);
 	const search = document.createElement('input');
 	search.type = 'search';
-	search.placeholder = 'Filter topics';
+	search.placeholder = 'Search topics';
 	search.maxLength = 200;
 	search.autofocus = true;
 	label.append(search);
 	const navigation = document.createElement('nav');
+	navigation.className = 'book-topics';
 	navigation.setAttribute('aria-label', 'Topics');
+	const utilities = document.createElement('nav');
+	utilities.className = 'book-utilities';
+	utilities.setAttribute('aria-label', 'Book tools');
+	utilities.hidden = true;
 	const empty = document.createElement('p');
 	empty.className = 'book-empty';
 	empty.hidden = true;
@@ -51,7 +57,7 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 	const status = document.createElement('p');
 	status.className = 'sr-only';
 	status.setAttribute('role', 'status');
-	panel.append(header, label, navigation, empty, status);
+	panel.append(header, label, navigation, empty, status, utilities);
 	const dismiss = () => {
 		if (panel.matches(':popover-open')) { panel.hidePopover(); }
 	};
@@ -62,9 +68,13 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 		else { panel.setAttribute('popover', 'auto'); }
 		search.autofocus = !wide.matches;
 		if (restoreFocus) { (wide.matches ? search : toggle).focus({ preventScroll: true }); }
-		if (panel.isConnected) { revealActive(); }
+		if (panel.isConnected) { layout(); revealActive(); }
 	};
 	presentation();
+	const resize = new document.defaultView.ResizeObserver(() => layout());
+	resize.observe(document.body);
+	document.defaultView.addEventListener('resize', () => layout(), { signal: lifetime.signal });
+	document.defaultView.addEventListener('scroll', () => layout(), { passive: true, signal: lifetime.signal });
 	wide.addEventListener('change', presentation, { signal: lifetime.signal });
 	panel.addEventListener('toggle', event => {
 		if (event.target !== panel) { return; }
@@ -86,27 +96,28 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 		dismiss();
 		onNavigate(id);
 	};
-	const pager = document.createElement('div');
-	pager.className = 'book-pagination';
-	const neighbors = ['Previous', 'Next'].map(label => {
-		const link = document.createElement('a');
-		link.className = 'book-neighbor';
-		const caption = document.createElement('span');
-		caption.textContent = label;
-		const title = document.createElement('span');
-		link.append(caption, title);
-		link.addEventListener('click', event => {
-			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) { return; }
-			event.preventDefault();
-			choose(link.dataset.topic);
-		});
-		pager.append(link);
-		return { link, title, label };
-	});
 	let signature;
 	let activeId;
 	const links = new Map();
+	const utilityLinks = new Map();
 	const groups = new Map();
+	const createLink = item => {
+		const link = document.createElement('a');
+		link.textContent = item.title;
+		link.href = item.href;
+		link.addEventListener('click', event => {
+			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) { return; }
+			event.preventDefault();
+			choose(item.id);
+		});
+		return link;
+	};
+	function layout() {
+		if (!panel.isConnected) { return; }
+		if (wide.matches) {
+			panel.style.maxHeight = `${Math.max(0, document.defaultView.innerHeight - panel.getBoundingClientRect().top - 24)}px`;
+		} else { panel.style.removeProperty('max-height'); }
+	}
 	function revealActive() {
 		const link = links.get(activeId)?.link;
 		if (!link?.getClientRects().length) { return; }
@@ -130,7 +141,7 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 			wrapper.hidden = element.hidden;
 			element.open = query ? !element.hidden : open;
 		}
-		empty.hidden = count > 0;
+		empty.hidden = count > 0 || !links.size;
 		status.textContent = query ? `${count} matching topics` : '';
 	};
 	search.addEventListener('input', () => {
@@ -161,23 +172,27 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 		return groups.get(key);
 	};
 	return {
-		update(items, active) {
-			container.hidden = !items.length;
-			pagerContainer.hidden = !items.length;
-			if (!items.length) {
+		update(items, active, tools = []) {
+			container.hidden = !items.length && !tools.length;
+			if (container.hidden) {
 				dismiss();
 				toolbar.remove();
 				panel.remove();
-				pager.remove();
 				return;
 			}
-			if (!panel.isConnected) { container.append(toolbar, panel); pagerContainer.append(pager); }
-			const nextSignature = JSON.stringify(items.map(({ id, title, group, subgroup, aliases }) => ({ id, title, group, subgroup, aliases })));
+			if (!panel.isConnected) { container.append(toolbar, panel); }
+			label.hidden = !items.length;
+			navigation.hidden = !items.length;
+			const identity = ({ id, title, group, subgroup, aliases }) => ({ id, title, group, subgroup, aliases });
+			const nextSignature = JSON.stringify([items.map(identity), tools.map(identity)]);
 			if (nextSignature !== signature) {
 				signature = nextSignature;
 				navigation.replaceChildren();
+				utilities.replaceChildren();
 				links.clear();
+				utilityLinks.clear();
 				groups.clear();
+				utilities.hidden = !tools.length;
 				for (const item of items) {
 					let parent = group(JSON.stringify([item.group ?? '']), item.group || 'Topics', navigation);
 					if (item.subgroup) {
@@ -186,26 +201,24 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 						if (!entry) { entry = document.createElement('li'); parent.list.append(entry); }
 						parent = group(key, item.subgroup, entry);
 					}
-					const link = document.createElement('a');
-					link.textContent = item.title;
-					link.href = item.href;
-					link.addEventListener('click', event => {
-						if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) { return; }
-						event.preventDefault();
-						choose(item.id);
-					});
+					const link = createLink(item);
 					const entry = document.createElement('li');
 					entry.append(link);
 					parent.list.append(entry);
 					links.set(item.id, { link, item });
 				}
+				for (const item of tools) {
+					const link = createLink(item);
+					utilities.append(link);
+					utilityLinks.set(item.id, { link, item });
+				}
 			}
-			for (const item of items) {
-				const entry = links.get(item.id);
+			for (const item of [...items, ...tools]) {
+				const entry = links.get(item.id) ?? utilityLinks.get(item.id);
 				entry.link.href = item.href;
 				entry.item = item;
 			}
-			for (const [id, { link }] of links) {
+			for (const [id, { link }] of [...links, ...utilityLinks]) {
 				if (id === active) {
 					link.setAttribute('aria-current', 'page');
 					if (activeId !== active) {
@@ -216,26 +229,16 @@ export function createBookNavigation(container, onNavigate, pagerContainer = con
 				}
 				else { link.removeAttribute('aria-current'); }
 			}
-			current.textContent = links.get(active)?.item.title ?? '';
+			current.textContent = (links.get(active) ?? utilityLinks.get(active))?.item.title ?? '';
 			if (activeId !== active || !search.value) {
 				for (const group of groups.values()) { group.open = group.element.open; }
 			}
 			const changed = activeId !== active;
 			activeId = active;
 			filter();
+			layout();
 			if (changed) { revealActive(); }
-			const index = items.findIndex(item => item.id === active);
-			neighbors.forEach(({ link, title, label }, offset) => {
-				const item = index < 0 ? undefined : items[index + (offset === 0 ? -1 : 1)];
-				link.hidden = !item;
-				if (item) {
-					title.textContent = item.title;
-					link.href = item.href;
-					link.dataset.topic = item.id;
-					link.setAttribute('aria-label', `${label}: ${item.title}`);
-				}
-			});
 		},
-		dispose() { dismiss(); lifetime.abort(); toolbar.remove(); panel.remove(); pager.remove(); },
+		dispose() { dismiss(); lifetime.abort(); resize.disconnect(); toolbar.remove(); panel.remove(); },
 	};
 }

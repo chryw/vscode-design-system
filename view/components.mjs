@@ -6,6 +6,8 @@
 
 import { node, exampleViewer, request, variantChoices } from './ui.mjs';
 import { specificationUrl } from './component-specs.mjs';
+import { documentSection } from '../model/documents.mjs';
+import { documentMarkup } from './documents.mjs';
 
 export async function renderFixturePreview(content, control, fixtureId, signal, onView, { id = 'component-example', heading = 'h2', compact = false, variantLabel = 'Variant', previewLabel, preferredTheme, showVariants = true, pauseWhenHidden = false, mapVisibilityInput, actionsHost, contentSized = true, fillWidth = false, lazy = false, input = {}, onStatus, onMessage } = {}) {
 	const example = node('section', undefined, heading ? 'control-stage article-section reference-example' : 'control-stage');
@@ -249,7 +251,7 @@ export async function renderFixturePreview(content, control, fixtureId, signal, 
 	};
 }
 
-export async function renderComponents(content, system, fixtureId, signal, onView) {
+export async function renderComponents(content, system, fixtureId, signal, onView, resolveResource) {
 	const control = system.controls.find(control => control.id === system.view.controlId);
 	let specification;
 	if (control.nodeId) {
@@ -268,9 +270,16 @@ export async function renderComponents(content, system, fixtureId, signal, onVie
 	const appendNotes = (id, title, notes) => {
 		const section = node('section', undefined, 'article-section component-doc-section');
 		section.id = id;
-		const list = node('ul');
-		list.append(...notes.map(text => node('li', text)));
-		section.append(node('h2', title), list);
+		section.append(node('h2', title));
+		if (control.docs.design) {
+			section.append(documentMarkup(documentSection(control.docs.design, { heading: title }), {
+				level: 3, prefix: `${id}-`, resolveResource,
+			}));
+		} else {
+			const list = node('ul');
+			list.append(...notes.map(text => node('li', text)));
+			section.append(list);
+		}
 		content.append(section);
 	};
 	appendNotes('component-usage', 'Usage', control.docs.usage);
@@ -280,11 +289,16 @@ export async function renderComponents(content, system, fixtureId, signal, onVie
 	api.id = 'component-api';
 	api.append(node('h2', 'API'));
 	const scroll = node('div', undefined, 'table-scroll');
+	if (control.docs.apiSource === 'typescript') {
+		scroll.tabIndex = 0;
+		scroll.setAttribute('role', 'region');
+		scroll.setAttribute('aria-label', `${control.name} API declarations`);
+	}
 	const table = node('table', undefined, 'component-api-table');
 	table.append(node('caption', `${control.docs.className} API`));
 	const head = node('thead');
 	const header = node('tr');
-	for (const name of ['Member', 'Type', 'Purpose']) {
+	for (const name of ['Member', 'Type', control.docs.apiSource === 'typescript' ? 'Declaration' : 'Purpose']) {
 		const cell = node('th', name);
 		cell.scope = 'col';
 		header.append(cell);
@@ -297,8 +311,10 @@ export async function renderComponents(content, system, fixtureId, signal, onVie
 		name.scope = 'row';
 		name.append(node('code', prop.name));
 		const type = node('td');
-		type.append(node('code', prop.type));
-		row.append(name, type, node('td', prop.description));
+		type.append(node('code', `${prop.type}${prop.optional ? ' (optional)' : ''}`));
+		const detail = node('td');
+		detail.append(control.docs.apiSource === 'typescript' ? node('code', prop.declaration) : document.createTextNode(prop.description));
+		row.append(name, type, detail);
 		body.append(row);
 	}
 	table.append(head, body);

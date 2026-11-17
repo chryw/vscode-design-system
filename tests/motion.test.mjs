@@ -9,24 +9,27 @@ import { workspaceRoot } from '../runtime/paths.mjs';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { motionDefinitionFiles, motionGuidanceFile, motionPageFile, motionResponseFiles, motionSourceFiles, parseMotionDefinitions, projectMotionDefinitions, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
+import { motionDefinitionFiles, motionPageFile, motionResponseFiles, motionSourceFiles, parseMotionDefinitions, projectMotionDefinitions, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
 import { load } from '../adapters/vscode/groups/motion.mjs';
 import { pageJumps } from '../view/navigation-model.mjs';
 import { motionRecipeExamples, motionExample } from '../view/motion-recipes.mjs';
 import { motionPresetBindingFiles, readMotionPresetBindings } from '../adapters/vscode/groups/motion-preset-bindings.mjs';
 
 const root = workspaceRoot;
+const motionPage = JSON.parse(readFileSync(`${root}/${motionPageFile}`, 'utf8'));
+const motionGuidanceFile = motionPage.source;
+const motionImplementationFile = motionPage.sources[0].file;
 const ts = createRequire(`${root}/package.json`)('typescript');
 const source = (file, offset) => ({ file, line: offset + 1 });
 
 function fixture(duration = 100) {
 	const tokens = [
-		['motion.duration.faster', 'duration', duration],
-		['motion.duration.normal', 'duration', 200],
+		['motion.duration.short', 'duration', duration],
+		['motion.duration.medium', 'duration', 200],
 		['motion.duration.gentle', 'duration', 250],
-		['motion.progress.duration', 'duration', 4000],
-		['motion.control.duration', 'duration', { ref: 'motion.duration.faster' }],
-		['motion.control.easing', 'easing', { ref: 'motion.easing.easeInOut' }],
+		['motion.progress.cycle.duration', 'duration', 4000],
+		['motion.state.change.duration', 'duration', { ref: 'motion.duration.short' }],
+		['motion.state.change.easing', 'easing', { ref: 'motion.easing.easeInOut' }],
 		['motion.easing.easeInOut', 'easing', 'ease'],
 		['motion.easing.linear', 'easing', 'linear'],
 		['motion.surface.enter.scale', 'scale', 0.97],
@@ -34,11 +37,11 @@ function fixture(duration = 100) {
 	const registry = `export const motionTokenRegistry = new MotionTokenRegistry(${JSON.stringify(tokens).replace('"INFINITE"', 'Infinity')});`;
 	const recipe = (id, duration, easing, frames = []) => ({ id, purpose: id, duration, easing, frames, reduced: 'instant' });
 	const recipes = [
-		recipe('motion.control', 'motion.control.duration', 'motion.control.easing'),
-		recipe('motion.selection', 'motion.control.duration', 'motion.easing.easeInOut'),
+		recipe('motion.state.change', 'motion.state.change.duration', 'motion.state.change.easing'),
+		recipe('motion.selection.change', 'motion.state.change.duration', 'motion.easing.easeInOut'),
 		recipe('motion.surface.enter', 'motion.duration.gentle', 'motion.easing.easeInOut', [{ opacity: 0, scale: 'motion.surface.enter.scale' }, { opacity: 1, scale: 1 }]),
-		recipe('motion.surface.exit', 'motion.duration.faster', 'motion.easing.easeInOut'),
-		{ ...recipe('motion.progress.spin', 'motion.progress.duration', 'motion.easing.linear', [{ angle: 0 }, { angle: 360 }]), iterations: 'INFINITE' },
+		recipe('motion.surface.exit', 'motion.duration.short', 'motion.easing.easeInOut'),
+		{ ...recipe('motion.spinner.cycle', 'motion.progress.cycle.duration', 'motion.easing.linear', [{ angle: 0 }, { angle: 360 }]), iterations: 'INFINITE' },
 	];
 	return { registry, recipes: `export const motionRecipes = ${JSON.stringify(recipes).replace('"INFINITE"', 'Infinity')};` };
 }
@@ -49,12 +52,12 @@ test('motion definitions resolve actual recipe aliases and literal endpoints', (
 	assert.deepEqual({
 		status: model.status,
 		recipes: model.recipes.map(recipe => [recipe.id, recipe.duration]),
-		alias: model.tokens.find(token => token.id === 'motion.control.duration').value,
-		loop: model.recipes.find(recipe => recipe.id === 'motion.progress.spin').loop,
+		alias: model.tokens.find(token => token.id === 'motion.state.change.duration').value,
+		loop: model.recipes.find(recipe => recipe.id === 'motion.spinner.cycle').loop,
 		start: model.recipes.find(recipe => recipe.id === 'motion.surface.enter').frames[0].opacity,
 	}, {
 		status: 'defined',
-		recipes: [['motion.control', 100], ['motion.selection', 100], ['motion.surface.enter', 250], ['motion.surface.exit', 100], ['motion.progress.spin', 4000]],
+		recipes: [['motion.state.change', 100], ['motion.selection.change', 100], ['motion.surface.enter', 250], ['motion.surface.exit', 100], ['motion.spinner.cycle', 4000]],
 		alias: '100ms', loop: true, start: 0,
 	});
 });
@@ -89,8 +92,8 @@ test('localized strings and shared frame constants are read as data', () => {
 test('unsupported executable expressions and broken alias graphs fail explicitly', () => {
 	const { registry, recipes } = fixture();
 	assert.throws(() => parseMotionDefinitions(ts, registry.replace('"value":100', '"value":(() => { throw new Error("must not execute"); })()'), recipes, source), /Unsupported motion expression/);
-	assert.throws(() => parseMotionDefinitions(ts, registry.replace('"ref":"motion.duration.faster"', '"ref":"missing"'), recipes, source), /Missing, incompatible, or cyclic/);
-	assert.throws(() => parseMotionDefinitions(ts, registry.replace('"ref":"motion.duration.faster"', '"ref":"motion.control.duration"'), recipes, source), /cyclic/);
+	assert.throws(() => parseMotionDefinitions(ts, registry.replace('"ref":"motion.duration.short"', '"ref":"missing"'), recipes, source), /Missing, incompatible, or cyclic/);
+	assert.throws(() => parseMotionDefinitions(ts, registry.replace('"ref":"motion.duration.short"', '"ref":"motion.state.change.duration"'), recipes, source), /cyclic/);
 });
 
 test('absent definitions are scoped absence; unreadable definitions are not absence', () => {
@@ -121,10 +124,12 @@ test('token-only checkouts do not invent published recipes', () => {
 test('motion navigation follows the system hierarchy', () => {
 	const jumps = pageJumps({ section: 'motion' }, load(context()).page);
 	assert.deepEqual(jumps, [
-		{ anchor: 'motion-principles', label: 'Principles' },
-		{ anchor: 'motion-foundations', label: 'Foundations' },
-		{ anchor: 'motion-practices', label: 'Best practices' },
+		{ anchor: 'motion-principles', label: 'Purpose and restraint' },
+		{ anchor: 'motion-practices', label: 'Product patterns' },
+		{ anchor: 'motion-foundations', label: 'Timing and properties' },
+		{ anchor: 'motion-implementation', label: 'Presets and tokens' },
 		{ anchor: 'motion-accessibility', label: 'Accessibility' },
+		{ anchor: 'motion-review', label: 'Evaluate and improve' },
 	]);
 });
 
@@ -137,15 +142,15 @@ test('Motion composition and guidance are tracked source dependencies, not rende
 	const { motionDocumentation: model } = load(context({}, reads));
 	const examples = motionRecipeExamples(model);
 	assert.deepEqual({
-		dependencies: [motionPageFile, motionGuidanceFile].map(file => reads.has(file)),
+		dependencies: [motionPageFile, motionGuidanceFile, motionImplementationFile].map(file => reads.has(file)),
 		sections: model.page.sections.map(section => [section.id, section.title ?? model.sections[section.heading].title]),
 		recipeSources: [...new Set(examples.map(recipe => recipe.source.file))],
 		css: examples.map(recipe => [recipe.id, Boolean(recipe.code)]),
 	}, {
-		dependencies: [true, true],
-		sections: [['principles', 'Principles'], ['foundations', 'Foundations'], ['practices', 'Best practices'], ['accessibility', 'Accessibility']],
-		recipeSources: [motionGuidanceFile],
-		css: [['surface', true], ['layout', true], ['content', true], ['feedback', true], ['notification', true]],
+		dependencies: [true, true, true],
+		sections: [['principles', 'Purpose and restraint'], ['practices', 'Product patterns'], ['foundations', 'Timing and properties'], ['implementation', 'Presets and tokens'], ['accessibility', 'Accessibility'], ['review', 'Evaluate and improve']],
+		recipeSources: [motionImplementationFile],
+		css: [['surface', true], ['layout', true], ['content', true], ['feedback', true]],
 	});
 	assert.match(model.sections['content-replacement'].markdown, /Editor tabs, typing, search keystrokes, and streaming remain immediate/);
 	assert.doesNotMatch(readFileSync(`${root}/${motionGuidanceFile}`, 'utf8'), /canvas recipe reference|motion-recipes\.mjs/);
@@ -157,12 +162,12 @@ test('chapter copy is curated while specifications and timing remain source-back
 	const reads = new Set();
 	const { motionDocumentation: before } = load(context({}, reads));
 	const { motionDocumentation: after } = load(context({
-		[file]: original.read(file).replace('Match the time to the job.', 'Feedback acknowledges input promptly.')
-			.replace('Only the selection indicator travels;', 'Example-only caption.'),
+		[file]: original.read(file).replace('Duration is how long the visual change takes,', 'Feedback acknowledges input promptly,')
+			.replace('The selection indicator connects', 'Example-only caption.'),
 	}));
 	assert.deepEqual({
 		tracked: reads.has(file),
-		copyChanged: after.page.sections[1].blocks[0].blocks[0].description.startsWith('Feedback acknowledges input promptly.'),
+		copyChanged: after.page.sections.find(section => section.id === 'foundations').blocks[0].blocks[0].description.startsWith('Feedback acknowledges input promptly,'),
 		captionChanged: motionExample(after, 'selection').caption.startsWith('Example-only caption.'),
 		guidanceUnchanged: after.page.properties.find(property => property.id === 'position').description === before.page.properties.find(property => property.id === 'position').description,
 		timingUnchanged: after.responses.map(response => response.durationMs),
@@ -181,12 +186,12 @@ test('saved Markdown, CSS examples, and declarative composition refresh without 
 	const original = context();
 	const spec = original.read(motionGuidanceFile)
 		.replace('Make changes easier to understand.', 'Clarify meaningful change.')
-		.replace('Use a small cue beside a stable status label', 'Use one compact cue beside a stable status label')
-		.replace('.surface {', '.surface.test-change {');
+		.replace('Use a small cue beside a stable status label', 'Use one compact cue beside a stable status label');
+	const implementation = original.read(motionImplementationFile).replace('.surface {', '.surface.test-change {');
 	const page = JSON.parse(original.read(motionPageFile));
 	page.sections[0].blocks.reverse();
 	const { motionDocumentation: changed } = load(context({
-		[motionGuidanceFile]: spec, [motionPageFile]: JSON.stringify(page),
+		[motionGuidanceFile]: spec, [motionImplementationFile]: implementation, [motionPageFile]: JSON.stringify(page),
 	}));
 	assert.deepEqual({
 		principle: changed.sections.purposeful.markdown.startsWith('Clarify meaningful change.'),
@@ -195,7 +200,7 @@ test('saved Markdown, CSS examples, and declarative composition refresh without 
 		cssChanged: motionRecipeExamples(changed)[0].code.startsWith('.surface.test-change {'),
 	}, {
 		principle: true,
-		order: ['accessible', 'consistent', 'responsive', 'natural', 'purposeful'],
+		order: ['principles', 'motion-styles', 'when-to-use-motion'],
 		example: 'Use one compact cue beside a stable status label when the amount of work is unknown.',
 		cssChanged: true,
 	});
@@ -211,7 +216,7 @@ test('broken heading, block, example, and token references fail rather than publ
 		[page => { delete page.durationIntro; }, /Missing Motion duration comparisons/],
 		[page => { page.durations[0].exampleId = 'control'; }, /Motion duration studies need/],
 		[page => { page.durations[0].tokens = ['motion.easing.linear']; }, /Missing Motion duration token/],
-		[page => { page.source = '../outside.md'; }, /Unsupported Motion page descriptor/],
+		[page => { page.source = '../outside.md'; }, /Invalid book source reference/],
 		[page => { page.examples.push(page.examples[0]); }, /duplicate Motion examples/],
 		[page => { page.responses = [{ id: 'missing' }]; }, /Missing Motion response/],
 		[page => { page.sections[1].blocks.push({ type: 'responses', heading: 'duration' }); }, /Missing Motion response specimens/],
@@ -222,34 +227,96 @@ test('broken heading, block, example, and token references fail rather than publ
 	}
 	const spec = context().read(motionGuidanceFile);
 	assert.throws(() => readMotionPage(context({ [motionGuidanceFile]: `${spec}\n### Purposeful\nDuplicate` }), definitions), /Ambiguous Motion heading/);
-	assert.throws(() => readMotionPage(context({ [motionGuidanceFile]: spec.replace('```css', '```text') }), definitions), /Expected one CSS example/);
+	const implementation = context().read(motionImplementationFile);
+	assert.throws(() => readMotionPage(context({ [motionImplementationFile]: implementation.replace('```css', '```text') }), definitions), /Expected one CSS example/);
 	assert.throws(() => readMotionPage(context({ [motionGuidanceFile]: `${spec}\n\`\`\`css\nunclosed` }), definitions), /Unclosed fence/);
-	assert.throws(() => readMotionPage(context({ [motionGuidanceFile]: spec.replace('var(--vscode-motion-surface-exit-duration', 'var(--vscode-motion-missing') }), definitions), /Missing Motion CSS variable/);
+	assert.throws(() => readMotionPage(context({ [motionImplementationFile]: implementation.replace('var(--vscode-motion-surface-exit-duration', 'var(--vscode-motion-missing') }), definitions), /Missing Motion CSS variable/);
 });
 
-test('generated response pairs are digest-checked and resolve source references without executing source', () => {
+test('Motion binds relocated design and technical sources while retaining single-source books', () => {
 	const original = context();
 	const definitions = readMotionDefinitions(original);
-	const byId = new Map(definitions.tokens.map(token => [token.id, token]));
+	const relocated = 'src/vs/platform/theme/common/motion/relocated.design.md';
+	const page = JSON.parse(original.read(motionPageFile));
+	page.source = relocated;
+	const current = readMotionPage(context({
+		[motionPageFile]: JSON.stringify(page),
+		[relocated]: original.read(motionGuidanceFile),
+	}), definitions);
+	const legacyPage = { ...page, source: motionImplementationFile };
+	delete legacyPage.sources;
+	const legacy = readMotionPage(context({
+		[motionPageFile]: JSON.stringify(legacyPage),
+		[motionImplementationFile]: `${original.read(motionGuidanceFile)}\n${original.read(motionImplementationFile)}`,
+	}), definitions);
+	assert.deepEqual({
+		design: current.sections.purposeful.source.file,
+		recipe: current.sections['overlay-surface-composition'].source.file,
+		singleSourceContent: Object.entries(current.sections).every(([id, section]) => section.markdown === legacy.sections[id].markdown),
+	}, { design: relocated, recipe: motionImplementationFile, singleSourceContent: true });
+	assert.throws(() => readMotionPage(context({
+		[motionImplementationFile]: `${original.read(motionImplementationFile)}\n## Purposeful\nDuplicate.\n`,
+	}), definitions), /Ambiguous Motion heading/);
+	assert.throws(() => readMotionPage({
+		...original,
+		read: file => {
+			if (file === motionImplementationFile) { throw new Error('Technical source unavailable'); }
+			return original.read(file);
+		},
+	}, definitions), /Technical source unavailable/);
+});
+
+test('Motion scoped chapter copy preserves explicit composition and source-derived definitions', () => {
+	const original = context();
+	const file = 'src/vs/platform/theme/common/motion/motion-examples.md';
+	const descriptor = JSON.parse(original.read(motionPageFile));
+	const references = (value, compact) => {
+		if (Array.isArray(value)) { return value.map(item => references(item, compact)); }
+		if (!value || typeof value !== 'object') { return value; }
+		if (Object.hasOwn(value, '$text')) {
+			const reference = typeof value.$text === 'string' ? { file, heading: value.$text } : value.$text;
+			return { $text: compact && reference.file === file && Object.keys(reference).length === 2 ? reference.heading : reference };
+		}
+		return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, references(child, compact)]));
+	};
+	const explicit = references(descriptor, false);
+	delete explicit.textSource;
+	const scoped = { ...references(descriptor, true), textSource: file };
+	const definitions = readMotionDefinitions(original);
+	const before = readMotionPage(context({ [motionPageFile]: JSON.stringify(explicit) }), definitions);
+	const after = readMotionPage(context({ [motionPageFile]: JSON.stringify(scoped) }), definitions);
+	const { textSource, ...page } = after.page;
+	assert.deepEqual({ page, sections: after.sections, intro: after.intro }, before);
+	const edited = readMotionPage(context({
+		[motionPageFile]: JSON.stringify(scoped),
+		[file]: original.read(file).replace('Duration is how long the visual change takes,', 'Changed authored pacing guidance,'),
+	}), definitions);
+	assert.ok(edited.page.sections.find(section => section.id === 'foundations').blocks[0].blocks[0].description.startsWith('Changed authored pacing guidance,'));
+	assert.throws(() => readMotionPage(context({
+		[motionPageFile]: JSON.stringify({ ...scoped, textSource: '../outside.md' }),
+	}), definitions), /Invalid book source reference/);
+	assert.throws(() => readMotionPage({
+		...original,
+		read: requested => {
+			if (requested === motionPageFile) { return JSON.stringify(scoped); }
+			if (requested === file) { throw new Error('Chapter copy unavailable'); }
+			return original.read(requested);
+		},
+	}, definitions), /Chapter copy unavailable/);
+});
+
+test('authoring candidates are digest-checked but are absent from shared product tokens', () => {
+	const original = context();
+	const definitions = readMotionDefinitions(original);
 	const responses = new Map(definitions.responses.map(response => [response.id, response]));
 	assert.deepEqual({
 		sources: definitions.scope,
-		pairs: ['responsive', 'settled'].map(id => ({
-			id,
-			duration: byId.get(`motion.response.${id}.duration`).number,
-			easing: byId.get(`motion.response.${id}.easing`).value,
-			responseDuration: responses.get(id).durationMs,
-			responseEasing: responses.get(id).easing,
-		})),
+		candidateIds: [...responses.keys()],
+		sharedCandidates: definitions.tokens.filter(token => token.id.startsWith('motion.response.') || token.value.startsWith('linear(')),
 	}, {
 		sources: motionSourceFiles,
-		pairs: ['responsive', 'settled'].map(id => ({
-			id,
-			duration: responses.get(id).durationMs,
-			easing: responses.get(id).easing,
-			responseDuration: responses.get(id).durationMs,
-			responseEasing: responses.get(id).easing,
-		})),
+		candidateIds: ['responsive', 'settled'],
+		sharedCandidates: [],
 	});
 	const staleParameters = original.read(motionResponseFiles[0]).replace('"frequencyHz": 6', '"frequencyHz": 7');
 	assert.throws(() => readMotionDefinitions(context({
@@ -316,11 +383,11 @@ test('missing responses, incompatible defaults, and incomplete preset bindings f
 	for (const [changed, error] of [
 		[bindings.replace(`phase: 'exit'`, `phase: 'missing'`), /Invalid or duplicate Motion preset binding phase/],
 		[bindings.replace(`'motion.surface.exit.duration'`, `'motion.surface.enter.duration'`), /Motion preset binding does not match the source default/],
-		[bindings.replace(`['motion.control.easing', 'motion.border.easing']`, '[]'), /Missing easing assignments/],
+		[bindings.replace(`['motion.state.change.easing']`, '[]'), /Missing easing assignments/],
 	]) {
 		assert.throws(() => readMotionPresetBindings(context({ [motionPresetBindingFiles[1]]: changed }), definitions), error);
 	}
-	const presets = original.read(motionPresetBindingFiles[0]).replace(`phase: 'enter', response: 'settled'`, `phase: 'enter', response: 'missing'`);
+	const presets = original.read(motionPresetBindingFiles[0]).replace(`phase: 'enter', response: 'motion.surface.enter'`, `phase: 'enter', response: 'missing'`);
 	assert.throws(() => readMotionPresetBindings(context({ [motionPresetBindingFiles[0]]: presets }), definitions), /Missing or invalid Motion response/);
 });
 
@@ -341,11 +408,11 @@ test('analysis examples bind existing product recipes and real example identitie
 	assert.deepEqual(read().page.analyses, page.analyses);
 	page.analyses.at(-1).recipeId = 'missing';
 	assert.throws(read, /Missing Motion analysis recipe/);
-	page.analyses.at(-1).recipeId = 'motion.toast.enter';
+	page.analyses.at(-1).recipeId = 'motion.notification.enter';
 	page.analyses.at(-1).exampleId = 'missing';
 	assert.throws(read, /Missing Motion analysis example/);
 	page.analyses.at(-1).exampleId = 'notification';
-	page.analyses.push({ id: 'another-selection', recipeId: 'motion.selection', exampleId: 'selection' });
+	page.analyses.push({ id: 'another-selection', recipeId: 'motion.selection.change', exampleId: 'selection' });
 	assert.throws(read, /Duplicate Motion analysis example/);
 	page.analyses.pop();
 	page.examples.find(example => example.id === 'anchored-menu').presetBindingId = 'missing';
@@ -355,12 +422,12 @@ test('analysis examples bind existing product recipes and real example identitie
 test('analysis follows saved source timing and groups only tracks with shared parameters', () => {
 	const original = context();
 	const before = load(original).motionDocumentation;
-	const duration = before.tokens.find(token => token.id === 'motion.duration.faster').number;
-	const declaration = `id: 'motion.duration.faster', kind: 'duration', value: `;
+	const duration = before.tokens.find(token => token.id === 'motion.duration.short').number;
+	const declaration = `id: 'motion.duration.short', kind: 'duration', value: `;
 	const registry = original.read(motionDefinitionFiles[0]).replace(`${declaration}${duration}`, `${declaration}${duration * 2}`);
 	const after = load(context({ [motionDefinitionFiles[0]]: registry })).motionDocumentation;
-	const first = before.analyses.find(entry => entry.id === 'motion.selection');
-	const changed = after.analyses.find(entry => entry.id === 'motion.selection');
+	const first = before.analyses.find(entry => entry.id === 'motion.selection.change');
+	const changed = after.analyses.find(entry => entry.id === 'motion.selection.change');
 	const track = first.tracks.find(track => track.properties.includes('scale')).analysis;
 	const updated = changed.tracks.find(track => track.properties.includes('scale')).analysis;
 	assert.deepEqual({
@@ -408,10 +475,11 @@ test('unsupported response analysis never invents measurements', () => {
 });
 
 test('fenced heading-like text is code, and CRLF source headings retain their authored text', () => {
-	const spec = context().read(motionGuidanceFile).replace('.surface {', '# not-a-guidance-heading\n.surface {').replaceAll('\n', '\r\n');
+	const spec = context().read(motionGuidanceFile).replaceAll('\n', '\r\n');
+	const implementation = context().read(motionImplementationFile).replace('.surface {', '# not-a-guidance-heading\n.surface {').replaceAll('\n', '\r\n');
 	const model = readMotionPage({
-		...context({ [motionGuidanceFile]: spec }),
-		source: (file, offset) => ({ file, line: spec.slice(0, offset).split('\n').length }),
+		...context({ [motionGuidanceFile]: spec, [motionImplementationFile]: implementation }),
+		source: (file, offset) => ({ file, line: (file === motionGuidanceFile ? spec : implementation).slice(0, offset).split('\n').length }),
 	}, readMotionDefinitions(context()));
 	assert.deepEqual({
 		headingCreated: Boolean(model.sections['not-a-guidance-heading']),
@@ -420,16 +488,16 @@ test('fenced heading-like text is code, and CRLF source headings retain their au
 	}, {
 		headingCreated: false,
 		purposeful: true,
-		sourceLine: spec.split('\n').findIndex(line => line.startsWith('### Notification arrival composition')) + 1,
+		sourceLine: implementation.split('\n').findIndex(line => line.startsWith('### Notification arrival composition')) + 1,
 	});
 });
 
 test('ordinary ramps, literal purpose defaults, and long compatibility cycles remain distinct', () => {
 	const tokens = [
-		{ id: 'motion.duration.normal', kind: 'duration', value: 200 },
-		{ id: 'motion.progress.duration', kind: 'duration', value: 4000 },
-		{ id: 'motion.control.duration', kind: 'duration', value: 120 },
-		{ id: 'motion.surface.enter.duration', kind: 'duration', value: { ref: 'motion.duration.normal' } },
+		{ id: 'motion.duration.medium', kind: 'duration', value: 200 },
+		{ id: 'motion.progress.cycle.duration', kind: 'duration', value: 4000 },
+		{ id: 'motion.state.change.duration', kind: 'duration', value: 120 },
+		{ id: 'motion.surface.enter.duration', kind: 'duration', value: { ref: 'motion.duration.medium' } },
 	].map(token => ({ ...token, description: token.id, source: { file: 'registry.ts', line: 1 } }));
 	const model = projectMotionDefinitions(tokens, []);
 	assert.deepEqual({
@@ -437,18 +505,18 @@ test('ordinary ramps, literal purpose defaults, and long compatibility cycles re
 		durations: model.durations.map(token => token.id),
 	}, {
 		categories: [
-			['motion.duration.normal', 'ramp', '200ms'], ['motion.progress.duration', 'purpose', '4000ms'],
-			['motion.control.duration', 'purpose', '120ms'], ['motion.surface.enter.duration', 'purpose', '200ms'],
+			['motion.duration.medium', 'ramp', '200ms'], ['motion.progress.cycle.duration', 'purpose', '4000ms'],
+			['motion.state.change.duration', 'purpose', '120ms'], ['motion.surface.enter.duration', 'purpose', '200ms'],
 		],
-		durations: ['motion.duration.normal'],
+		durations: ['motion.duration.medium'],
 	});
 });
 
 test('property tracks retain distinct press timing rather than being relabeled with selection timing', () => {
 	const { registry, recipes } = fixture();
-	const withTracks = recipes.replace('"id":"motion.selection"', '"id":"motion.selection","tracks":[{"property":"scale","duration":"motion.duration.normal","easing":"motion.easing.linear"}]');
+	const withTracks = recipes.replace('"id":"motion.selection.change"', '"id":"motion.selection.change","tracks":[{"property":"scale","duration":"motion.duration.medium","easing":"motion.easing.linear"}]');
 	const model = parseMotionDefinitions(ts, registry, withTracks, source);
-	assert.deepEqual(model.recipes.find(recipe => recipe.id === 'motion.selection').tracks, [
-		{ property: 'scale', duration: 200, easing: 'linear', durationToken: 'motion.duration.normal', easingToken: 'motion.easing.linear' },
+	assert.deepEqual(model.recipes.find(recipe => recipe.id === 'motion.selection.change').tracks, [
+		{ property: 'scale', duration: 200, easing: 'linear', durationToken: 'motion.duration.medium', easingToken: 'motion.easing.linear' },
 	]);
 });

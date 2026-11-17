@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-export function load({read,source}){
+import { colorDefinitions, createColorResolver } from '../color-catalog.mjs';
+
+export function load({read,source,root}, palettes = []){
 	const elevationGuidance = {file:'.github/skills/design-philosophy/SKILL.md',text:read('.github/skills/design-philosophy/SKILL.md')};
 	const tierStart = elevationGuidance.text.indexOf('### Elevation tiers');
 	const tierEnd = elevationGuidance.text.indexOf('\n<a id=', tierStart);
@@ -31,5 +33,30 @@ export function load({read,source}){
 		shadowUsage: [...read('src/vs/workbench/browser/parts/notifications/media/notificationsToasts.css').matchAll(/box-shadow:\s*(?<value>[^;]+);/g)]
 			.map(match => ({ value: match.groups.value, source: source('src/vs/workbench/browser/parts/notifications/media/notificationsToasts.css', match.index) })),
 	};
+	if (palettes.length) {
+		const files = ['baseColors', 'editorColors', 'quickpickColors', 'semanticColors']
+			.map(name => `src/vs/platform/theme/common/colors/${name}.ts`);
+		files.push('src/vs/workbench/common/theme.ts');
+		const definitions = files.flatMap(file => colorDefinitions(read(file), file, root));
+		const byId = new Map(definitions.map(definition => [definition.id, definition]));
+		const symbols = new Map(definitions.filter(definition => definition.symbol).map(definition => [definition.symbol, definition.id]));
+		const ids = [
+			'editor.background', 'editor.foreground', 'sideBar.background', 'sideBar.foreground', 'panel.background', 'panel.border',
+			'editorHoverWidget.background', 'editorHoverWidget.foreground', 'editorHoverWidget.border',
+			'editorWidget.background', 'editorWidget.foreground', 'editorWidget.border',
+			'quickInput.background', 'quickInput.foreground', 'contrastBorder', 'focusBorder',
+		];
+		elevation.palettes = palettes.map(({ theme, colors, label }) => {
+			const resolve = createColorResolver(byId, symbols, colors, [], theme);
+			return {
+				id: theme.id, label, highContrast: theme.type.startsWith('hc-'),
+				tokens: ids.map(id => {
+					const color = resolve(id);
+					if (color.value === 'Runtime-only') { throw new Error(`Cannot resolve elevation preview color: ${id}`); }
+					return { id, css: `--vscode-${id.replaceAll('.', '-')}`, value: color.value === 'Unset' ? 'transparent' : color.value };
+				}),
+			};
+		});
+	}
 return {elevation};
 }

@@ -13,7 +13,7 @@ import { load as readPhilosophy } from '../adapters/vscode/groups/philosophy.mjs
 
 const root = workspaceRoot;
 
-test('source coverage does not promote absent geometry or a missing specification to defined guidance', async () => {
+test('source coverage distinguishes missing geometry from the authored elevation specification', async () => {
 	const store = new TopicStore(root);
 	try {
 		const result = [];
@@ -27,7 +27,7 @@ test('source coverage does not promote absent geometry or a missing specificatio
 		}
 		assert.deepEqual(result, [
 			['size', 'not-assessed', true], ['stroke', 'not-assessed', true],
-			['layout', 'not-defined-in-covered-sources', true], ['elevation', 'not-defined-in-covered-sources', true],
+			['layout', 'not-defined-in-covered-sources', true], ['elevation', 'source-defined', true],
 		]);
 	} finally { store.close(); }
 });

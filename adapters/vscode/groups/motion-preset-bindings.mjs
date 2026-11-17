@@ -32,6 +32,15 @@ export function readMotionPresetBindings(context, definitions) {
 	}
 	const presetsById = new Map(presets.map(preset => [preset.id, preset]));
 	const responsesById = new Map(definitions.responses.map(response => [response.id, response]));
+	const tokens = new Map(definitions.tokens.map(token => [token.id, token]));
+	const resolveResponse = (id, label) => {
+		const generated = responsesById.get(id);
+		if (generated) { return generated; }
+		const duration = tokens.get(`${id}.duration`);
+		const easing = tokens.get(`${id}.easing`);
+		if (duration?.kind !== 'duration' || easing?.kind !== 'easing') { return undefined; }
+		return { id, label, durationMs: duration.number, easing: easing.value };
+	};
 	if (presetsById.size !== presets.length || new Set(bindings.map(binding => binding.id)).size !== bindings.length
 		|| bindings.length !== presets.length) {
 		throw new Error('Duplicate or missing Motion preset and binding identities.');
@@ -43,14 +52,13 @@ export function readMotionPresetBindings(context, definitions) {
 			throw new Error(`Invalid Motion preset: ${preset.id}`);
 		}
 		for (const phase of preset.phases) {
-			const response = responsesById.get(phase.response);
+			const response = resolveResponse(phase.response, preset.label);
 			if (!response || !Array.isArray(phase.tracks) || !phase.tracks.length
 				|| phase.tracks.some(track => typeof track.primitive !== 'string' || typeof track.property !== 'string')) {
 				throw new Error(`Missing or invalid Motion response or tracks: ${preset.id}/${phase.phase}`);
 			}
 		}
 	}
-	const tokens = new Map(definitions.tokens.map(token => [token.id, token]));
 	const bindingsByPreset = new Set();
 	const projectedBindings = bindings.map(binding => {
 		const preset = presetsById.get(binding.preset);
@@ -65,7 +73,7 @@ export function readMotionPresetBindings(context, definitions) {
 			const phase = preset.phases.find(phase => phase.phase === bound.phase);
 			if (!phase || seen.has(bound.phase)) { throw new Error(`Invalid or duplicate Motion preset binding phase: ${binding.id}/${bound.phase}`); }
 			seen.add(bound.phase);
-			const response = responsesById.get(phase.response);
+			const response = resolveResponse(phase.response, preset.label);
 			for (const [ids, kind, value] of [[bound.durationTokens, 'duration', response.durationMs], [bound.easingTokens, 'easing', response.easing]]) {
 				if (!Array.isArray(ids) || !ids.length) { throw new Error(`Missing ${kind} assignments: ${binding.id}`); }
 				for (const id of ids) {

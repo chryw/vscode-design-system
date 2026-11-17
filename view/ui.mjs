@@ -89,10 +89,26 @@ export function paletteSwitcher(system, onChange) {
 	}
 	return group;
 }
+export function problemDetails(id) {
+	const details = node('details', undefined, 'canvas-problem');
+	details.id = id;
+	details.hidden = true;
+	const summary = node('summary');
+	summary.append(node('span'));
+	summary.firstChild.setAttribute('role', 'alert');
+	details.append(summary, node('p'));
+	return details;
+}
+
+export function showProblem(target, title, message) {
+	target.hidden = false;
+	target.querySelector('summary span').textContent = title;
+	target.querySelector('p').textContent = message;
+}
+
 export function problem(error, context = document.activeElement) {
 	const target = context?.closest?.('.topic-pane')?.querySelector('#problem') ?? document.querySelector('#problem');
-	target.hidden = false;
-	target.textContent = `${error.message}. Use Refresh to retry.`;
+	showProblem(target, 'Action failed — details', `${error.message}. Use Refresh topic to retry.`);
 }
 
 export async function request(url, options) {

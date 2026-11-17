@@ -24,12 +24,21 @@ export function validateBook(book) {
 			|| new Set(topic.aliases).size !== topic.aliases.length
 			|| typeof topic.compare !== 'boolean' || typeof topic.fixture !== 'boolean'
 			|| topic.hidden !== undefined && typeof topic.hidden !== 'boolean'
+			|| topic.navigation !== undefined && !['topic', 'utility'].includes(topic.navigation)
 			|| topic.page !== undefined && !/^pages\/[a-z][a-z0-9-]*\.json$/.test(topic.page)
 			|| topic.section === 'components' && (topic.id !== `component-${topic.controlId}` || !['ready', 'tbd'].includes(topic.content))) {
 			throw new Error(`Invalid book topic: ${topic?.id}`);
 		}
 		return { ...topic, rendererKind: topic.renderer, renderer: renderers[topic.renderer] };
 	});
+}
+
+export function bookNavigation(catalog) {
+	const visible = catalog.filter(item => !item.hidden);
+	return {
+		topics: visible.filter(item => item.navigation !== 'utility'),
+		utilities: visible.filter(item => item.navigation === 'utility'),
+	};
 }
 
 export function createCatalog(manifest, componentAliases) {

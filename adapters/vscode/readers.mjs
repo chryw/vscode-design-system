@@ -63,7 +63,7 @@ export async function readTopic(store, id, settings) {
 		codiconFontAvailable: existsSync(path.join(store.root, 'node_modules/@vscode/codicons/dist/codicon.ttf')),
 	};
 	Object.assign(data, await use('guidance', [section]));
-	if (['typography', 'spacing', 'shape', 'size', 'stroke', 'tokens', 'layout'].includes(section)) {
+	if (['typography', 'spacing', 'shape', 'size', 'stroke', 'tokens', 'layout', 'elevation'].includes(section)) {
 		Object.assign(data, await use('sizes'));
 	}
 	if (section === 'typography' || section === 'tokens') {
@@ -82,7 +82,15 @@ export async function readTopic(store, id, settings) {
 	}
 	if (section === 'principles') { Object.assign(data, await use('philosophy')); }
 	if (section === 'spacing') { Object.assign(data, await use('spacing')); }
-	if (section === 'shape' || section === 'elevation' || section === 'tokens') { Object.assign(data, await use('elevation')); }
+	if (section === 'shape' || section === 'tokens') { Object.assign(data, await use('elevation')); }
+	if (section === 'elevation') {
+		const palettes = [];
+		for (const { id, label } of store.repository.corePaletteThemes) {
+			const { theme, colors } = await use('themes', [id, id, false, false]);
+			palettes.push({ theme, colors, label });
+		}
+		Object.assign(data, await use('elevation', [palettes]));
+	}
 	if (section === 'motion') {
 		Object.assign(data, await use('motion'));
 		if (data.motionDocumentation.status === 'defined') {
@@ -95,7 +103,9 @@ export async function readTopic(store, id, settings) {
 	}
 	if (section === 'components') { Object.assign(data, await use('components', [entry.controlId])); }
 	if (section === 'documentation') { data.library = documentView(await use('documents'), settings); }
-	const sourceDocuments = [...new Set(dependencies.flatMap(item => item.files))].filter(file => file.endsWith('.md'));
+	const primarySource = data.motionDocumentation?.page.source ?? data.page?.sources?.[0]?.file;
+	const sourceDocuments = [...new Set(dependencies.flatMap(item => item.files))].filter(file => file.endsWith('.md'))
+		.sort((a, b) => Number(b === primarySource) - Number(a === primarySource));
 	if (section !== 'documentation') { Object.assign(data, await use('sourceDocuments', [sourceDocuments])); }
 	data.sourceFiles = [...new Set(dependencies.flatMap(item => item.files))];
 	if (data.library?.document) { data.sourceFiles.push(data.library.document.source.file); }

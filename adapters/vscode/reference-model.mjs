@@ -76,6 +76,9 @@ export function createReferenceModel(system, selected) {
 			assessment('Glyph catalog', 'source-defined', ['src/vs/base/common/codiconsLibrary.ts']),
 			documented('Glyph sizing and naming guidance', philosophy.file, sizing.file),
 		],
+		illustration: ({ documented }) => [
+			documented('Illustration guidance', system.page.sources[0].file),
+		],
 		motion: ({ documented, gap, assessment }) => [
 			documented('Motion intent', philosophy.file),
 			system.motionDocumentation?.status === 'defined'
@@ -87,9 +90,9 @@ export function createReferenceModel(system, selected) {
 			documented('Constraint-based layout guidance', layout.file),
 			gap('Named composition recipes', layout.file),
 		],
-		elevation: ({ assessment, gap }) => [
+		elevation: ({ assessment, documented }) => [
 			assessment('Shadow definitions', 'source-defined', [style]),
-			gap('Shadow-tier usage guidance', theming.file),
+			documented('Shadow-tier usage guidance', system.authored.markdownSource),
 			assessment('Product usage', system.elevation.shadowUsage.length ? 'implementation-only' : 'not-assessed',
 				['src/vs/workbench/browser/parts/notifications/media/notificationsToasts.css'], system.elevation.shadowUsage.length ? 'present' : 'absent'),
 		],

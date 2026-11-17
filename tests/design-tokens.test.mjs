@@ -12,9 +12,30 @@ import { TopicStore } from '../runtime/store.mjs';
 import { definitionEntries, designTokenGroups } from '../view/token-lookup.mjs';
 import { readSizeTokens } from '../adapters/vscode/typography.mjs';
 import { readMotionDefinitions } from '../adapters/vscode/groups/motion-source.mjs';
+import { motionTokenGroups } from '../view/motion-reference.mjs';
 
 const root = workspaceRoot;
 const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026', query: '' };
+
+test('motion lookup exposes compact product pairs, not sampled candidates or local choreography', async () => {
+	const store = new TopicStore(root);
+	try {
+		const { data } = await store.read('tokens', settings);
+		const tokens = definitionEntries(data).filter(token => token.group === 'motion');
+		const groups = motionTokenGroups(tokens);
+		assert.deepEqual({
+			groups: [...groups.keys()],
+			baseOnly: groups.get('Duration scale').every(token => token.id.startsWith('motion.duration.')),
+			sampledCurves: tokens.some(token => token.value.startsWith('linear(')),
+			feedback: ['motion.hover.change.duration', 'motion.state.change.duration'].every(id => groups.get('Feedback').some(token => token.id === id)),
+			presence: ['motion.visibility.exit.easing', 'motion.notification.enter.duration'].every(id => groups.get('Presence').some(token => token.id === id)),
+			localChoreography: tokens.filter(token => /^motion\.(confetti|matrix|voice|logo|attention)\./.test(token.id)),
+		}, {
+			groups: ['Duration scale', 'Easing', 'Feedback', 'Presence', 'Activity'],
+			baseOnly: true, sampledCurves: false, feedback: true, presence: true, localChoreography: [],
+		});
+	} finally { store.close(); }
+});
 
 test('explicit size registrations can reference their shared numeric constant', () => {
 	const tokens = readSizeTokens('const GAP = 4;\nregisterSize(\'layout.gap\', sizeForAllThemes(GAP, \'px\'), localize(\'gap\', "Gap"));', 'sizes.ts');
@@ -29,18 +50,18 @@ test('the index qualifies documented design decisions rather than styling implem
 		const entries = definitionEntries(data);
 		const get = id => entries.find(entry => entry.id === id);
 		const motion = readMotionDefinitions({ root, read: file => readFileSync(`${root}/${file}`, 'utf8'), source: file => ({ file, line: 1 }) });
-		const control = motion.tokens.find(token => token.id === 'motion.control.duration');
+		const control = motion.tokens.find(token => token.id === 'motion.state.change.duration');
 		assert.deepEqual([
 			'spacing.size80', 'fontSize.body1', 'fontWeight.semiBold', 'cornerRadius.medium',
-			'codiconFontSize.compact', 'strokeThickness', 'motion.control.duration', 'agents.layout.floatingPanelGap',
+			'codiconFontSize.compact', 'strokeThickness', 'motion.state.change.duration', 'agents.layout.floatingPanelGap',
 		].map(id => [id, get(id).value]), [
 			['spacing.size80', '8px'], ['fontSize.body1', '13px'], ['fontWeight.semiBold', '600'], ['cornerRadius.medium', '6px'],
-			['codiconFontSize.compact', '12px'], ['strokeThickness', '1px'], ['motion.control.duration', control.value], ['agents.layout.floatingPanelGap', '4px'],
+			['codiconFontSize.compact', '12px'], ['strokeThickness', '1px'], ['motion.state.change.duration', control.value], ['agents.layout.floatingPanelGap', '4px'],
 		]);
-		assert.equal(get('motion.control.duration').alias, control.alias);
-		assert.deepEqual(['motion.duration.normal', 'motion.control.duration', 'motion.progress.duration'].map(id => get(id).category),
+		assert.equal(get('motion.state.change.duration').alias, control.alias);
+		assert.deepEqual(['motion.duration.medium', 'motion.state.change.duration', 'motion.progress.cycle.duration'].map(id => get(id).category),
 			['ramp', 'purpose', 'purpose']);
-		assert.equal(get('motion.control.duration').deprecated, undefined);
+		assert.equal(get('motion.state.change.duration').deprecated, undefined);
 		assert.equal(get('color.background.accent').purpose, 'Strong emphasis for a leading action. Do not use it to imply success or selection.');
 		assert.equal(get('--vscode-shadow-sm').value, '0 0 4px rgba(0, 0, 0, 0.08)');
 		assert.equal(get('agents.layout.floatingPanelGap').scope, 'Agents window');
@@ -49,7 +70,7 @@ test('the index qualifies documented design decisions rather than styling implem
 			'defaultButtonStyles.buttonForeground', 'EditorTabsControl.EDITOR_TAB_HEIGHT.compact',
 			'--vscode-sash-size', '--vscode-shadow-depth-x', 'AGENTS_CENTERED_CONTENT_MAX_WIDTH',
 			'Codicon.add', 'languageIds.typescript', 'Dark Accent / Blue 01', 'Typography / Heading 4',
-			'motion.control', 'editor.background',
+			'motion.state.change', 'editor.background',
 		].filter(id => get(id)), []);
 		assert.equal(entries.every(entry => entry.css.startsWith('--')), true);
 		assert.deepEqual([...designTokenGroups(entries).keys()], [

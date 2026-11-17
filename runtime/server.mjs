@@ -20,7 +20,7 @@ const assets = new Set([
 	'index.html', 'canvas.css', 'shell.css', 'shell.mjs', 'context.mjs', 'book-navigation.mjs', 'book-navigation.css', 'reference.mjs', 'ui.mjs', 'navigation-model.mjs',
 	'page-content.mjs', 'motion-reference.mjs', 'topic-lifecycle.mjs', 'token-lookup.mjs', 'controls.mjs', 'component-specs.mjs',
 	'typography.mjs', 'foundations.mjs', 'guidance.mjs', 'markdown.mjs', 'layout.mjs', 'icons.mjs',
-	'color-reference.mjs', 'theme-gallery.mjs', 'motion.mjs', 'motion-previews.mjs', 'motion-recipes.mjs', 'motion.css', 'components.mjs', 'documents.mjs',
+	'color-reference.mjs', 'theme-gallery.mjs', 'elevation.mjs', 'motion.mjs', 'motion-previews.mjs', 'motion-recipes.mjs', 'motion.css', 'components.mjs', 'documents.mjs',
 	'topics/catalog.mjs', ...['guidance', 'typography', 'foundations', 'theming', 'icons', 'motion', 'tokens', 'components', 'documents'].map(kind => `topics/${kind}.mjs`),
 	],
 );

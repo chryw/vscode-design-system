@@ -8,7 +8,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, statSync, watch } fro
 import path from 'node:path';
 import { contained } from './paths.mjs';
 import { readBook } from './book.mjs';
-import { DocumentError, documentSection, documentView, isRepositoryPath, parseDocument, queryDocuments, resolveDocumentReference } from '../model/documents.mjs';
+import { DocumentError, documentSection, documentView, findDocument, isRepositoryPath, parseDocument, queryDocuments, resolveDocumentReference } from '../model/documents.mjs';
 
 const bookPrefix = '.github/design-system/';
 const ignoredDirectories = new Set(['.git', 'node_modules', '.build', 'out', 'dist', 'vendor']);
@@ -35,7 +35,15 @@ export class DocumentLibrary {
 		this.readScopes();
 	}
 	readScopes() {
-		const scopes = readBook(this.bookRoot).documentSources;
+		const book = readBook(this.bookRoot);
+		const scopes = book.documentSources;
+		const aliases = book.documentAliases === undefined ? {} : book.documentAliases;
+		if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases) || Object.keys(aliases).length > 200
+			|| Object.entries(aliases).some(([from, to]) => !isRepositoryPath(from) || !from.endsWith('.md')
+				|| !isRepositoryPath(to) || !to.endsWith('.md') || from === to || Object.hasOwn(aliases, to)
+				|| [from, to].some(file => file.startsWith('.github/extensions/')))) {
+			throw new Error('Invalid document aliases; use direct repository Markdown paths');
+		}
 		if (!Array.isArray(scopes) || !scopes.length || scopes.length > 12
 			|| new Set(scopes.map(scope => scope?.id)).size !== scopes.length) { throw new Error('Invalid authored-document discovery scopes'); }
 		for (const scope of scopes) {
@@ -53,6 +61,7 @@ export class DocumentLibrary {
 		}
 		const changed = JSON.stringify(this.scopes) !== JSON.stringify(scopes);
 		this.scopes = scopes;
+		this.aliases = aliases;
 		if (changed && this.active) { this.setActive(false); this.setActive(true); }
 	}
 	sourcePath(file) {
@@ -168,9 +177,14 @@ export class DocumentLibrary {
 			}
 		};
 		for (const scope of this.scopes) { visit(scope.root, scope); }
+		for (const [from, to] of Object.entries(this.aliases)) {
+			if (seen.has(from)) { diagnostics.push({ file: from, reason: 'alias-shadows-document' }); }
+			if (!documents.some(document => document.id === to)) { diagnostics.push({ file: to, reason: 'missing-alias-target' }); }
+		}
 		documents.sort((a, b) => a.title.localeCompare(b.title, 'en') || a.id.localeCompare(b.id, 'en'));
 		this.index = {
-			version: 1, revision: digest(JSON.stringify({ documents: documents.map(({ id, revision }) => [id, revision]), scopes: this.scopes, diagnostics })),
+			version: 1, revision: digest(JSON.stringify({ documents: documents.map(({ id, revision }) => [id, revision]), scopes: this.scopes, aliases: this.aliases, diagnostics })),
+			aliases: this.aliases,
 			scopes: this.scopes.map(({ id, title, origin, root, fileName, excludeDirectories }) => ({ id, title, origin, root, fileName, excludeDirectories })), documents, diagnostics,
 		};
 		this.directories = directories;
@@ -184,7 +198,7 @@ export class DocumentLibrary {
 	project(view, options = {}) { return documentView(this.snapshot({ refresh: !this.active, ...options }), view); }
 	read(id, options = {}) {
 		if (typeof id !== 'string' || !id || id.length > 2048) { throw new DocumentError('DOCUMENT_QUERY_INVALID', 'Expected a discovered repository-relative document ID'); }
-		const document = this.snapshot({ refresh: !this.active }).documents.find(document => document.id === id);
+		const document = findDocument(this.snapshot({ refresh: !this.active }), id);
 		if (!document) { throw new DocumentError('DOCUMENT_NOT_FOUND', `Document is not available in the configured library: ${id}`); }
 		return documentSection(document, options);
 	}

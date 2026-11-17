@@ -8,10 +8,9 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { motionTokenCategory } from '../../../view/motion-reference.mjs';
-import { resolveContent } from './authored.mjs';
+import { resolveContent, sourcePath } from './authored.mjs';
 
 export const motionPageFile = '.github/design-system/pages/motion.json';
-export const motionGuidanceFile = 'src/vs/platform/theme/common/motion/MOTION.md';
 
 export const motionDefinitionFiles = [
 	'src/vs/platform/theme/common/motionRegistry.ts',
@@ -227,7 +226,7 @@ export function projectMotionDefinitions(tokens, recipes, responses = []) {
 	const easingIds = [...new Set([
 		...projectedRecipes.flatMap(recipe => [recipe.easingToken, ...recipe.tracks.map(track => track.easingToken)]),
 		...projectedTokens.filter(token => token.id.startsWith('motion.easing.')).map(token => token.id),
-		'motion.disclosure.easing', 'motion.matrix.easing',
+		'motion.disclosure.geometry.easing', 'motion.matrix.easing',
 	])];
 	return {
 		status: recipes.length ? 'defined' : 'partial', tokens: projectedTokens, recipes: projectedRecipes, responses,
@@ -288,39 +287,48 @@ export function readMotionDefinitions({ root, read, source }) {
 
 /** Resolve the Motion page's heading references without executing authored content. */
 export function readMotionPage(context, definitions, presetBindingIds) {
-	const page = resolveContent(JSON.parse(context.read(motionPageFile)), context.read);
-	if (page.version !== 1 || page.id !== 'motion' || page.renderer !== 'motion' || page.source !== motionGuidanceFile) {
+	const descriptor = JSON.parse(context.read(motionPageFile));
+	const page = resolveContent(descriptor, context.read, { source: descriptor.textSource });
+	if (page.version !== 1 || page.id !== 'motion' || page.renderer !== 'motion' || typeof page.source !== 'string'
+		|| page.sources !== undefined && (!Array.isArray(page.sources) || page.sources.length > 12
+			|| page.sources.some(entry => !entry || typeof entry.file !== 'string' || Object.keys(entry).some(key => key !== 'file')))) {
 		throw new Error(`Unsupported Motion page descriptor: ${motionPageFile}`);
 	}
-	const text = context.read(motionGuidanceFile);
-	const headings = [];
-	let fence;
-	let offset = 0;
-	for (const line of text.split('\n')) {
-		const delimiter = line.match(/^\s*(?<fence>`{3,}|~{3,})/);
-		if (delimiter) {
-			const marker = delimiter.groups.fence;
-			if (!fence) { fence = marker; }
-			else if (marker[0] === fence[0] && marker.length >= fence.length) { fence = undefined; }
-		} else if (!fence) {
-			const heading = line.match(/^(?<marks>#{1,6})\s+(?<title>.+?)\s*#*\s*$/);
-			if (heading) {
-				const title = heading.groups.title;
-				const id = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
-				if (headings.some(heading => heading.id === id)) { throw new Error(`Ambiguous Motion heading: ${id}`); }
-				headings.push({ id, title, level: heading.groups.marks.length, offset, start: offset + line.length + 1 });
-			}
-		}
-		offset += line.length + 1;
-	}
-	if (fence) { throw new Error('Unclosed fence in Motion guidance'); }
+	const files = [page.source, ...(page.sources ?? []).map(entry => entry.file)].map(sourcePath);
+	if (new Set(files).size !== files.length) { throw new Error('Duplicate Motion source'); }
 	const sections = Object.create(null);
-	for (const [index, heading] of headings.entries()) {
-		sections[heading.id] = {
-			title: heading.title, level: heading.level,
-			markdown: text.slice(heading.start, headings[index + 1]?.offset ?? text.length).replace(/\r\n/g, '\n').trim(),
-			source: context.source(motionGuidanceFile, heading.offset),
-		};
+	for (const file of files) {
+		const text = context.read(file);
+		const headings = [];
+		let fence;
+		let offset = 0;
+		for (const line of text.split('\n')) {
+			const delimiter = line.match(/^\s*(?<fence>`{3,}|~{3,})/);
+			if (delimiter) {
+				const marker = delimiter.groups.fence;
+				if (!fence) { fence = marker; }
+				else if (marker[0] === fence[0] && marker.length >= fence.length) { fence = undefined; }
+			} else if (!fence) {
+				const heading = line.match(/^(?<marks>#{1,6})\s+(?<title>.+?)\s*#*\s*$/);
+				if (heading) {
+					const title = heading.groups.title;
+					const id = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+					if (sections[id] || headings.some(heading => heading.id === id)) {
+						throw new Error(`Ambiguous Motion heading: ${id} in ${file}`);
+					}
+					headings.push({ id, title, level: heading.groups.marks.length, offset, start: offset + line.length + 1 });
+				}
+			}
+			offset += line.length + 1;
+		}
+		if (fence) { throw new Error(`Unclosed fence in Motion guidance: ${file}`); }
+		for (const [index, heading] of headings.entries()) {
+			sections[heading.id] = {
+				title: heading.title, level: heading.level,
+				markdown: text.slice(heading.start, headings[index + 1]?.offset ?? text.length).replace(/\r\n/g, '\n').trim(),
+				source: context.source(file, heading.offset),
+			};
+		}
 	}
 	const requireHeading = id => {
 		if (typeof id !== 'string' || !sections[id]) { throw new Error(`Missing Motion heading: ${id}`); }

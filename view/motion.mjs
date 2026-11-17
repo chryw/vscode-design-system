@@ -23,7 +23,7 @@ function section(id, title, level = 'h2') {
 
 const propertyFrames = {
 	fade: () => [{ opacity: 1 }, { opacity: 0 }],
-	scale: model => [{ transform: 'scale(1)' }, { transform: `scale(${model.tokens.find(token => token.id === 'motion.press.scale').number})` }],
+	scale: model => [{ transform: 'scale(1)' }, { transform: `scale(${model.tokens.find(token => token.id === 'motion.press.change.scale').number})` }],
 	position: () => [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }],
 	color: () => [{ backgroundColor: 'var(--vscode-button-secondaryBackground)' }, { backgroundColor: 'var(--vscode-button-background)' }],
 };

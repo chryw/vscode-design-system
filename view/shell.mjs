@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { mountReference } from './reference.mjs';
-import { node, request } from './ui.mjs';
+import { node, request, problemDetails, showProblem } from './ui.mjs';
 import { bookTitle, topicId, visibleTopicIds } from './topics/catalog.mjs';
 import { createBookNavigation } from './book-navigation.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { documentURL } from './documents.mjs';
 import { setRepository } from './context.mjs';
+import { bookNavigation } from '../model/catalog.mjs';
 
 const lifetime = new AbortController();
 const panes = new Map();
@@ -21,7 +22,7 @@ const contents = createBookNavigation(navigation, id => {
 		problem(error);
 		target.focus();
 	});
-}, document.querySelector('#book-pagination'));
+});
 let catalog;
 let state;
 let events;
@@ -37,12 +38,12 @@ const post = (route, input) => request(route, {
 });
 const problem = error => {
 	let message = document.querySelector('#shell-problem');
-	if (!message) { message = node('p'); message.id = 'shell-problem'; message.setAttribute('role', 'alert'); target.before(message); }
-	message.textContent = `Couldn't update the design system: ${error.message}`;
+	if (!message) { message = problemDetails('shell-problem'); document.querySelector('.explorer-heading').after(message); }
+	showProblem(message, 'Canvas update failed — details', error.message);
 	if (new URL(location.href).searchParams.get('section') === 'documentation') {
-		const back = node('a', 'Browse documentation');
+		const back = node('a', 'Browse sources');
 		back.href = documentURL();
-		message.append(' ', back);
+		message.querySelector('p').append(' ', back);
 	}
 };
 const urlFor = id => {
@@ -90,10 +91,14 @@ async function changeScope(input) {
 function reconcile(next) {
 	state = next;
 	refresh.disabled = refreshing;
+	refresh.textContent = refreshing ? 'Refreshing…' : visibleTopicIds(state.scope).length > 1 ? 'Refresh topics' : 'Refresh topic';
+	refresh.title = `Reload ${visibleTopicIds(state.scope).map(id => catalog.find(topic => topic.id === id).title).join(' and ')}, including live examples`;
 	const all = state.scope.mode === 'all';
 	document.body.classList.toggle('book-layout', all);
 	const restoreFocus = navigation.contains(document.activeElement);
-	contents.update(all ? catalog.filter(item => !item.hidden).map(item => ({ id: item.id, title: item.title, group: item.group, subgroup: item.subgroup, aliases: item.aliases, href: urlFor(item.id).href })) : [], state.scope.active);
+	const { topics, utilities } = bookNavigation(all ? catalog : []);
+	const link = item => ({ ...item, href: urlFor(item.id).href });
+	contents.update(topics.map(link), state.scope.active, utilities.map(link));
 	document.querySelector('.skip').hidden = !all;
 	const visible = visibleTopicIds(state.scope);
 	if (!panes.size) { target.replaceChildren(); }
@@ -138,6 +143,7 @@ function reconcile(next) {
 				},
 				onSnapshot: system => {
 					syncArticleLinks(element);
+					if (document.activeElement === element) { focusArticle(id); }
 					document.title = `${system.library?.document?.title ?? catalog.find(item => item.id === state.scope.active).title} — ${bookTitle}`;
 					const { kind, branch, worktree, modified } = system.provenance;
 					document.querySelector('#checkout').textContent = `${kind} · ${worktree} · ${branch} · ${modified ? 'Modified' : 'Clean'}`;
@@ -174,7 +180,7 @@ refresh.addEventListener('click', async () => {
 	} finally {
 		refreshing = false;
 		refresh.disabled = false;
-		refresh.textContent = 'Refresh';
+		refresh.textContent = visibleTopicIds(state.scope).length > 1 ? 'Refresh topics' : 'Refresh topic';
 	}
 }, { signal: lifetime.signal });
 async function applyURL() {

@@ -166,9 +166,14 @@ export function queryDocuments(index, options = {}) {
 	};
 }
 
+export function findDocument(index, id) {
+	const canonical = index.aliases?.[id] ?? id;
+	return index.documents.find(document => document.id === canonical);
+}
+
 export function documentView(index, view) {
 	const listing = queryDocuments(index, { query: view.query ?? '', scope: view.documentScope ?? '', offset: view.documentOffset ?? 0 });
-	const document = view.documentId ? index.documents.find(item => item.id === view.documentId) : undefined;
+	const document = view.documentId ? findDocument(index, view.documentId) : undefined;
 	if (view.documentId && !document) { throw new DocumentError('DOCUMENT_NOT_FOUND', `Document is not available in the configured library: ${view.documentId}`); }
 	return { listing, document };
 }

@@ -9,6 +9,7 @@ import { bookTitle, topicId } from './topics/catalog.mjs';
 import { documentView, resolveDocumentReference } from '../model/documents.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
+import { bookNavigation } from '../model/catalog.mjs';
 
 const snapshot = globalThis.designSnapshot;
 setRepository(snapshot.repository);
@@ -17,7 +18,7 @@ const navigation = document.querySelector('#book-navigation');
 let reference;
 let active;
 let view;
-const contents = createBookNavigation(navigation, id => show(id, true), document.querySelector('#book-pagination'));
+const contents = createBookNavigation(navigation, id => show(id, true));
 const topicURL = id => {
 	const url = new URL(location.href);
 	url.search = '';
@@ -44,9 +45,9 @@ function show(id, push = false, settings = {}) {
 		active = id;
 		view = { ...topic.view, ...settings };
 		if (push) { history.pushState(null, '', writeViewURL(topicURL(id), view, { topic: false })); }
-		contents.update(snapshot.catalog.map(item => ({
-			id: item.id, title: item.title, group: item.group, subgroup: item.subgroup, aliases: item.aliases, href: topicURL(item.id).href,
-		})), id);
+		const { topics, utilities } = bookNavigation(snapshot.catalog);
+		const link = item => ({ ...item, href: topicURL(item.id).href });
+		contents.update(topics.map(link), id, utilities.map(link));
 		const article = document.createElement('article');
 		article.className = 'design-reference topic-pane';
 		article.dataset.topic = id;

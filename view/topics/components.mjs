@@ -4,4 +4,4 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { renderComponents } from '../components.mjs';
-export function render(target, data, host, signal) { return renderComponents(target, data, data.view.fixtureId, signal, host.onView); }
+export function render(target, data, host, signal) { return renderComponents(target, data, data.view.fixtureId, signal, host.onView, host.documentResource); }

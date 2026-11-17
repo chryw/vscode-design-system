@@ -1,14 +1,18 @@
 # Authored-document contract
 
-The book has two complementary entry points: curated design chapters and the **Documentation** library. Both read the same source files. A document does not need a custom renderer or a chapter entry to be discoverable.
+The book has two complementary entry points: curated design chapters and the **Source library**. Both read the same source files. A document does not need a custom renderer or a chapter entry to be discoverable.
 
 ## Find and read
 
-Open **Guidance → Documentation**. Search matches document titles, repository-relative paths, Markdown, and frontmatter. Exact title and path matches rank ahead of incidental mentions. Filter by source and page through bounded results.
+Open **Source library** beneath the topic groups. It is a book-level tool for finding original guidance, specifications, instructions, and references, not another design subject. Search matches document titles, repository-relative paths, Markdown, and frontmatter. Exact title and path matches rank ahead of incidental mentions. Filter by source and page through bounded results.
+
+The checkout registers the library with `navigation: "utility"`; omitting this field or using `"topic"` keeps ordinary grouped navigation. Utility placement does not hide content from exports or machine listings. The internal `documentation` ID, section, document APIs, and existing URLs remain unchanged.
 
 Selecting a result reads the actual Markdown, including code blocks, tables, links, and local images. Frontmatter remains available under **Document metadata** so instruction applicability is not lost. Relative Markdown links open the corresponding document; linked code opens as source text. Unsupported or unavailable references are reported rather than executed or silently replaced.
 
-The document ID is its repository-relative path. Renaming a file changes that ID; an old bookmark reports that the document is unavailable and offers a route back to the library. IDs are interpreted within the canvas's canonical checkout, never as arbitrary absolute paths.
+Source readers use the same opening hierarchy as curated chapters: document navigation and provenance, one page title, introductory prose, section outline, then the body. Leading prose appears beneath the title instead of below the outline. A leading, prose-only **Introduction** section supplies that introduction without repeating its heading; its original anchor and aliases remain usable. Substantive headings, nested introductory sections, lists, tables, and code retain their source structure. This is a presentation rule, not a rewrite of the document or the agent-facing source.
+
+The document ID is its repository-relative path. When renaming a specification, the selected checkout can retain a direct old-path → canonical-path mapping in `book.json`'s optional `documentAliases`. Reads, saved document selections, and portable snapshots resolve that mapping to the same canonical document; searches do not list duplicate copies. Aliases cannot chain or shadow an existing document, and missing targets are explicit diagnostics. An unknown bookmark still reports that the document is unavailable and offers a route back to the library. IDs are interpreted within the canvas's canonical checkout, never as arbitrary absolute paths.
 
 ## Discovery scopes
 

@@ -120,10 +120,10 @@ test('keywords, CSS number forms, and duration changes retain the same normalize
 test('analysis accepts source-projected aliases without owning a parallel catalog of defaults', () => {
 	const project = (duration, easing) => projectMotionDefinitions([
 		{ id: 'motion.duration.test', kind: 'duration', value: duration },
-		{ id: 'motion.control.duration', kind: 'duration', value: { ref: 'motion.duration.test' } },
-		{ id: 'motion.control.easing', kind: 'easing', value: easing },
+		{ id: 'motion.state.change.duration', kind: 'duration', value: { ref: 'motion.duration.test' } },
+		{ id: 'motion.state.change.easing', kind: 'easing', value: easing },
 	], [{
-		id: 'motion.control', duration: 'motion.control.duration', easing: 'motion.control.easing', frames: [],
+		id: 'motion.state.change', duration: 'motion.state.change.duration', easing: 'motion.state.change.easing', frames: [],
 	}]).recipes[0];
 	const before = project(200, 'linear');
 	const after = project(400, [0.42, 0, 1, 1]);

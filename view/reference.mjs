@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 
-import { node, sourceLink } from './ui.mjs';
+import { node, sourceLink, problemDetails, showProblem } from './ui.mjs';
 import {getTopic,topicId} from './topics/catalog.mjs';
 import { pageJumps, topicPresentation } from './navigation-model.mjs';
 import { createTopicLoader } from './topic-lifecycle.mjs';
@@ -24,12 +24,10 @@ export function mountReference(root, props, host) {
 	const status = node('p', undefined, 'sr-only');
 	status.id = 'status';
 	status.setAttribute('role', 'status');
-	const problem = node('p');
-	problem.id = 'problem';
-	problem.setAttribute('role', 'alert');
-	problem.hidden = true;
+	const problem = problemDetails('problem');
 	const heading = node('h1');
-	const guidance = node('p', undefined, 'topic-intro');
+	const guidance = node('div', undefined, 'topic-intro');
+	let metadata;
 	const actions = node('footer', undefined, 'tools topic-actions');
 	const sourceDocuments = node('details', undefined, 'source-documents');
 	sourceDocuments.hidden = true;
@@ -39,7 +37,17 @@ export function mountReference(root, props, host) {
 	outline.hidden = true;
 	const header = node('div', undefined, 'topic-heading');
 	header.append(heading);
-	root.replaceChildren(header, guidance, outline, problem, content, actions, status);
+	const context = node('div', undefined, 'topic-context');
+	context.append(header, guidance, outline);
+	root.replaceChildren(context, problem, content, actions, status);
+	const measureContext = () => {
+		const height = context.getBoundingClientRect().height;
+		const top = Number.parseFloat(getComputedStyle(context).top) || 0;
+		root.style.setProperty('--topic-scroll-offset', `${height ? height + top + 16 : 24}px`);
+	};
+	const contextObserver = new ResizeObserver(measureContext);
+	contextObserver.observe(context);
+	root.ownerDocument.defaultView.addEventListener('resize', measureContext);
 	const revealSection = target => {
 		for (let element = target; element && element !== content; element = element.parentElement) {
 			if (element instanceof HTMLDetailsElement) { element.open = true; }
@@ -75,7 +83,7 @@ export function mountReference(root, props, host) {
 			const entry = getTopic(topicId(props));
 			const module = await import(`./${entry.renderer}`);
 			if (signal.aborted) { throw new Error('Topic render cancelled'); }
-			const count = await module.render(stage, model, {
+			const result = await module.render(stage, model, {
 				...host, groupOpen, previewState,
 				onView: patch => { Object.assign(props, patch); host.onView(patch); },
 				onQuery: value => { query = value; host.onQuery(value); },
@@ -85,6 +93,7 @@ export function mountReference(root, props, host) {
 					void loader.refresh({ contentOnly: true });
 				},
 			}, signal);
+			const presentation = typeof result === 'number' ? { count: result } : result;
 			if (system.sourceSections?.length) {
 				stage.classList.add('article-flow');
 				renderSourceSections(stage, system.sourceSections, host.documentResource);
@@ -96,9 +105,9 @@ export function mountReference(root, props, host) {
 				target.id ||= `${topicId(props)}-section-${index + 1}`;
 				return { target, label: labels.get(target.id) ?? heading.textContent };
 			});
-			return { stage, count, sections, signal };
+			return { stage, ...presentation, sections, signal };
 		},
-		commit: ({ stage, count, sections, signal }, system, input) => {
+		commit: ({ stage, count, context: documentContext, introduction, sections, signal }, system, input) => {
 			const focusedSearch = root.querySelector('input[type="search"]');
 			const restoreSearch = focusedSearch && document.activeElement === focusedSearch
 				? { start: focusedSearch.selectionStart, end: focusedSearch.selectionEnd, value: focusedSearch.value } : undefined;
@@ -136,11 +145,11 @@ export function mountReference(root, props, host) {
 					const item = node('li');
 					item.append(link);
 					list.append(item);
-					locations.push({ target, link, inset: Number.parseFloat(getComputedStyle(target).scrollMarginTop) });
+					locations.push({ target, link });
 				}
 				const trackLocation = () => {
 					if (!root.getClientRects().length) { return; }
-					const location = locations.findLast(({ target, inset }) => target.getBoundingClientRect().top <= Math.max(24, inset) + 1) ?? locations[0];
+					const location = locations.findLast(({ target }) => target.getBoundingClientRect().top <= Math.max(24, Number.parseFloat(getComputedStyle(target).scrollMarginTop)) + 1) ?? locations[0];
 					selectLocation(location.link);
 				};
 				const window = root.ownerDocument.defaultView;
@@ -164,14 +173,20 @@ export function mountReference(root, props, host) {
 				return;
 			}
 			const policy = topicPresentation(system, props);
+			metadata?.remove();
+			metadata = documentContext;
+			if (metadata) { context.before(metadata); }
 			heading.textContent = system.library?.document?.title ?? getTopic(topicId(props)).title;
 			const documentTitle = system.library?.document?.headings.find(item => item.level === 1);
 			heading.id = documentTitle ? `document-${documentTitle.id}` : '';
-			guidance.textContent = props.section === 'components' && props.controlId
-				? system.controls.find(control => control.id === props.controlId).docs.summary
-				: system.authored?.intro ?? system.motionDocumentation?.intro ?? '';
+			guidance.replaceChildren(...(introduction ? [introduction] : []));
+			if (!introduction && !system.library?.document) {
+				guidance.textContent = props.section === 'components' && props.controlId
+					? system.controls.find(control => control.id === props.controlId).docs.summary
+					: system.authored?.intro ?? system.motionDocumentation?.intro ?? '';
+			}
 			const unavailable = props.section === 'components' && system.controls[0].content === 'tbd';
-			guidance.hidden = unavailable || Boolean(system.library?.document);
+			guidance.hidden = unavailable || !guidance.hasChildNodes();
 			if (!unavailable && !['colors', 'spacing'].includes(props.section) && policy.source && system.sourceFiles.includes(policy.source.file)) {
 				const source = sourceLink(policy.source, 'View source');
 				if (sourceAction) {
@@ -197,17 +212,17 @@ export function mountReference(root, props, host) {
 				}
 				sourceDocuments.append(list);
 			}
+			measureContext();
 			showAnchor();
 			host.onSnapshot(system);
 		},
 		report: error => {
-			problem.hidden = false;
 			const message = error.message.replace(/^Couldn't load the design system: /, '').replace(/[.!?]$/, '');
-			problem.textContent = `Couldn't refresh this topic: ${message}. Use Refresh to retry.`;
+			showProblem(problem, snapshot ? "Couldn't refresh this topic — showing last loaded content" : "Couldn't load this topic — details", `${message}. Use Refresh topic to retry.`);
 			if (props.section === 'documentation') {
-				const back = node('a', 'Back to documentation');
+				const back = node('a', 'Back to sources');
 				back.href = documentURL('', props);
-				problem.append(' ', back);
+				problem.querySelector('p').append(' ', back);
 			}
 			content.dataset.topicState = 'error';
 		},
@@ -223,6 +238,8 @@ export function mountReference(root, props, host) {
 		refresh: force => loader.refresh({ force }),
 		dispose: () => {
 			loader.dispose();
+			contextObserver.disconnect();
+			root.ownerDocument.defaultView.removeEventListener('resize', measureContext);
 			root.replaceChildren();
 		},
 	};

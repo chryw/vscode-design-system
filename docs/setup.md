@@ -39,6 +39,18 @@ The installer copies assets into `.github/extensions/vscode-design-system/` and 
 
 For an isolated Agents worktree, prepare and install into that worktree. Discovery follows the session workspace. The canvas's `root` input selects the content checkout; installation determines where the extension is discovered.
 
+## Keep one current book
+
+Use one design-system canvas per product worktree across all chats and sessions, including newly opened sessions. Reuse the existing canvas in its owning chat. Instance IDs are chat-scoped: opening `design-book` in another chat still creates another canvas. Do not invent numbered, topic-specific, or validation-specific instances.
+
+Before opening a canvas, locate the worktree's existing canvas owner through its shared coordination record or known session. Where the worktree uses the private coordination index, resolve it with `git rev-parse --git-path copilot-workflow.json` and read its owner/checkpoint. If no canvas exists, open `vscode-design-system` once with instance ID `design-book` and the selected worktree's `root`. Record that owning chat, root, and instance in the existing worktree coordination record so later sessions can return to it.
+
+The canvas owner refreshes the same instance with the combined saved worktree, including uncommitted changes, rather than a contributor's isolated snapshot. Use topic refresh for guidance and product-source edits. Book catalog or fixture-binding changes require a provider reload; viewer changes require updating the managed installation and reloading providers. Serialize these operations with active contributors, validate a coherent candidate, and preserve the current topic and view. Do not install partially written changes or postpone every refresh indefinitely behind new work.
+
+Retire obsolete instances with the host's **Close Canvas** action. Closing an editor tab or stopping a viewer server alone does not remove a canvas from the picker. Preserve the canonical instance and unrelated canvases.
+
+Before reporting the book as current, verify that the picker contains only one design-system canvas, its content root is the intended worktree, and it reflects the latest coordinated product and viewer changes. If a refresh is pending or cleanup is blocked, report that limitation rather than opening a replacement.
+
 ## Check the content
 
 From the viewer clone:
@@ -68,7 +80,7 @@ git pull --ff-only
 node scripts/install.mjs --workspace /absolute/path/to/vscode-checkout --update
 ```
 
-For a canvas, reload extension providers afterward. For browser use, pull the viewer updates and restart the serving command. Update the product checkout separately.
+For a canvas, have the existing canvas owner reload extension providers afterward and reopen the same instance in its owning chat. Follow [Keep one current book](#keep-one-current-book) rather than creating a replacement panel. For browser use, pull the viewer updates and restart the serving command. Update the product checkout separately.
 
 To uninstall a canvas, remove the installed `.github/extensions/vscode-design-system/` directory, then reload providers. Its local exclusion rule remains in Git's `info/exclude`; remove that exact rule if desired. View state remains under `extension-data/vscode-design-system/` in `COPILOT_HOME`, or `~/.copilot` when unset, keyed by checkout, book, and panel.
 

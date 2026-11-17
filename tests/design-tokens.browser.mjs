@@ -109,18 +109,19 @@ test('the curated token reference explains choices and keeps implementation inve
 		await search.fill('color.background.accent');
 		await expect(article.locator('.token-reference-row')).toContainText('Strong emphasis for a leading action');
 		await expect(article.locator('.token-reference-row')).toContainText('#0E639C');
-		await search.fill('motion.control.duration');
+		await search.fill('motion.state.change.duration');
 		await expect(article.locator('#tokens-motion h3')).toHaveText('Feedback');
 		const tokenRow = id => article.locator('.token-reference-row').filter({
 			has: page.getByRole('button', { name: `Copy ${id} CSS variable --vscode-${id.replaceAll('.', '-')}`, exact: true }),
 		});
-		const controlDuration = panel.store.topics.get('tokens').envelope.data.designTokens.find(token => token.id === 'motion.control.duration');
-		await expect(tokenRow('motion.control.duration')).toHaveCount(1);
-		await expect(tokenRow('motion.control.duration').locator('td').first()).toHaveText(controlDuration.value);
-		await expect(tokenRow('motion.border.duration')).toContainText('Alias of motion.control.duration');
-		await search.fill('motion.progress.duration');
+		const controlDuration = panel.store.topics.get('tokens').envelope.data.designTokens.find(token => token.id === 'motion.state.change.duration');
+		await expect(tokenRow('motion.state.change.duration')).toHaveCount(1);
+		await expect(tokenRow('motion.state.change.duration').locator('td').first()).toHaveText(controlDuration.value);
+		await expect(tokenRow('motion.state.change.duration')).not.toContainText('Alias of');
+		await expect(tokenRow('motion.state.change.duration').locator('td').first()).toHaveText('120ms');
+		await search.fill('motion.progress.cycle.duration');
 		await expect(article.locator('#tokens-motion h3')).toHaveText('Activity');
-		await expect(tokenRow('motion.progress.duration')).toContainText('4000ms');
+		await expect(tokenRow('motion.progress.cycle.duration')).toContainText('4000ms');
 		await search.fill('agents.fontSize.heading1');
 		await expect(article.locator('.token-reference-row')).toContainText('Use fontSize.heading1');
 		for (const width of [320, 390, 800, 1440]) {
@@ -129,7 +130,7 @@ test('the curated token reference explains choices and keeps implementation inve
 		}
 		await expect(article.locator('.token-list a')).toHaveCount(0);
 		await expect(article.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(1);
-		await page.getByRole('searchbox', { name: 'Find a topic', exact: true }).fill('Iconography');
+		await page.getByRole('searchbox', { name: 'Search topics', exact: true }).fill('Iconography');
 		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'Iconography', exact: true }).click();
 		await expect(page.locator('[data-topic="iconography"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		assert.equal(panel.state.scope.mode, 'all');
