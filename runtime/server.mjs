@@ -203,7 +203,7 @@ export async function createExplorer(root, options = {}) {
 			if (url.pathname === '/api/catalog') { json({ version: 1, title: bookTitle, topics: catalog }); return; }
 			if (url.pathname === '/api/repository') { json(repository.projection); return; }
 			if (url.pathname === '/book.json') { json(readBook(roots.book)); return; }
-			if (['/model/documents.mjs', '/model/view-state.mjs', '/model/catalog.mjs', '/model/components.mjs', '/model/repository.mjs'].includes(url.pathname)) {
+			if (['/model/documents.mjs', '/model/view-state.mjs', '/model/catalog.mjs', '/model/components.mjs', '/model/repository.mjs', '/model/token-definitions.mjs'].includes(url.pathname)) {
 				send(200, 'text/javascript', readFileSync(contained(packageRoot, url.pathname.slice(1))));
 				return;
 			}

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Shared no-build repository projection contract. */
-import { createCatalog } from './catalog.mjs';
+import { createCatalog, validateBook } from './catalog.mjs';
 import { createControls } from './components.mjs';
 
 export function createRepository(input) {
@@ -16,6 +16,16 @@ export function createRepository(input) {
 		throw new Error('Invalid design-system repository projection');
 	}
 	const { controls, aliases } = createControls(input.curation, input.toolkit.specifications);
+	if (input.book?.components !== undefined) {
+		validateBook(input.book);
+		const { components, ...book } = input.book;
+		const topics = controls.map(control => ({
+			id: `component-${control.id}`, title: control.name, group: 'Components', section: 'components', controlId: control.id,
+			aliases: [control.id, ...(control.aliases ?? [])], compare: true, fixture: Boolean(control.groups.length),
+			content: control.content, hidden: control.hidden, renderer: 'components', page: components.page,
+		}));
+		input = { ...input, book: { ...book, topics: book.topics.flatMap(topic => topic.id === components.after ? [topic, ...topics] : [topic]) } };
+	}
 	return {
 		...createCatalog(input.book, aliases), projection: input, controls, componentAliases: aliases,
 		motionControls: input.bindings.motion, spacingControl: input.bindings.spacing,

@@ -26,7 +26,8 @@ export function topicPresentation(system, view) {
 					? system.icons[0].source
 					: view.section === 'elevation'
 						? system.elevation.tiers.source
-						: system.page?.sources?.[0] ?? { file: system.documents[view.section][0].file };
+						: system.page?.source ? { file: system.page.source }
+							: system.page?.sources?.[0] ?? { file: system.documents[view.section][0].file };
 	return {
 		foundation: foundationSections.includes(view.section),
 		search: view.section === 'tokens',

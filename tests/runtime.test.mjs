@@ -21,6 +21,7 @@ import { listTopics, readReference, searchReference } from '../runtime/headless.
 import { createDocumentCheckout, repositoryRoot } from './document-helpers.mjs';
 import { copyReviewSources } from '../scripts/archive.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
+import { defaultView } from '../runtime/view-state.mjs';
 
 const root = workspaceRoot;
 const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026', query: '', fixtureId: '', anchor: '' };
@@ -32,6 +33,23 @@ const scratch = prefix => {
 	cpSync(repositoryRoot, path.join(result, '.github/design-system'), { recursive: true });
 	return result;
 };
+
+test('component design-document renames retain both earlier bookmark forms without alias chains', () => {
+	const store = new TopicStore(root);
+	try {
+		const ids = [
+			'src/vs/base/browser/ui/inputbox/input-design.md',
+			'src/vs/base/browser/ui/inputbox/input.design.md',
+		];
+		assert.deepEqual(ids.map(id => {
+			const document = store.documents.read(id);
+			return { id: document.id, source: document.source.file, title: document.title };
+		}), ids.map(() => ({
+			id: 'src/vs/base/browser/ui/inputbox/input-box.design.md',
+			source: 'src/vs/base/browser/ui/inputbox/input-box.design.md', title: 'InputBox',
+		})));
+	} finally { store.close(); }
+});
 
 test('review sources keep viewer implementation separate from repository data and code-local guidance', async () => {
 	const directory = scratch('design-review-sources-');
@@ -599,7 +617,8 @@ test('book manifest and authored content are served only from their explicit con
 		}, { title: 'Visual Studio Code Design System', article: '# Authored guidance', privateModule: 404, symlink: 404 });
 		assert.throws(() => validateBook({ ...book, version: 2 }), /manifest/);
 		assert.throws(() => validateBook({ ...book, topics: [...book.topics, book.topics[0]] }), /manifest/);
-		assert.throws(() => validateBook({ ...book, topics: [{ ...book.topics[0], renderer: '../../runtime/server.mjs' }] }), /topic/);
+		assert.throws(() => validateBook({ ...book, topics: book.topics.map((topic, index) =>
+			index ? topic : { ...topic, renderer: '../../runtime/server.mjs' }) }), /topic/);
 	} finally { await panel.close(); }
 });
 
@@ -641,8 +660,8 @@ test('headless read and search return bounded source-backed results without fixt
 	const button = await readReference(root, 'component-button', { limit: 1000 });
 	const search = await searchReference(root, 'fontSize', { topics: ['typography'], limit: 3 });
 	assert.ok(read.sources.length && read.guidance.length && JSON.stringify(read).length < 8000);
-	assert.deepEqual({ file: read.guidance[0].file, anchor: read.guidance[0].anchor },
-		{ file: 'src/vs/platform/theme/common/sizes/typography.design.md', anchor: 'ui-type-roles' });
+	assert.equal(read.guidance[0].file, 'src/vs/platform/theme/common/sizes/typography.design.md');
+	assert.match(read.guidance[0].text, /^# Typography/);
 	assert.equal(motion.guidance[0].file, 'src/vs/platform/theme/common/motion/motion.design.md');
 	assert.equal(button.guidance[0].file, 'src/vs/base/browser/ui/button/button.design.md');
 	assert.deepEqual({ matches: search.results.length, bounded: search.truncated, sourceBacked: search.results.every(result => result.file && result.line > 0) },
@@ -668,11 +687,26 @@ test('headless reads prioritize Motion definitions and component APIs over rende
 	});
 });
 
+test('GUI topics and bounded agent reads share normalized source resources without fixture discovery', async () => {
+	const store = new TopicStore(root);
+	try {
+		const topic = await store.read('component-button', defaultView('component-button', store.repository));
+		const agent = await readReference(root, 'component-button', { limit: 24000 });
+		assert.deepEqual({
+			api: agent.definitions, examples: agent.examples, guidance: agent.guidance[0].file,
+		}, {
+			api: topic.data.resources.definitions, examples: topic.data.resources.examples,
+			guidance: topic.data.controls[0].docs.design.id,
+		});
+	} finally { store.close(); }
+});
+
 test('headless reads preserve unavailable component guidance and enforce their excerpt budget', async () => {
 	const unavailable = await readReference(root, 'component-breadcrumbs');
 	const bounded = await readReference(root, 'motion', { limit: 1000 });
 	const used = bounded.summary.length + bounded.guidance.reduce((sum, entry) => sum + entry.text.length, 0)
-		+ bounded.definitions.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0);
+		+ bounded.definitions.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0)
+		+ bounded.examples.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0);
 	assert.deepEqual({
 		readiness: unavailable.capability.readiness,
 		reason: unavailable.summary.length > 0,

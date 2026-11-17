@@ -10,10 +10,16 @@ const renderers = Object.freeze({
 });
 
 export function validateBook(book) {
+	const components = book?.components;
 	if (book?.version !== 1 || book.id !== 'vscode-design-system' || book.title !== 'Visual Studio Code Design System'
-		|| !Array.isArray(book.topics) || !book.topics.length || book.topics.some(topic => !topic || typeof topic !== 'object' || Array.isArray(topic))
+		|| !Array.isArray(book.topics) || !book.topics.length || book.topics.length > 200 || book.topics.some(topic => !topic || typeof topic !== 'object' || Array.isArray(topic))
 		|| new Set(book.topics.map(topic => topic.id)).size !== book.topics.length
-		|| !book.topics.some(topic => topic.id === book.defaultTopic && !topic.hidden)) {
+		|| !book.topics.some(topic => topic.id === book.defaultTopic && !topic.hidden)
+		|| components !== undefined && (!components || typeof components !== 'object' || Array.isArray(components)
+			|| Object.keys(components).some(key => !['after', 'page'].includes(key))
+			|| !/^pages\/[a-z][a-z0-9-]*\.json$/.test(components.page)
+			|| !book.topics.some(topic => topic.id === components.after)
+			|| book.topics.some(topic => topic.section === 'components'))) {
 		throw new Error('Invalid design-system book manifest');
 	}
 	return book.topics.map(topic => {

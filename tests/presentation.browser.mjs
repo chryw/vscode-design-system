@@ -11,9 +11,60 @@ import { chromium, expect } from './playwright.mjs';
 import { createExplorer } from '../runtime/server.mjs';
 import { corePaletteThemes } from '../view/token-lookup.mjs';
 import { mockFixtureControl, mockFixtureRenderer } from './browser-helpers.mjs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { readPage } from '../adapters/vscode/groups/authored.mjs';
+import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
 
 const root = workspaceRoot;
 const widths = [320, 390, 500, 800, 1440];
+
+test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
+	const read = file => readFileSync(path.join(root, file), 'utf8');
+	const authored = readPage(read, 'typography').authored;
+	const source = 'src/vs/platform/theme/common/sizes/typography.design.md';
+	const pageFile = '.github/design-system/pages/typography.json';
+	mkdirSync(path.join(root, '.build'), { recursive: true });
+	const scratch = mkdtempSync(path.join(root, '.build/chapter-composition-'));
+	const sourceFile = path.join(scratch, 'source.md');
+	const descriptor = path.join(scratch, 'page.json');
+	const sections = Object.entries(authored.sections).map(([key, section]) => ({
+		id: `typography-${key}`, key, heading: section.title, ...(key === 'emphasis' ? { aliases: ['typography-weight-guidance'] } : {}),
+	})).reverse();
+	const candidate = { version: 1, id: 'typography', renderer: 'typography', source, sources: [],
+		content: { sampleText: authored.sampleText, baseline: authored.baseline, composition: authored.composition }, sections };
+	writeFileSync(descriptor, JSON.stringify(candidate));
+	writeFileSync(sourceFile, read(source).replace('## Weight and emphasis',
+		'## Weight and emphasis\n\nAdditional **authored emphasis** with [owned typography](./typography.design.md).'));
+	const panel = await createExplorer(root, { scope: { operation: 'replace', topics: ['typography'], active: 'typography' },
+		adapter: { ...vscodeAdapter, sourcePath: (root, file, bookRoot) =>
+			file === source ? sourceFile : file === pageFile ? descriptor : vscodeAdapter.sourcePath(root, file, bookRoot) } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+		await page.goto(`${panel.url}#typography-weight-guidance`);
+		const article = page.locator('[data-topic="typography"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		assert.deepEqual(await article.locator('.topic-content h2').allTextContents(), sections.map(section => section.heading));
+		await expect(article.locator('#typography-emphasis')).toBeFocused();
+		await expect(article.locator('#typography-emphasis strong')).toHaveText('authored emphasis');
+		await expect(article.getByRole('link', { name: 'owned typography', exact: true })).toHaveAttribute('href', /documentId=.*typography\.design\.md/);
+		for (const width of [390, 1100]) {
+			await page.setViewportSize({ width, height: 900 });
+			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+		}
+		writeFileSync(descriptor, JSON.stringify({ ...candidate, sections: [
+			...sections, { id: 'unrendered', key: 'unrendered', heading: 'Introduction' },
+		] }));
+		await panel.refreshTopic('typography');
+		await expect(article.locator('#problem')).toContainText('Expected one rendered chapter section: unrendered');
+		await expect(article.locator('#typography-emphasis strong')).toHaveText('authored emphasis');
+	} finally {
+		await browser.close();
+		await panel.close();
+		rmSync(scratch, { recursive: true, force: true });
+	}
+});
 
 test('Illustration uses the shared book frame, source sections, and keyboard outline', { timeout: 30000 }, async () => {
 	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'illustration' } });
@@ -205,14 +256,12 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 			if (id === 'typography') {
 				assert.equal(await article.locator('.typography-style-row').evaluateAll(rows => rows.every(row =>
 					row.firstElementChild.classList.contains('typography-style-meta'))), true);
-				assert.deepEqual(await article.locator('.source-guidance').evaluateAll(sections => Object.fromEntries(
-					sections.filter(section => ['typography-role-guidance', 'typography-weight-guidance', 'typography-reading-guidance'].includes(section.id))
-						.map(section => [section.id, section.nextElementSibling.id]),
-				)), {
-					'typography-role-guidance': 'typography-styles',
-					'typography-weight-guidance': 'typography-emphasis',
-					'typography-reading-guidance': 'typography-families',
-				});
+				assert.equal(await article.evaluate(article => [
+					['#typography-role-guidance', '#typography-styles .typography-style-list'],
+					['#typography-weight-guidance', '#typography-emphasis .typography-emphasis'],
+					['#typography-reading-guidance', '#typography-families'],
+				].every(([source, target]) => Boolean(article.querySelector(source)
+					.compareDocumentPosition(article.querySelector(target)) & Node.DOCUMENT_POSITION_FOLLOWING))), true);
 			}
 			const links = article.locator('.article-outline a');
 			assert.equal(await links.evaluateAll(links => links.every((link, index) => {

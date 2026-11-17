@@ -77,7 +77,7 @@ export function renderTypography(content, system) {
 		compositionSample.append(line);
 	}
 	composition.append(exampleViewer(compositionSample), node('p', contentText(authored.baseline, model.baseline), 'meta'));
-	const metrics = system.reference.scales.readingMetrics.length
+	const metrics = system.page?.source || system.reference.scales.readingMetrics.length
 		? specimen('metrics')
 		: undefined;
 	for (const token of system.reference.scales.readingMetrics) {

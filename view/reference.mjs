@@ -8,7 +8,47 @@ import { node, sourceLink, problemDetails, showProblem } from './ui.mjs';
 import {getTopic,topicId} from './topics/catalog.mjs';
 import { pageJumps, topicPresentation } from './navigation-model.mjs';
 import { createTopicLoader } from './topic-lifecycle.mjs';
-import { documentURL, renderSourceSections } from './documents.mjs';
+import { documentMarkup, documentURL, renderSourceSections } from './documents.mjs';
+
+function composeChapter(stage, system, resolveResource) {
+	if (!system.page?.source) { return; }
+	const bindings = system.page.sections.filter(section => section.key);
+	const sections = bindings.map(binding => {
+		const copy = system.authored.sections[binding.key];
+		const matches = [...stage.querySelectorAll('h2')].filter(heading => heading.textContent === copy.title);
+		if (matches.length !== 1) { throw new Error(`Expected one rendered chapter section: ${binding.key}; found ${matches.length}`); }
+		const element = matches[0].closest('section');
+		if (!element || !stage.contains(element)) { throw new Error(`Missing rendered chapter section container: ${binding.key}`); }
+		return { binding, element };
+	});
+	const parents = new Set(sections.map(section => section.element?.parentElement).filter(Boolean));
+	if (parents.size > 1) { throw new Error('Chapter sections must share one composition container'); }
+	const parent = [...parents][0] ?? stage;
+	const markup = (text, id) => documentMarkup({ id: system.authored.markdownSource, markdown: text }, {
+		level: 3, prefix: `${id}-`, resolveResource,
+	});
+	for (const section of sections) {
+		const { binding } = section;
+		section.element.id = binding.id;
+		const description = section.element.querySelector(':scope > h2')?.nextElementSibling;
+		if (description?.matches('p.muted')) { description.replaceWith(markup(description.textContent, binding.id)); }
+		for (const alias of binding.aliases ?? []) {
+			const anchor = node('span');
+			anchor.id = alias;
+			anchor.hidden = true;
+			anchor.dataset.sectionAlias = 'true';
+			section.element.prepend(anchor);
+		}
+	}
+	if (sections.length) {
+		const elements = new Set(sections.map(section => section.element));
+		const first = [...parent.children].find(element => elements.has(element));
+		const position = document.createTextNode('');
+		first.before(position);
+		for (const { element } of sections) { position.before(element); }
+		position.remove();
+	}
+}
 
 export function mountReference(root, props, host) {
 	let snapshot;
@@ -57,9 +97,10 @@ export function mountReference(root, props, host) {
 		if (!props.anchor || anchorShown) {
 			return;
 		}
-		const target = props.section === 'documentation'
+		let target = props.section === 'documentation'
 			? root.querySelector(`#${CSS.escape(`document-${props.anchor}`)}`)
 			: content.querySelector(`#${CSS.escape(props.anchor)}`);
+		if (target?.dataset.sectionAlias) { target = target.closest('section'); }
 		if (target) {
 			anchorShown = true;
 			revealSection(target);
@@ -94,6 +135,7 @@ export function mountReference(root, props, host) {
 				},
 			}, signal);
 			const presentation = typeof result === 'number' ? { count: result } : result;
+			composeChapter(stage, system, host.documentResource);
 			if (system.sourceSections?.length) {
 				stage.classList.add('article-flow');
 				renderSourceSections(stage, system.sourceSections, host.documentResource);
@@ -101,7 +143,7 @@ export function mountReference(root, props, host) {
 			const labels = new Map(pageJumps(props, system.page).map(({ anchor, label }) => [anchor, label]));
 			const sections = [...stage.querySelectorAll('h2')].filter(heading =>
 				!heading.closest('.control-stage') || props.section === 'components').map((heading, index) => {
-				const target = heading.closest('details[id], section[id]') ?? heading;
+				const target = heading.closest('details, section') ?? heading;
 				target.id ||= `${topicId(props)}-section-${index + 1}`;
 				return { target, label: labels.get(target.id) ?? heading.textContent };
 			});
@@ -181,9 +223,16 @@ export function mountReference(root, props, host) {
 			heading.id = documentTitle ? `document-${documentTitle.id}` : '';
 			guidance.replaceChildren(...(introduction ? [introduction] : []));
 			if (!introduction && !system.library?.document) {
-				guidance.textContent = props.section === 'components' && props.controlId
+				const text = props.section === 'components' && props.controlId
 					? system.controls.find(control => control.id === props.controlId).docs.summary
 					: system.authored?.intro ?? system.motionDocumentation?.intro ?? '';
+				if (system.authored?.markdownSource) {
+					guidance.append(documentMarkup({ id: system.authored.markdownSource, markdown: text }, {
+						level: 2, prefix: `${topicId(props)}-intro-`, resolveResource: host.documentResource,
+					}));
+				} else {
+					guidance.textContent = text;
+				}
 			}
 			const unavailable = props.section === 'components' && system.controls[0].content === 'tbd';
 			guidance.hidden = unavailable || !guidance.hasChildNodes();

@@ -9,6 +9,7 @@ import { createReferenceModel } from './reference-model.mjs';
 import { readProvenance } from './provenance.mjs';
 import { contained } from '../../runtime/paths.mjs';
 import { documentView } from '../../model/documents.mjs';
+import { createTopicResources } from './topic-resources.mjs';
 
 export function canonicalRoot(root) {
 	const result = realpathSync(root);
@@ -103,7 +104,7 @@ export async function readTopic(store, id, settings) {
 	}
 	if (section === 'components') { Object.assign(data, await use('components', [entry.controlId])); }
 	if (section === 'documentation') { data.library = documentView(await use('documents'), settings); }
-	const primarySource = data.motionDocumentation?.page.source ?? data.page?.sources?.[0]?.file;
+	const primarySource = data.controls[0]?.docs.design?.id ?? data.motionDocumentation?.page.source ?? data.page?.source ?? data.page?.sources?.[0]?.file;
 	const sourceDocuments = [...new Set(dependencies.flatMap(item => item.files))].filter(file => file.endsWith('.md'))
 		.sort((a, b) => Number(b === primarySource) - Number(a === primarySource));
 	if (section !== 'documentation') { Object.assign(data, await use('sourceDocuments', [sourceDocuments])); }
@@ -117,5 +118,6 @@ export async function readTopic(store, id, settings) {
 	if (section === 'size') { data.sizes = data.sizes.filter(token => token.id.startsWith('codiconFontSize')); }
 	if (section === 'stroke') { data.sizes = data.sizes.filter(token => token.id === 'strokeThickness'); }
 	if (section === 'typography') { data.sizes = data.sizes.filter(token => token.category === 'typography'); }
+	data.resources = createTopicResources(data);
 	return { data, dependencies: dependencies.map(item => ({ key: item.key, revision: item.revision })) };
 }

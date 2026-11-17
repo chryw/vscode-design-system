@@ -40,7 +40,8 @@ function resolveContentValue(value, read, depth, source) {
 	if (Array.isArray(value)) { return value.map(item => resolveContentValue(item, read, depth + 1, source)); }
 	if (!value || typeof value !== 'object') { throw new Error('Invalid book content value'); }
 	if (Object.hasOwn(value, '$text')) {
-		const reference = typeof value.$text === 'string' ? { file: source, heading: value.$text } : value.$text;
+		const reference = typeof value.$text === 'string' ? { file: source, heading: value.$text }
+			: value.$text && typeof value.$text === 'object' ? { file: source, ...value.$text } : value.$text;
 		if (Object.keys(value).length !== 1 || !reference || typeof reference !== 'object'
 			|| Object.keys(reference).some(key => !['file', 'heading', 'paragraph', 'list'].includes(key))
 			|| typeof reference.file !== 'string' || !reference.file.endsWith('.md')
@@ -74,7 +75,8 @@ export function readContent(read, file) {
 	if (value?.version !== 1 || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error(`Invalid book content version: ${file}`);
 	}
-	return resolveContent(value, read);
+	const { textSource, ...content } = value;
+	return resolveContent(content, read, { source: textSource });
 }
 
 function validateChapter(authored, topic) {
@@ -121,30 +123,74 @@ export function readPage(read, topic) {
 	if (manifest?.version !== 1 || !Array.isArray(manifest.topics) || manifest.topics.some(item => !item || typeof item !== 'object' || Array.isArray(item))) {
 		throw new Error('Invalid book manifest');
 	}
-	const topics = manifest.topics.filter(item => item.section === topic);
+	const topics = topic === 'components' && manifest.components
+		? [{ page: manifest.components.page, renderer: 'components' }]
+		: manifest.topics.filter(item => item.section === topic);
 	const bindings = new Set(topics.map(item => item.page));
 	if (!topics.length || bindings.size !== 1) { throw new Error(`Missing or conflicting page binding: ${topic}`); }
 	const [binding] = bindings;
-	const page = JSON.parse(read(contentPath(binding)));
+	let page = JSON.parse(read(contentPath(binding)));
+	const composed = typeof page?.source === 'string';
+	if (composed) {
+		if (page.sources === undefined) { page.sources = []; }
+		if (page.sections === undefined) { page.sections = []; }
+	}
 	if (page?.version !== 1 || page.id !== topic || typeof page.renderer !== 'string'
 		|| topics.some(topic => topic.renderer !== page.renderer)
 		|| !Array.isArray(page.sources) || page.sources.some(item => !item || typeof item.file !== 'string'
 			|| item.heading !== undefined && typeof item.heading !== 'string'
 			|| Object.keys(item).some(key => !['file', 'heading'].includes(key)))
 		|| !Array.isArray(page.sections) || page.sections.some(item => !item || typeof item.id !== 'string'
-			|| !/^[a-z][a-z0-9-]*$/.test(item.id) || typeof item.title !== 'string' || !item.title)
+			|| !/^[a-z][a-z0-9-]*$/.test(item.id) || (!composed || !item.heading) && (typeof item.title !== 'string' || !item.title))
 		|| new Set(page.sections.map(item => item.id)).size !== page.sections.length
-		|| typeof page.content !== 'string' || !page.content.startsWith('content/') || !page.content.endsWith('.json')) {
+		|| (composed ? !page.content || typeof page.content !== 'object' || Array.isArray(page.content)
+			: typeof page.content !== 'string' || !page.content.startsWith('content/') || !page.content.endsWith('.json'))) {
 		throw new Error(`Invalid book page: ${topic}`);
+	}
+	if (composed && ['version', 'id', 'status', 'intro', 'sections', 'markdownSource', 'sectionIds'].some(key => Object.hasOwn(page.content, key))) {
+		throw new Error(`Page content must not duplicate source guidance: ${topic}`);
 	}
 	for (const reference of page.sources) {
 		const file = sourcePath(reference.file);
 		const text = read(file);
 		if (reference.heading !== undefined) { markdownSection(text, reference.heading, file); }
 	}
-	const authored = readContent(read, page.content);
+	let authored;
+	if (composed) {
+		const file = sourcePath(page.source);
+		const document = parseDocument(read(file), { id: file, origin: 'product' });
+		const sections = {};
+		const sectionIds = {};
+		const normalized = page.sections.map(section => {
+			if (typeof section.key !== 'string' || !/^[a-z][a-z0-9-]*$/.test(section.key)
+				|| Object.hasOwn(sections, section.key) || typeof section.heading !== 'string'
+				|| Object.keys(section).some(key => !['id', 'key', 'heading', 'title', 'label', 'aliases', 'description', 'paragraphs'].includes(key))
+				|| section.title !== undefined && (typeof section.title !== 'string' || !section.title.trim())
+				|| section.label !== undefined && (typeof section.label !== 'string' || !section.label.trim())
+				|| section.description !== undefined && (!section.description || typeof section.description !== 'object' || !Object.hasOwn(section.description, '$text'))
+				|| section.paragraphs !== undefined && (!Array.isArray(section.paragraphs)
+					|| section.paragraphs.some(paragraph => !paragraph || typeof paragraph !== 'object' || !Object.hasOwn(paragraph, '$text')))
+				|| section.aliases !== undefined && (!Array.isArray(section.aliases)
+					|| section.aliases.some(alias => typeof alias !== 'string' || !/^[a-z][a-z0-9-]*$/.test(alias)))) {
+				throw new Error(`Invalid authored section binding: ${topic}`);
+			}
+			const excerpt = documentSection(document, { heading: section.heading });
+			const text = resolveContent({ description: section.description ?? excerpt.markdown, paragraphs: section.paragraphs ?? [] }, read, { source: file });
+			sections[section.key] = { title: section.title ?? excerpt.title, ...text, source: excerpt.source };
+			sectionIds[section.key] = section.id;
+			return { ...section, title: section.label ?? section.title ?? excerpt.title };
+		});
+		const anchors = normalized.flatMap(section => [section.id, ...(section.aliases ?? [])]);
+		if (new Set(anchors).size !== anchors.length) { throw new Error(`Duplicate chapter section anchor: ${topic}`); }
+		authored = { ...resolveContent(page.content, read, { source: file }),
+			version: 1, id: topic, status: 'book-authored', markdownSource: file,
+			intro: markdownSection(read(file), 'Introduction', file), sections, sectionIds };
+		page = { ...page, sections: normalized };
+	} else {
+		authored = readContent(read, page.content);
+	}
 	validateChapter(authored, topic);
-	if (topic === 'elevation' && !page.sources.some(reference => reference.file === authored.markdownSource)) {
+	if (topic === 'elevation' && page.source !== authored.markdownSource && !page.sources.some(reference => reference.file === authored.markdownSource)) {
 		throw new Error(`Elevation Markdown source must be listed in page sources: ${authored.markdownSource}`);
 	}
 	const sourceBindings = page.guidance ?? [];
@@ -153,12 +199,14 @@ export function readPage(read, topic) {
 	}
 	const sourceSections = sourceBindings.map(binding => {
 		if (!binding || typeof binding.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(binding.id)
-			|| typeof binding.file !== 'string' || binding.title !== undefined && typeof binding.title !== 'string'
+			|| binding.file !== undefined && typeof binding.file !== 'string'
+			|| (binding.file ?? page.source) === undefined || binding.title !== undefined && typeof binding.title !== 'string'
 			|| binding.before !== undefined && (typeof binding.before !== 'string' || !/^[a-z][a-z0-9-]*$/.test(binding.before))
 			|| Object.keys(binding).some(key => !['id', 'file', 'heading', 'anchor', 'title', 'before'].includes(key))) {
 			throw new Error(`Invalid source-section binding in ${topic}`);
 		}
-		const file = binding.file.startsWith('content/') ? contentPath(binding.file) : sourcePath(binding.file);
+		const source = binding.file ?? page.source;
+		const file = typeof source === 'string' && source.startsWith('content/') ? contentPath(source) : sourcePath(source);
 		const document = documentSection(parseDocument(read(file), { id: file }), binding);
 		return { ...document, sectionId: binding.id, title: binding.title ?? document.title, before: binding.before };
 	});

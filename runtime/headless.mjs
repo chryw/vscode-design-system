@@ -5,7 +5,6 @@
 /* eslint-disable local/code-no-new-javascript-files -- No-build canvas runtime. */
 import { readFileSync, statSync } from 'node:fs';
 import { readRepository } from '../adapters/vscode/repository.mjs';
-import { definitionEntries } from '../view/token-lookup.mjs';
 import { bookTitle } from './book.mjs';
 import { TopicStore, canonicalRoot } from './store.mjs';
 import { defaultView } from './view-state.mjs';
@@ -41,67 +40,6 @@ export async function validateReference(root, topics) {
 	} finally { store.close(); }
 }
 
-function topicDefinitions(data) {
-	const group = (definitionKind, entries) => entries.map(entry => ({ ...entry, definitionKind }));
-	let groups;
-	switch (data.view.section) {
-		case 'motion':
-			groups = [
-				group('motion-token', data.motionDocumentation.tokens),
-				group('motion-recipe', data.motionDocumentation.recipes),
-				group('motion-analysis', data.motionDocumentation.analyses),
-				group('motion-preset', data.motionDocumentation.presets.map(preset => ({ ...preset, presetId: preset.id, id: `motion.preset.${preset.id}` }))),
-				group('motion-preset-binding', data.motionDocumentation.bindings.map(binding => ({
-					id: `motion.presetBinding.${binding.id}`, bindingId: binding.id, presetId: binding.preset, source: binding.source,
-					phases: binding.phases.map(phase => ({
-						phase: phase.phase, response: phase.response, durationTokens: phase.durationTokens, easingTokens: phase.easingTokens,
-					})),
-				}))),
-				group('motion-response', data.motionDocumentation.responses.map(response => ({
-					id: `motion.response.${response.id}`, responseId: response.id, label: response.label, source: response.source,
-					frequencyHz: response.frequencyHz, dampingRatio: response.dampingRatio, durationMs: response.durationMs, limits: response.limits,
-					metrics: {
-						response50Ms: response.metrics.response50Ms, settle2PercentMs: response.metrics.settle2PercentMs,
-						endpointResidual: response.metrics.endpointResidual, maxInterpolationError: response.metrics.maxInterpolationError,
-					},
-				}))),
-			];
-			break;
-		case 'components':
-			groups = [group('component-api', data.controls.flatMap(control =>
-				(control.docs.api ?? []).map(member => ({ ...member, componentId: control.id }))))];
-			break;
-		case 'typography':
-			groups = [group('type-token', data.typography.tokens), group('font-family', data.typography.families)];
-			break;
-		case 'tokens':
-			groups = [group('design-token', definitionEntries(data))];
-			break;
-		case 'colors':
-			groups = [group('color', data.colors)];
-			break;
-		case 'theming':
-			groups = [group('theme', data.themes), group('color', data.colors)];
-			break;
-		case 'iconography':
-			groups = [group('icon', data.icons)];
-			break;
-		case 'elevation':
-			groups = [group('shadow', data.elevation.cssShadows)];
-			break;
-		default:
-			groups = [group('token', data.sizes)];
-	}
-	const definitions = [];
-	// A long token collection must not starve its related recipes or font families.
-	for (let index = 0; groups.some(group => index < group.length); index++) {
-		for (const group of groups) {
-			if (index < group.length) { definitions.push(group[index]); }
-		}
-	}
-	return definitions;
-}
-
 export async function readReference(root, id, { limit = 12000 } = {}) {
 	if (!Number.isInteger(limit) || limit < 100 || limit > 24000) { throw new Error('Read limit must be 100–24000 characters'); }
 	const store = new TopicStore(root);
@@ -114,19 +52,7 @@ export async function readReference(root, id, { limit = 12000 } = {}) {
 		remaining -= summary.length;
 		let guidanceBudget = Math.floor(remaining * (id === 'motion' ? 0.5 : 0.75));
 		const guidance = [];
-		const composed = (result.data.sourceSections ?? []).map(section => ({
-			file: section.source.file, text: section.markdown, source: section.source, anchor: section.anchor, title: section.title,
-		}));
-		const composedFiles = new Set(composed.map(section => section.file));
-		const primarySource = result.data.motionDocumentation?.page.source ?? result.data.page?.sources?.[0]?.file;
-		const chapterSources = result.sources.filter(file => file.endsWith('.md') && (file.startsWith('.github/design-system/') || file.startsWith('src/')))
-			.sort((a, b) => Number(b === primarySource) - Number(a === primarySource)
-				|| Number(b.startsWith('src/')) - Number(a.startsWith('src/')));
-		const documents = [
-			...composed,
-			...chapterSources.filter(file => !composedFiles.has(file)).map(file => ({ file })),
-			...(result.data.documents[result.data.view.section] ?? []).filter(document => !chapterSources.includes(document.file) && !composedFiles.has(document.file)),
-		];
+		const documents = result.data.resources.guidance;
 		for (const document of documents) {
 			if (guidanceBudget <= 0) { break; }
 			const source = document.text ?? readFileSync(store.sourcePath(document.file), 'utf8');
@@ -135,7 +61,7 @@ export async function readReference(root, id, { limit = 12000 } = {}) {
 			remaining -= text.length;
 			guidance.push({ file: document.file, source: document.source, anchor: document.anchor, title: document.title, text, truncated: text.length !== source.length });
 		}
-		const candidates = topicDefinitions(result.data);
+		const candidates = result.data.resources.definitions;
 		const definitions = [];
 		for (const candidate of candidates) {
 			const text = JSON.stringify(candidate);
@@ -143,12 +69,19 @@ export async function readReference(root, id, { limit = 12000 } = {}) {
 			definitions.push(candidate);
 			remaining -= text.length;
 		}
+		const examples = [];
+		for (const candidate of result.data.resources.examples) {
+			const length = JSON.stringify(candidate).length;
+			if (length > remaining) { continue; }
+			examples.push(candidate);
+			remaining -= length;
+		}
 		return { title: bookTitle, topic: id, checkout: store.root, revision: result.revision, sources: result.sources.slice(0, 100),
 			sourceCount: result.sources.length, coverage: result.coverage, capability: result.capability, summary, guidance, definitions,
-			definitionCount: candidates.length,
+			definitionCount: candidates.length, examples, exampleCount: result.data.resources.examples.length,
 			...(result.data.library ? { documents: result.data.library.listing } : {}),
 			truncated: summary.length < description.length || guidance.length < documents.length || guidance.some(item => item.truncated)
-				|| definitions.length < candidates.length || result.sources.length > 100 };
+				|| definitions.length < candidates.length || examples.length < result.data.resources.examples.length || result.sources.length > 100 };
 	} finally { store.close(); }
 }
 

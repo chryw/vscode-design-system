@@ -9,9 +9,10 @@ export function createControls(input, specifications) {
 	const source = value => typeof value === 'string' && /^src\/[\w/.-]+\.(?:ts|css)$/.test(value) && !value.split('/').includes('..');
 	const design = control => control.design === undefined && control.api === undefined
 		|| typeof control.design === 'string' && /^src\/[\w/.-]+\.design\.md$/.test(control.design)
+			&& /\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.design\.md$/.test(control.design)
 			&& !control.design.split('/').includes('..') && words(control.api) && control.api.length > 0
 			&& new Set(control.api).size === control.api.length
-			&& control.api.every(member => /^[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*$/.test(member));
+			&& control.api.every(member => /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?$/.test(member));
 	const definition = control => object(control) && typeof control.id === 'string' && typeof control.name === 'string'
 		&& words(control.groups) && (control.aliases === undefined || words(control.aliases))
 		&& (control.relatedOwners === undefined || words(control.relatedOwners))

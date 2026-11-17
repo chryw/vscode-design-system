@@ -58,7 +58,7 @@ test('the full canvas browses canonical component families and preserves grouped
 	}
 });
 
-test('Button renders source Markdown and API declarations while legacy components remain unchanged', { timeout: 60000 }, async () => {
+test('component articles render source Markdown and derived APIs while retaining older-book support', { timeout: 60000 }, async () => {
 	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'component-button' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -89,7 +89,8 @@ test('Button renders source Markdown and API declarations while legacy component
 		panel.setScope({ operation: 'replace', topics: ['component-checkbox'], active: 'component-checkbox' });
 		const checkbox = page.locator('[data-topic="component-checkbox"]');
 		await expect(checkbox.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		assert.deepEqual(await checkbox.locator('.component-api-table thead th').allTextContents(), ['Member', 'Type', 'Purpose']);
+		assert.deepEqual(await checkbox.locator('.component-api-table thead th').allTextContents(),
+			['Member', 'Type', controls.find(control => control.id === 'checkbox').design ? 'Declaration' : 'Purpose']);
 		assert.deepEqual(errors, []);
 	} finally { await browser.close(); await panel.close(); }
 });

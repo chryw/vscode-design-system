@@ -77,7 +77,7 @@ export function createReferenceModel(system, selected) {
 			documented('Glyph sizing and naming guidance', philosophy.file, sizing.file),
 		],
 		illustration: ({ documented }) => [
-			documented('Illustration guidance', system.page.sources[0].file),
+			documented('Illustration guidance', system.page.source ?? system.page.sources[0].file),
 		],
 		motion: ({ documented, gap, assessment }) => [
 			documented('Motion intent', philosophy.file),

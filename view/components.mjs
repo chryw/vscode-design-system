@@ -305,7 +305,9 @@ export async function renderComponents(content, system, fixtureId, signal, onVie
 	}
 	head.append(header);
 	const body = node('tbody');
-	for (const prop of control.docs.api) {
+	const members = system.resources?.definitions.filter(definition => definition.definitionKind === 'component-api' && definition.componentId === control.id)
+		?? control.docs.api;
+	for (const prop of members) {
 		const row = node('tr');
 		const name = node('th');
 		name.scope = 'row';

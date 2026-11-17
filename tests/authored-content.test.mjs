@@ -9,12 +9,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { catalog, validateBook, createControls, repository } from './repository-helpers.mjs';
+import { catalog, controls, validateBook, createControls, repository } from './repository-helpers.mjs';
 import { contentText, sectionContent } from '../view/page-content.mjs';
 import { bookRoot, contentPath, markdownSection, readContent, readPage, resolveContent } from '../adapters/vscode/groups/authored.mjs';
 import { load as loadComponent } from '../adapters/vscode/groups/components.mjs';
 import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
 import { TopicStore } from '../runtime/store.mjs';
+import { documentControl } from '../adapters/vscode/component-docs.mjs';
+import { createRepository } from '../model/repository.mjs';
 
 const book = repository.projection.book;
 const curation = repository.projection.curation;
@@ -44,6 +46,19 @@ test('the manifest preserves every original visible and archived topic and binds
 		assert.equal(authored.id, page.id);
 		assert.ok(authored.intro.trim(), section);
 	}
+});
+
+test('one component collection derives registrations and aliases without a second topic inventory', () => {
+	const input = structuredClone(repository.projection);
+	input.book.components = { after: 'tokens', page: 'pages/components.json' };
+	input.book.topics = input.book.topics.filter(topic => topic.section !== 'components');
+	const derived = createRepository(input);
+	const byId = topics => [...topics].sort((a, b) => a.id.localeCompare(b.id));
+	assert.deepEqual(byId(derived.projection.book.topics), byId(book.topics));
+	input.curation.additions.push({ id: 'architecture-probe', name: 'Architecture probe', groups: [], reason: 'Test-only component.' });
+	assert.equal(createRepository(input).getTopic('component-architecture-probe').title, 'Architecture probe');
+	input.book.components.after = 'missing-topic';
+	assert.throws(() => createRepository(input), /Invalid design-system book manifest/);
 });
 
 test('prose, structured specimens, and authoritative excerpts project through tracked reads', () => {
@@ -101,8 +116,10 @@ test('elevation guidance and scenario captions come from the owning document and
 	assert.match(updated.scenarios[0].caption, /Changed relationship caption/);
 	assert.equal(updated.markdownSource, file);
 	assert.doesNotMatch(read(file), /Lessons from other systems|atlassian\.design|fluent2\.microsoft\.design|storybooks\.fluentui\.dev|learn\.microsoft\.com\/en-us\/windows\/apps\/design/i);
-	const content = `${bookRoot}content/foundations/elevation.json`;
 	const page = `${bookRoot}pages/elevation.json`;
+	const definition = JSON.parse(read(page));
+	const inline = typeof definition.content === 'object';
+	const content = inline ? page : `${bookRoot}${definition.content}`;
 	const relocated = 'src/vs/platform/theme/common/elevation-guide.md';
 	const relocatedRead = candidate => candidate === relocated ? read(file)
 		: [content, page].includes(candidate) ? read(candidate).replaceAll(file, relocated) : read(candidate);
@@ -121,8 +138,6 @@ test('elevation guidance and scenario captions come from the owning document and
 		hostingCaption: edited.hosting.caption.startsWith('Changed hosting caption.'),
 	}, { consumerGuidance: true, modalGuidance: true, constructionCaption: true, fillGuidance: true, hostingCaption: true });
 	for (const change of [
-		data => { delete data.markdownSource; },
-		data => { data.markdownSource = 'src/vs/platform/theme/common/unlisted.md'; },
 		data => { data.scenarios[0].id = 'unsupported'; },
 		data => { delete data.scenarios[1].caption; },
 		data => { delete data.construction.caption; },
@@ -132,9 +147,17 @@ test('elevation guidance and scenario captions come from the owning document and
 	]) {
 		assert.throws(() => readPage(amend(content, text => {
 			const data = JSON.parse(text);
-			change(data);
+			change(inline ? data.content : data);
 			return JSON.stringify(data);
 		}), 'elevation'), /Invalid authored chapter: elevation|Elevation Markdown source must be listed in page sources/);
+	}
+	for (const source of [undefined, '../outside.md']) {
+		assert.throws(() => readPage(amend(content, text => {
+			const data = JSON.parse(text);
+			if (inline) { data.source = source; }
+			else { data.markdownSource = source; }
+			return JSON.stringify(data);
+		}), 'elevation'), /Invalid book page|Invalid book source reference|Invalid authored chapter|Elevation Markdown source/);
 	}
 });
 
@@ -217,6 +240,7 @@ test('Button preserves Markdown structure and rejects invalid API selectors and 
 	const curation = `${bookRoot}content/components/curation.json`;
 	for (const change of [
 		family => { family.design = '../outside.design.md'; },
+		family => { family.design = 'src/vs/base/browser/ui/button/Button.design.md'; },
 		family => { family.api = ['IButton.label', 'IButton.label']; },
 		family => { family.api = ['ButtonBar._buttons']; },
 		family => { family.api = ['IButton.missing']; },
@@ -226,6 +250,62 @@ test('Button preserves Markdown structure and rejects invalid API selectors and 
 			change(value.families.find(([id]) => id === 'button')[1]);
 			return JSON.stringify(value);
 		}) }, 'button'), /Invalid component definition|Unsupported public component API|Expected one public component API/);
+	}
+});
+
+test('component source APIs include inherited accessors, constructors, inferred types, and exported functions', () => {
+	const selected = [
+		['checkbox', 'src/vs/base/browser/ui/toggle/checkbox.design.md', ['Checkbox.constructor', 'Checkbox.checked']],
+		['radio', 'src/vs/base/browser/ui/radio/radio.design.md', ['Radio.onDidSelect']],
+		['badge', 'src/vs/base/browser/ui/countBadge/count-badge.design.md', ['CountBadge.setCount']],
+		['spinner', 'src/vs/base/browser/ui/pixelSpinner/pixel-spinner.design.md', ['createPixelSpinner']],
+	];
+	const api = selected.flatMap(([id, design, api]) => documentControl({
+		...controls.find(control => control.id === id), content: 'ready', design, api,
+	}, read, undefined, root).docs.api);
+	assert.deepEqual(api.map(member => [member.symbol, member.type]), [
+		['Checkbox.constructor', 'Checkbox'], ['Checkbox.checked', 'boolean'], ['Radio.onDidSelect', 'Event<number>'],
+		['CountBadge.setCount', 'void'], ['createPixelSpinner', 'IPixelSpinner'],
+	]);
+	assert.match(api[1].declaration, /get checked\(\): boolean;[\s\S]*set checked/);
+	const radio = documentControl({ ...controls.find(control => control.id === 'radio'), content: 'ready',
+		design: selected[1][1], api: ['Radio.onDidSelect'] },
+	amend('src/vs/base/browser/ui/radio/radio.ts', text => text.replace('new Emitter<number>()', 'new Emitter<string>()')), undefined, root);
+	assert.equal(radio.docs.api[0].type, 'Event<string>');
+});
+
+test('inline chapter composition reads complete source sections without paragraph projections', () => {
+	const file = 'src/vs/platform/theme/common/sizes/typography.design.md';
+	const page = `${bookRoot}pages/typography.json`;
+	const original = readPage(read, 'typography').authored;
+	const candidate = {
+		version: 1, id: 'typography', renderer: 'typography', source: file, sources: [],
+		content: { sampleText: original.sampleText, baseline: original.baseline, composition: original.composition },
+		sections: Object.entries(original.sections).map(([key, section]) => ({
+			id: `typography-${key}`, key, heading: section.title,
+		})),
+	};
+	const projection = readPage(requested => requested === page ? JSON.stringify(candidate) : requested === file
+		? read(file).replace('## Hierarchy and reading rhythm', '## Hierarchy and reading rhythm\n\nAdditional paragraph from the owner.')
+		: read(requested), 'typography');
+	assert.deepEqual({
+		text: projection.authored.sections.composition.description,
+		paragraphSelectors: projection.authored.sections.composition.paragraphs,
+		primary: projection.authored.markdownSource,
+	}, {
+		text: `Additional paragraph from the owner.\n\n${markdownSection(read(file), 'Hierarchy and reading rhythm', file)}`,
+		paragraphSelectors: [], primary: file,
+	});
+	assert.throws(() => readPage(requested => requested === page
+		? JSON.stringify({ ...candidate, content: { ...candidate.content, intro: 'Copied prose' } }) : read(requested), 'typography'),
+	/Page content must not duplicate source guidance/);
+	for (const invalid of [
+		{ ...candidate, sources: null },
+		{ ...candidate, sections: null },
+		{ ...candidate, guidance: [{ id: 'invalid-source', file: null, heading: 'Introduction' }] },
+	]) {
+		assert.throws(() => readPage(requested => requested === page ? JSON.stringify(invalid) : read(requested), 'typography'),
+			/Invalid book page|Invalid source-section binding/);
 	}
 });
 
@@ -257,13 +337,15 @@ test('invalid manifests, content shapes, and source bindings fail instead of bec
 			return JSON.stringify(value);
 		}), 'typography'), /Invalid|Expected one section/);
 	}
-	const bodyFile = `${bookRoot}content/foundations/typography.json`;
+	const page = JSON.parse(read(pageFile));
+	const inline = typeof page.content === 'object';
+	const bodyFile = inline ? pageFile : `${bookRoot}${page.content}`;
 	assert.throws(() => readPage(amend(bodyFile, text => {
 		const value = JSON.parse(text);
-		value.composition = [['fontSize.body1']];
+		(inline ? value.content : value).composition = [['fontSize.body1']];
 		return JSON.stringify(value);
 	}), 'typography'), /Invalid authored chapter/);
-	assert.throws(() => readContent(() => '{"version":2}', 'content/foundations/typography.json'), /Invalid book content version/);
+	assert.throws(() => readContent(() => '{"version":2}', 'content/legacy.json'), /Invalid book content version/);
 	const malformed = structuredClone(curation);
 	malformed.productControls[0].groups = [42];
 	assert.throws(() => createControls(malformed), /Invalid component curation/);

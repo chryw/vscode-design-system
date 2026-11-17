@@ -175,8 +175,7 @@ test('toolkit evidence is retained without promoting every specification to prim
 test('navigation and page structures are metadata, not a second source inventory', () => {
 	assert.deepEqual(sections.filter(section => !['motion', 'patterns'].includes(section.id))
 		.filter(section => !readPage(file => readFileSync(`${root}/${file}`, 'utf8'), section.id).authored.intro).map(section => section.id), []);
-	assert.deepEqual(pageJumps({ section: 'components' }, readPage(file => readFileSync(`${root}/${file}`, 'utf8'), 'components').page).map(item => item.anchor),
-		['component-example', 'component-usage', 'component-accessibility', 'component-api']);
+	assert.deepEqual(pageJumps({ section: 'components' }, readPage(file => readFileSync(`${root}/${file}`, 'utf8'), 'components').page), []);
 	for (const id of [...foundationSections, 'accessibility', 'content', 'components']) {
 		assert.ok(pageStructures[id].length >= 2 && new Set(pageStructures[id]).size === pageStructures[id].length, id);
 	}

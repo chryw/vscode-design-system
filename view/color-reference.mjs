@@ -70,7 +70,7 @@ export function renderColors(content, system, host, signal) {
 
 	const states = specimen('states');
 	const stateParagraphs = paragraphs('states');
-	states.append(stateParagraphs[0]);
+	states.append(...stateParagraphs.slice(0, 1));
 	preview(states, ...authored.previews.states);
 	states.append(...stateParagraphs.slice(1));
 
