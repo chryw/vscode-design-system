@@ -177,7 +177,9 @@ test('navigation and page structures are metadata, not a second source inventory
 		.filter(section => !readPage(file => readFileSync(`${root}/${file}`, 'utf8'), section.id).authored.intro).map(section => section.id), []);
 	assert.deepEqual(pageJumps({ section: 'components' }, readPage(file => readFileSync(`${root}/${file}`, 'utf8'), 'components').page), []);
 	for (const id of [...foundationSections, 'accessibility', 'content', 'components']) {
-		assert.ok(pageStructures[id].length >= 2 && new Set(pageStructures[id]).size === pageStructures[id].length, id);
+		const structure = pageStructures[id]
+			?? readPage(file => readFileSync(`${root}/${file}`, 'utf8'), id).page.guidance.map(section => section.id);
+		assert.ok(structure.length >= 2 && new Set(structure).size === structure.length, id);
 	}
 });
 

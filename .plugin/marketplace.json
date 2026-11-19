@@ -6,7 +6,7 @@
 			"name": "vscode-design-system",
 			"description": "Browse design guidance and live source data from your selected VS Code checkout.",
 			"source": "./",
-			"version": "0.4.0"
+			"version": "0.4.1"
 		}
 	]
 }
