@@ -33,7 +33,7 @@ export async function renderIcons(content, system, onFilter, signal) {
 		throw new Error('The local Codicon font could not load');
 	}
 	const label = node('label', 'Filter icons', 'icon-filter');
-	const input = node('input');
+	const input = node('input', undefined, 'chrome-input');
 	input.type = 'search';
 	input.maxLength = 200;
 	input.value = system.view.query;
@@ -95,10 +95,10 @@ export async function renderIcons(content, system, onFilter, signal) {
 		}
 		inspector.append(samples, node('code', `U+${icon.code.slice(2).toUpperCase()} · content: "\\${icon.code.slice(2)}"`));
 		const actions = node('div', undefined, 'tools');
-		const copyClass = node('button', 'Copy icon class');
+		const copyClass = node('button', 'Copy icon class', 'chrome-button secondary');
 		copyClass.type = 'button';
 		copyClass.addEventListener('click', () => copyText(`codicon codicon-${icon.id}`, copyClass));
-		const copyCode = node('button', 'Copy CSS code point');
+		const copyCode = node('button', 'Copy CSS code point', 'chrome-button secondary');
 		copyCode.type = 'button';
 		copyCode.addEventListener('click', () => copyText(`\\${icon.code.slice(2)}`, copyCode));
 		actions.append(copyClass, copyCode);

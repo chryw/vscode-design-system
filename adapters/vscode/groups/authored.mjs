@@ -30,6 +30,15 @@ export function markdownSection(text, heading, file) {
 	return result;
 }
 
+function chapterIntroduction(document) {
+	const title = document.headings.find(heading => heading.level === 1);
+	const start = title?.bodyOffset ?? 0;
+	const first = document.headings.find(heading => heading.offset >= start);
+	const preamble = document.markdown.slice(start, first?.offset).trim();
+	const introduction = first?.title === 'Introduction' ? documentSection(document, { anchor: first.id }).markdown : '';
+	return [preamble, introduction].filter(Boolean).join('\n\n');
+}
+
 export function resolveContent(value, read, { source } = {}) {
 	if (source !== undefined) { sourcePath(source); }
 	return resolveContentValue(value, read, 0, source);
@@ -91,7 +100,7 @@ function validateChapter(authored, topic, hasGuidance) {
 		layout: ['hierarchy', 'responsive'], elevation: ['tiers', 'anatomy', 'scenarios', 'shadows', 'guidance', 'role'],
 		theming: ['guidance', 'comparison'], colors: ['usage', 'surfaces', 'accent', 'feedback', 'states', 'palette'],
 	};
-	if (authored.id !== topic || authored.status !== 'book-authored' || !text(authored.intro) || !authored.sections || Array.isArray(authored.sections)
+	if (authored.id !== topic || authored.status !== 'book-authored' || typeof authored.intro !== 'string' || !authored.sections || Array.isArray(authored.sections)
 		|| typeof authored.sections !== 'object' || (requiredSections[topic] ?? []).some(id => !authored.sections[id])
 		|| Object.values(authored.sections).some(section => !section || !text(section.title) || !text(section.description)
 			|| !Array.isArray(section.paragraphs) || !section.paragraphs.every(text))
@@ -185,7 +194,7 @@ export function readPage(read, topic) {
 		if (new Set(anchors).size !== anchors.length) { throw new Error(`Duplicate chapter section anchor: ${topic}`); }
 		authored = { ...resolveContent(page.content, read, { source: file }),
 			version: 1, id: topic, status: 'book-authored', markdownSource: file,
-			intro: markdownSection(read(file), 'Introduction', file), sections, sectionIds };
+			intro: chapterIntroduction(document), sections, sectionIds };
 		page = { ...page, sections: normalized };
 	} else {
 		authored = readContent(read, page.content);

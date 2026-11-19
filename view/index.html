@@ -13,31 +13,32 @@
 <body class="design-reference explorer">
 	<a class="skip" href="#reference" hidden>Skip to content</a>
 	<header class="explorer-heading">
-		<div>
-			<p class="book-title">Visual Studio Code Design System</p>
+		<div class="site-bar">
+			<div class="site-navigation"></div>
+			<p class="book-title" title="Visual Studio Code Design System"><span class="brand-product">VS Code </span>Design System</p>
 			<div class="checkout-details">
 				<nav class="page-history" aria-label="Page history">
 					<button id="history-back" type="button" disabled>Back</button>
 					<button id="history-forward" type="button" disabled>Forward</button>
 				</nav>
-				<p id="checkout" class="checkout-name">Loading checkout…</p>
 				<div class="checkout-split" role="group" aria-label="Checkout">
-					<button id="refresh" class="chrome-button secondary" type="button" disabled><span class="chrome-icon codicon-refresh" aria-hidden="true"></span><span id="refresh-label">Refresh</span></button>
+					<button id="refresh" class="chrome-button secondary" type="button" aria-label="Refresh" disabled><span class="chrome-icon codicon-refresh" aria-hidden="true"></span><span id="refresh-label">Refresh</span></button>
 					<button id="checkout-toggle" class="chrome-button secondary" type="button" aria-label="Checkout details" aria-haspopup="dialog" aria-controls="checkout-picker" aria-expanded="false" popovertarget="checkout-picker" disabled><span class="chrome-icon codicon-chevron-down" aria-hidden="true"></span></button>
 				</div>
 			</div>
-			<p id="checkout-mode" class="meta" role="status"></p>
-			<p id="checkout-status" class="sr-only" role="status"></p>
 		</div>
+		<p id="checkout-mode" class="meta" role="status"></p>
+		<p id="checkout-status" class="sr-only" role="status"></p>
 	</header>
 	<section id="checkout-picker" class="checkout-popup" popover="auto" role="dialog" aria-labelledby="checkout-title">
 		<h2 id="checkout-title">Checkout</h2>
+		<p id="checkout" class="meta">Loading checkout…</p>
 		<form id="checkout-form">
 			<label for="checkout-choice">Local worktree</label>
 			<div class="chrome-select"><select id="checkout-choice" name="checkout" aria-describedby="checkout-help checkout-location" autofocus></select><span class="chrome-icon codicon-chevron-down" aria-hidden="true"></span></div>
 			<p id="checkout-location" class="document-path"></p>
 			<label for="checkout-path" hidden>Checkout path</label>
-			<input id="checkout-path" name="path" type="text" autocomplete="off" hidden>
+			<input id="checkout-path" class="chrome-input" name="path" type="text" autocomplete="off" hidden>
 			<p id="checkout-error" class="checkout-error" role="alert" hidden></p>
 			<button class="chrome-button" type="submit">Browse checkout</button>
 			<p id="checkout-help">Reads saved content, topics, and examples. Does not switch or pull Git branches.</p>

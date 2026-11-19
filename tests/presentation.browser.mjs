@@ -42,6 +42,7 @@ test('repository references are collapsed contributor resources after the articl
 		const footer = article.locator('.topic-actions');
 		const sources = article.locator('.contributor-resources');
 		const reading = footer.locator('.topic-references');
+		const summaries = footer.locator(':scope > details > summary');
 		await expect(article.locator('.topic-context details')).toHaveCount(0);
 		await expect(sources).not.toHaveAttribute('open', '');
 		await expect(sources.locator('summary')).toHaveText('Contributor resources');
@@ -68,6 +69,27 @@ test('repository references are collapsed contributor resources after the articl
 				await page.emulateMedia({ colorScheme, forcedColors });
 				for (const width of [320, 800, 1440]) {
 					await page.setViewportSize({ width, height: 900 });
+					await page.mouse.move(0, 0);
+					const styles = await summaries.evaluateAll(summaries => summaries.map(summary => {
+						const bounds = summary.getBoundingClientRect();
+						const icon = summary.querySelector('.chrome-icon').getBoundingClientRect();
+						const style = getComputedStyle(summary);
+						return {
+							left: bounds.left, width: bounds.width, height: bounds.height,
+							iconOffset: icon.left - bounds.left, iconWidth: icon.width, iconHeight: icon.height,
+							padding: style.padding, font: style.font, color: style.color,
+						};
+					}));
+					assert.deepEqual(styles[0], styles[1], `Equivalent disclosure geometry: ${colorScheme}, ${forcedColors}, ${width}px`);
+					for (const summary of await summaries.all()) {
+						await summary.focus();
+						await summary.hover();
+						assert.deepEqual(await summary.evaluate(summary => {
+							const style = getComputedStyle(summary);
+							return { focused: summary.matches(':focus-visible'), outline: style.outlineStyle, width: style.outlineWidth, offset: style.outlineOffset };
+						}), { focused: true, outline: 'solid', width: '1px', offset: '-1px' });
+					}
+					await reading.locator('a').first().focus();
 					assert.deepEqual(await footer.evaluate(footer => {
 						const bounds = element => element.getBoundingClientRect();
 						const items = [...footer.querySelectorAll('li')].filter(item => item.getClientRects().length);
@@ -83,6 +105,14 @@ test('repository references are collapsed contributor resources after the articl
 				}
 			}
 		}
+		await sources.locator('summary').focus();
+		await page.keyboard.press('Enter');
+		await expect(sources).toHaveAttribute('open', '');
+		const sourceLink = sources.locator('a').first();
+		await page.keyboard.press('Tab');
+		await expect(sourceLink).toBeFocused();
+		const beforeSourceClick = await sources.locator('summary .chrome-icon').evaluate(icon => getComputedStyle(icon).transform);
+		assert.equal(beforeSourceClick, await reading.locator('summary .chrome-icon').evaluate(icon => getComputedStyle(icon).transform));
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(article.locator('.contributor-resources')).toBeVisible();
@@ -128,6 +158,63 @@ test('repository references are collapsed contributor resources after the articl
 		await browser?.close();
 		await panel.close();
 	}
+});
+
+test('viewer search fields and command controls share dimensions and honor semantic theme overrides', { timeout: 60000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'tokens' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await mockFixtureRenderer(page, root, ['icon-label', 'button', 'input', 'radio']);
+		await page.goto(panel.url);
+		await page.evaluate(() => {
+			document.body.style.setProperty('--vscode-input-background', 'rgb(24, 36, 48)');
+			document.body.style.setProperty('--vscode-input-foreground', 'rgb(240, 240, 240)');
+			document.body.style.setProperty('--vscode-input-placeholderForeground', 'rgb(210, 220, 230)');
+		});
+		const sidebar = page.getByRole('searchbox', { name: 'Search topics', exact: true });
+		const fieldStyle = input => input.evaluate(input => {
+			const style = getComputedStyle(input);
+			return {
+				height: input.getBoundingClientRect().height, font: style.font,
+				border: style.border, radius: style.borderRadius, paddingBlock: style.paddingBlock,
+				background: style.backgroundColor, foreground: style.color,
+			};
+		});
+		for (const id of ['tokens', 'colors', 'iconography', 'documentation']) {
+			panel.setScope({ operation: 'all', active: id });
+			const article = page.locator(`[data-topic="${id}"]`);
+			await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+			const input = article.getByRole('searchbox');
+			assert.deepEqual(await fieldStyle(input), await fieldStyle(sidebar), `${id}: shared search field`);
+			if (await input.getAttribute('placeholder')) {
+				assert.equal(await input.evaluate(input => getComputedStyle(input, '::placeholder').color),
+					await sidebar.evaluate(input => getComputedStyle(input, '::placeholder').color));
+			}
+			await input.focus();
+			await page.keyboard.press('Tab');
+			await page.keyboard.press('Shift+Tab');
+			assert.equal(await input.evaluate(input => input.matches(':focus-visible') && getComputedStyle(input).outlineStyle === 'solid'), true);
+		}
+		const documentSearch = page.locator('[data-topic="documentation"]').getByRole('button', { name: 'Search', exact: true });
+		const refresh = page.getByRole('button', { name: 'Refresh', exact: true });
+		const buttonStyle = button => button.evaluate(button => {
+			const style = getComputedStyle(button);
+			return { height: button.getBoundingClientRect().height, font: style.font, paddingBlock: style.paddingBlock };
+		});
+		assert.deepEqual(await buttonStyle(documentSearch), await buttonStyle(refresh));
+		const filter = page.locator('[data-topic="documentation"]').getByRole('combobox', { name: 'Source', exact: true });
+		await page.getByRole('button', { name: 'Checkout details', exact: true }).click();
+		const worktree = page.getByRole('combobox', { name: 'Local worktree', exact: true });
+		assert.deepEqual(await fieldStyle(filter), await fieldStyle(worktree));
+		await page.keyboard.press('Escape');
+		await page.setViewportSize({ width: 320, height: 900 });
+		await expect(documentSearch).toBeVisible();
+		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+		assert.deepEqual(errors, []);
+	} finally { await browser.close(); await panel.close(); }
 });
 
 test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
@@ -275,7 +362,7 @@ test('compact topic context stays visible and recoverable errors do not displace
 		const content = article.locator('.topic-content');
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('.checkout-details')).not.toHaveJSProperty('tagName', 'DETAILS');
-		await expect(page.locator('#checkout')).toBeVisible();
+		await expect(page.locator('#checkout')).toBeHidden();
 		await expect(page.locator('.checkout-details').getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
 		for (const width of [390, 800, 1199]) {
 			await page.setViewportSize({ width, height: 900 });
@@ -348,7 +435,7 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 						const headings = [...content.querySelectorAll('h2')].filter(heading => !heading.closest('.control-stage, summary'));
 						const title = article.querySelector('h1');
 						const intro = article.querySelector('.topic-intro');
-						const sections = [title, intro, ...headings].filter(element => element.getClientRects().length);
+						const sections = [title.parentElement, intro, ...headings].filter(element => element.getClientRects().length);
 						return {
 							aligned: sections.every(element => Math.abs(element.getBoundingClientRect().left - bounds.left) < 1),
 							hierarchy: headings.every(heading => Number.parseFloat(getComputedStyle(title).fontSize) > Number.parseFloat(getComputedStyle(heading).fontSize)
@@ -488,7 +575,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			const article = page.locator(`article[data-topic="${panel.state.scope.active}"]`);
 			await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 			await expect(page).toHaveTitle(`${catalog.find(topic => topic.id === panel.state.scope.active).title} — Visual Studio Code Design System`);
-			await expect(page.locator('.book-title')).toHaveText('Visual Studio Code Design System');
+			await expect(page.locator('.book-title')).toHaveText('VS Code Design System');
 			await expect(article.locator('h1')).toHaveCount(1);
 			await expect(article.locator('.scope, .system-gap, .slot-placeholder')).toHaveCount(0);
 			await expect(article.locator('.topic-content')).not.toContainText(/Why this topic is reserved|Curation notes and audit gaps|Content slot:|To curate:|not a complete migration audit/);
@@ -1170,7 +1257,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 
 		await t.test('full book has a searchable sidebar and a compact mobile drawer without moving the article', async () => {
 			const reads = { ...panel.store.metrics.reads };
-			await page.setViewportSize({ width: 800, height: 900 });
+			await page.setViewportSize({ width: 1100, height: 900 });
 			panel.setScope({ operation: 'all', active: 'typography', layout: 'single' });
 			const browse = page.getByRole('button', { name: 'Browse topics', exact: true });
 			const navigation = page.getByRole('navigation', { name: 'Topics', exact: true });
@@ -1189,7 +1276,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.locator('#book-navigation select, #scope-controls, .breadcrumbs, .page-jumps')).toHaveCount(0);
 			for (const width of widths) {
 				await page.setViewportSize({ width, height: 900 });
-				if (width >= 760) {
+				if (width >= 960) {
 					await expect(navigation).toBeVisible();
 					await expect(browse).not.toBeVisible();
 					const boxes = await page.evaluate(() => ({
@@ -1236,7 +1323,8 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await page.keyboard.press('Enter');
 			await ready('spacing');
 			await expect(page.locator('.book-panel a[aria-current="page"]')).toHaveText('Spacing');
-			await expect(page.locator('.book-current')).toHaveText('Spacing');
+			await expect(page.locator('.book-current')).toHaveCount(0);
+			await expect(page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true })).toBeVisible();
 			await expect(navigation).not.toBeVisible();
 			assert.equal(await page.evaluate(() => document.activeElement.closest('.topic-pane')?.dataset.topic), 'spacing');
 			assert.equal(await link.evaluate(element => element === [...document.querySelectorAll('nav a')].find(item => item.textContent === 'Spacing')), true);

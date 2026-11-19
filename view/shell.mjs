@@ -27,7 +27,7 @@ const contents = createBookNavigation(navigation, id => {
 		problem(error);
 		target.focus();
 	});
-});
+}, document.querySelector('.site-navigation'));
 let catalog;
 let state;
 let events;
@@ -230,7 +230,7 @@ function reconcile(next) {
 	refresh.title = 'Reread saved content, the topic list, and live examples from the selected checkout';
 	const all = state.scope.mode === 'all';
 	document.body.classList.toggle('book-layout', all);
-	const restoreFocus = navigation.contains(document.activeElement);
+	const restoreFocus = navigation.contains(document.activeElement) || document.querySelector('.site-navigation').contains(document.activeElement);
 	const { topics, utilities } = bookNavigation(all ? catalog : []);
 	const link = item => ({ ...item, href: urlFor(item.id).href });
 	contents.update(topics.map(link), state.scope.active, utilities.map(link));

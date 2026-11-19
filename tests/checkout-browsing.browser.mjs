@@ -34,7 +34,8 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 		await page.evaluate(() => document.fonts.ready);
 		const picker = page.getByRole('button', { name: 'Checkout details', exact: true });
 		await expect(picker).toBeEnabled();
-		await expect(page.locator('.checkout-details > #checkout')).toHaveCount(1);
+		await expect(page.locator('.checkout-details > #checkout')).toHaveCount(0);
+		await expect(page.locator('#checkout-picker #checkout')).toHaveCount(1);
 		const geometry = () => page.evaluate(() => {
 			const bounds = selector => {
 				const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
@@ -44,7 +45,7 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 		});
 		for (const width of [320, 800, 1440]) {
 			await page.setViewportSize({ width, height: 900 });
-			await expect.poll(() => page.locator('.book-panel').evaluate(panel => panel.hasAttribute('popover'))).toBe(width < 760);
+			await expect.poll(() => page.locator('.book-panel').evaluate(panel => panel.hasAttribute('popover'))).toBe(width < 960);
 			const before = await geometry();
 			await picker.focus();
 			await page.keyboard.press('Enter');

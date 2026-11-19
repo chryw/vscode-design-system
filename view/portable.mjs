@@ -21,7 +21,7 @@ let active;
 let view;
 const lifetime = new AbortController();
 const pageHistory = createPageHistory(restore, lifetime.signal);
-const contents = createBookNavigation(navigation, id => show(id, true));
+const contents = createBookNavigation(navigation, id => show(id, true), document.querySelector('.site-navigation') ?? navigation);
 const topicURL = id => {
 	const url = new URL(location.href);
 	url.search = '';

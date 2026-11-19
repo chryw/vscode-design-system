@@ -112,7 +112,7 @@ test('curated book navigation offers topics rather than a raw source library', {
 		const filter = page.getByRole('searchbox', { name: 'Search topics', exact: true });
 		for (const width of [1100, 390]) {
 			await page.setViewportSize({ width, height: 900 });
-			if (width < 760) { await page.getByRole('button', { name: 'Browse topics', exact: true }).click(); }
+			if (width < 960) { await page.getByRole('button', { name: 'Browse topics', exact: true }).click(); }
 			await filter.fill('no-topic-match');
 			await expect(page.getByText('No matching topics', { exact: true })).toBeVisible();
 			await expect(page.getByRole('navigation', { name: 'Book tools', exact: true })).toBeHidden();
@@ -121,9 +121,10 @@ test('curated book navigation offers topics rather than a raw source library', {
 			await expect(topics.getByRole('link', { name: 'Content', exact: true })).toBeFocused();
 			await page.keyboard.press('Enter');
 			await expect(page.locator('[data-topic="content"] h1')).toBeFocused();
-			if (width < 760) {
+			if (width < 960) {
 				await expect(topics).not.toBeVisible();
-				await expect(page.locator('.book-current')).toHaveText('Content');
+				await expect(page.locator('.book-current')).toHaveCount(0);
+				await expect(page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true })).toBeVisible();
 			}
 		}
 	} finally { await browser.close(); await panel.close(); }
@@ -154,8 +155,8 @@ test('portable navigation retains document links and page history without live A
 			<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 			<link rel="stylesheet" href="/canvas.css"><link rel="stylesheet" href="/shell.css"><link rel="stylesheet" href="/book-navigation.css">
 			<script type="module" src="/portable.mjs"></script></head><body class="design-reference explorer book-layout">
-			<header class="explorer-heading"><time id="snapshot-date"></time>
-			<nav aria-label="Page history"><button id="history-back" disabled>Back</button><button id="history-forward" disabled>Forward</button></nav></header>
+			<header class="explorer-heading"><div class="site-bar"><div class="site-navigation"></div><p class="book-title">Design System</p>
+			<nav class="page-history" aria-label="Page history"><button id="history-back" disabled>Back</button><button id="history-forward" disabled>Forward</button></nav></div></header><time id="snapshot-date"></time>
 			<div class="explorer-layout"><div id="book-navigation"></div><main id="reference" tabindex="-1"></main></div>
 			</body></html>` }));
 		await page.goto(new URL('/snapshot.html?topic=documentation', panel.url).href);
@@ -174,6 +175,15 @@ test('portable navigation retains document links and page history without live A
 		await topics.locator('summary').click();
 		await topics.getByRole('link', { name: 'Accessibility', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Accessibility');
+		await page.setViewportSize({ width: 390, height: 900 });
+		const browse = page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true });
+		await expect(browse).toBeVisible();
+		await expect(page.locator('.book-current, #book-navigation .book-toolbar')).toHaveCount(0);
+		await browse.focus();
+		await page.keyboard.press('Enter');
+		await expect(page.getByRole('searchbox', { name: 'Search topics', exact: true })).toBeFocused();
+		await page.keyboard.press('Escape');
+		await expect(browse).toBeFocused();
 		await page.getByRole('button', { name: 'Back', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Source library');
 		assert.deepEqual({ errors, apiRequests }, { errors: [], apiRequests: [] });

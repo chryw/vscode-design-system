@@ -176,7 +176,8 @@ test('catalog and scope validation are metadata-only, bounded and exact', async 
 			defaultPlacement: listed.find(item => item.id === 'typography').navigation,
 		}, {
 			foundations: [['accessibility', 'Foundations'], ['content', 'Foundations']],
-			patterns: ['modal'], patternOrder: true, headlessPattern: 'Patterns',
+			patterns: catalog.filter(item => item.group === 'Patterns' && !item.hidden).map(item => item.id),
+			patternOrder: true, headlessPattern: 'Patterns',
 			utilities: [], groupedLibrary: false, headless: 'utility', defaultPlacement: 'topic',
 		});
 		const book = readBook(path.join(root, '.github/design-system'));

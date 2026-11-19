@@ -23,6 +23,12 @@ export function codicon(id) {
 	return icon;
 }
 
+export function disclosureSummary(...content) {
+	const summary = node('summary', undefined, 'chrome-disclosure');
+	summary.append(codicon('chevron-right'), ...content);
+	return summary;
+}
+
 export function createPageHistory(onRestore, signal) {
 	const back = document.querySelector('#history-back');
 	const forward = document.querySelector('#history-forward');
@@ -156,16 +162,16 @@ export function problemDetails(id) {
 	const details = node('details', undefined, 'canvas-problem');
 	details.id = id;
 	details.hidden = true;
-	const summary = node('summary');
-	summary.append(node('span'));
-	summary.firstChild.setAttribute('role', 'alert');
+	const message = node('span');
+	message.setAttribute('role', 'alert');
+	const summary = disclosureSummary(message);
 	details.append(summary, node('p'));
 	return details;
 }
 
 export function showProblem(target, title, message) {
 	target.hidden = false;
-	target.querySelector('summary span').textContent = title;
+	target.querySelector('summary [role="alert"]').textContent = title;
 	target.querySelector('p').textContent = message;
 }
 

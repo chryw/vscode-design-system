@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-import { node, tokenButton } from '../ui.mjs';
+import { node, tokenButton, disclosureSummary } from '../ui.mjs';
 import { definitionEntries, designTokenGroups } from '../token-lookup.mjs';
 import { motionTokenGroups } from '../motion-reference.mjs';
 
@@ -34,7 +34,7 @@ export function render(target, data, host, signal) {
 	reference.id = 'tokens-reference';
 	reference.setAttribute('aria-label', 'Token reference');
 	const label = node('label', 'Search tokens');
-	const search = node('input');
+	const search = node('input', undefined, 'chrome-input');
 	search.type = 'search';
 	search.maxLength = 200;
 	search.value = data.view.query;
@@ -48,8 +48,7 @@ export function render(target, data, host, signal) {
 		const group = node('details', undefined, 'token-source-group');
 		group.id = `tokens-${id}`;
 		group.open = data.view.query ? true : host.groupOpen.get(id) ?? false;
-		const summary = node('summary');
-		summary.append(node('h2', guidance.title));
+		const summary = disclosureSummary(node('h2', guidance.title));
 		group.append(summary);
 		let mounted = false;
 		const mount = () => {

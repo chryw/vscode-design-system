@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 
-import { node } from './ui.mjs';
+import { node, disclosureSummary } from './ui.mjs';
 import { appendMotionMarkdown as appendMarkdown, renderMotionExample, renderPropertySpecimen, renderTimingComparison, renderRecipeDiagram, renderResponseSpecimens } from './motion-previews.mjs';
 import { motionRecipeExamples, motionSection, motionExample } from './motion-recipes.mjs';
 
@@ -164,7 +164,7 @@ export async function renderMotion(content, system, signal, presentation) {
 			case 'reference': {
 				const authored = motionSection(model, block.heading);
 				const reference = node('details', undefined, 'motion-doc-reference');
-				reference.append(node('summary', authored.title));
+				reference.append(disclosureSummary(authored.title));
 				appendMarkdown(reference, authored.markdown);
 				for (const child of block.blocks ?? []) { renderBlock(reference, child); }
 				parent.append(reference);

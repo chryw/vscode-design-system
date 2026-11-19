@@ -163,11 +163,6 @@
 .motion-doc .control-stage > * + * { margin-top: 0; }
 .motion-doc .control-stage[data-preview-state="ready"] > .preview-status { display: none; }
 .motion-doc .component-preview { min-height: 0; display: block; }
-.motion-doc-reference summary { cursor: pointer; }
-.motion-doc-reference summary:focus-visible {
-	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
-	outline-offset: var(--vscode-spacing-size20);
-}
 .motion-doc-reference > * + * { margin-top: var(--vscode-spacing-size80); }
 .motion-doc-specimen-stage { overflow: clip; }
 .motion-doc-specimen-target,

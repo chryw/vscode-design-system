@@ -40,7 +40,7 @@ test('canvas Back and Forward restore cross-topic anchors and reading position w
 	const panel = await createExplorer(fixture.root, { watchCheckout: false });
 	const browser = await chromium.launch({ headless: true });
 	try {
-		const page = await browser.newPage({ viewport: { width: 800, height: 900 } });
+		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 		const errors = [];
 		page.on('pageerror', error => errors.push(error.message));
 		await page.goto(panel.url);
@@ -101,13 +101,13 @@ test('compact reading headers exclude overview and repository controls while ret
 					const searchIcon = document.querySelector('.book-search .chrome-icon');
 					return {
 						siteStuck: Math.abs(header.top) < 1,
-						pageStuck: context.top >= header.bottom - 1 && context.top <= header.bottom + 54,
+						pageStuck: Math.abs(context.top - header.bottom) < 1,
 						introGone: bounds('.topic-intro').bottom < context.bottom,
 						oneRow: bounds('.article-outline').height < 48,
 						sectionClear: bounds('#first-continue').top >= context.bottom,
 						noOverflow: document.documentElement.scrollWidth <= innerWidth,
 						compactToolbar: innerWidth !== 390 || document.querySelector('.checkout-details').getBoundingClientRect().height < 36,
-						searchClear: innerWidth < 760 || search.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(search).paddingLeft) >= searchIcon.getBoundingClientRect().right + 4,
+						searchClear: innerWidth < 960 || search.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(search).paddingLeft) >= searchIcon.getBoundingClientRect().right + 4,
 					};
 				}), { siteStuck: true, pageStuck: true, introGone: true, oneRow: true, sectionClear: true, noOverflow: true, compactToolbar: true, searchClear: true }, `${colorScheme} ${width}px`);
 				const files = article.locator('.contributor-resources > summary');
@@ -123,11 +123,103 @@ test('compact reading headers exclude overview and repository controls while ret
 			}
 		}
 		fixture.saveBook(['first', 'second', 'third']);
+		const sourceFile = 'src/vs/feature/first.md';
+		fixture.write(sourceFile, readFileSync(path.join(fixture.root, sourceFile), 'utf8')
+			.replace('## Introduction\n\nA short overview that scrolls away.\n\n', ''));
 		const before = panel.state.views.first;
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.locator('#checkout-status')).toHaveText('Checkout reloaded');
+		await expect(article.locator('.topic-intro')).toBeHidden();
 		await expect(page.locator('#book-navigation').getByRole('link', { name: 'third topic', exact: true })).toBeVisible();
 		assert.deepEqual(panel.state.views.first, before);
+		assert.deepEqual(errors, []);
+	} finally { await browser.close(); await panel.close(); }
+});
+
+test('compact global navigation and a single local heading remain distinct and gap-free', { timeout: 60000 }, async t => {
+	const fixture = navigationCheckout(t);
+	const manifest = '.github/design-system/topics.json';
+	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
+	fixture.write(manifest, JSON.stringify({ ...book, topics: book.topics.map(topic => topic.id === 'first' ? { ...topic, title: 'Designing for AI' } : topic) }));
+	const panel = await createExplorer(fixture.root, { watchCheckout: false });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 390, height: 800 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="first"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		const browse = page.getByRole('button', { name: 'Browse topics', exact: true });
+		const filter = page.getByRole('searchbox', { name: 'Search topics', exact: true });
+		await page.keyboard.press('Tab');
+		const skip = page.getByRole('link', { name: 'Skip to content', exact: true });
+		await expect(skip).toBeFocused();
+		assert.equal(await skip.evaluate(element => {
+			const bounds = element.getBoundingClientRect();
+			return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === element;
+		}), true);
+		for (const colorScheme of ['light', 'dark']) {
+			for (const forcedColors of ['none', 'active']) {
+				await page.emulateMedia({ colorScheme, forcedColors });
+				for (const width of [320, 390, 800, 959, 960, 1440, 390]) {
+					await page.setViewportSize({ width, height: 800 });
+					await expect.poll(() => page.locator('.book-panel').evaluate(panel => panel.hasAttribute('popover'))).toBe(width < 960);
+					if (width < 960) {
+						await expect(browse).toBeVisible();
+						await browse.focus();
+						await page.keyboard.press('Enter');
+						await expect(filter).toBeFocused();
+						await page.keyboard.press('Escape');
+						await expect(browse).toBeFocused();
+					} else {
+						await expect(browse).toBeHidden();
+						await expect(filter).toBeVisible();
+					}
+					for (const y of [300, 650]) {
+						await page.evaluate(y => scrollTo(0, y), y);
+						await expect.poll(() => article.evaluate(article => {
+							const siteHeader = document.querySelector('.explorer-heading');
+							const site = siteHeader.getBoundingClientRect();
+							const context = article.querySelector('.topic-context');
+							const bounds = context.getBoundingClientRect();
+							const heading = article.querySelector('.topic-heading');
+							const button = document.querySelector('.site-navigation button').getBoundingClientRect();
+							const brand = document.querySelector('.book-title').getBoundingClientRect();
+							const controls = document.querySelector('.checkout-details').getBoundingClientRect();
+							const seam = document.elementFromPoint(bounds.left + bounds.width / 2, site.bottom + 1);
+							return {
+								joined: Math.abs(bounds.top - site.bottom) < 1,
+								opaque: getComputedStyle(context).backgroundColor === getComputedStyle(document.querySelector('.explorer-heading')).backgroundColor,
+								seamOwned: context.contains(seam),
+								singleTitle: heading.textContent.split('Designing for AI').length === 2 && !document.querySelector('.book-current'),
+								noSeparateRow: !document.querySelector('#book-navigation .book-toolbar'),
+								compact: bounds.height < (innerWidth < 960 ? 96 : 104),
+								globalCompact: site.height <= 45,
+								globalUtilities: Math.abs((brand.top + brand.bottom) / 2 - (controls.top + controls.bottom) / 2) < 1,
+								leftTrigger: innerWidth >= 960 || Math.abs(button.left - site.left) < 1 && button.right < brand.left,
+								localOnly: !heading.querySelector('button'),
+								noCheckoutRow: !siteHeader.querySelector('#checkout'),
+								noOverflow: document.documentElement.scrollWidth <= innerWidth,
+							};
+						}), { message: `${colorScheme}, ${forcedColors}, ${width}px, scroll ${y}` }).toEqual({ joined: true, opaque: true, seamOwned: true, singleTitle: true, noSeparateRow: true, compact: true, globalCompact: true, globalUtilities: true, leftTrigger: true, localOnly: true, noCheckoutRow: true, noOverflow: true });
+					}
+				}
+			}
+		}
+		await browse.focus();
+		await page.keyboard.press('Enter');
+		await expect(filter).toBeFocused();
+		await page.setViewportSize({ width: 1100, height: 800 });
+		await expect(filter).toBeFocused();
+		await page.setViewportSize({ width: 390, height: 800 });
+		await expect(browse).toBeFocused();
+		await page.keyboard.press('Enter');
+		await filter.fill('second');
+		await page.keyboard.press('ArrowDown');
+		await page.keyboard.press('Enter');
+		await expect(page.locator('[data-topic="second"] h1')).toBeFocused();
+		await expect(page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true })).toBeVisible();
 		assert.deepEqual(errors, []);
 	} finally { await browser.close(); await panel.close(); }
 });

@@ -4,21 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 
+import { disclosureSummary } from './ui.mjs';
+
 let navigationId = 0;
-export function createBookNavigation(container, onNavigate) {
+export function createBookNavigation(container, onNavigate, toolbarHost = container) {
 	const document = container.ownerDocument;
 	const lifetime = new AbortController();
-	const wide = document.defaultView.matchMedia('(min-width: 760px)');
+	const wide = document.defaultView.matchMedia('(min-width: 960px)');
 	const toolbar = document.createElement('div');
 	toolbar.className = 'book-toolbar';
 	const toggle = document.createElement('button');
 	toggle.type = 'button';
-	toggle.className = 'chrome-button secondary';
-	toggle.textContent = 'Browse topics';
+	toggle.className = 'chrome-icon-button';
+	toggle.setAttribute('aria-label', 'Browse topics');
+	toggle.title = 'Browse topics';
 	toggle.setAttribute('aria-expanded', 'false');
-	const current = document.createElement('span');
-	current.className = 'book-current';
-	toolbar.append(toggle, current);
+	const expand = document.createElement('span');
+	expand.className = 'chrome-icon codicon-menu';
+	expand.setAttribute('aria-hidden', 'true');
+	toggle.append(expand);
+	toolbar.append(toggle);
 	const panel = document.createElement('aside');
 	panel.className = 'book-panel';
 	panel.id = `book-panel-${++navigationId}`;
@@ -44,6 +49,7 @@ export function createBookNavigation(container, onNavigate) {
 	searchLabel.textContent = 'Search topics';
 	label.append(searchLabel);
 	const search = document.createElement('input');
+	search.className = 'chrome-input';
 	search.type = 'search';
 	search.placeholder = 'Search topics';
 	search.maxLength = 200;
@@ -171,12 +177,7 @@ export function createBookNavigation(container, onNavigate) {
 		if (!groups.has(key)) {
 			const element = document.createElement('details');
 			element.className = 'book-group';
-			const summary = document.createElement('summary');
-			summary.textContent = title;
-			const chevron = document.createElement('span');
-			chevron.className = 'chrome-icon codicon-chevron-right';
-			chevron.setAttribute('aria-hidden', 'true');
-			summary.append(chevron);
+			const summary = disclosureSummary(title);
 			const list = document.createElement('ul');
 			element.append(summary, list);
 			parent.append(element);
@@ -193,7 +194,7 @@ export function createBookNavigation(container, onNavigate) {
 				panel.remove();
 				return;
 			}
-			if (!panel.isConnected) { container.append(toolbar, panel); }
+			if (!panel.isConnected) { toolbarHost.append(toolbar); container.append(panel); }
 			label.hidden = !items.length;
 			navigation.hidden = !items.length;
 			const identity = ({ id, title, group, subgroup, aliases }) => ({ id, title, group, subgroup, aliases });
@@ -243,7 +244,6 @@ export function createBookNavigation(container, onNavigate) {
 				}
 				else { link.removeAttribute('aria-current'); }
 			}
-			current.textContent = (links.get(active) ?? utilityLinks.get(active))?.item.title ?? '';
 			if (activeId !== active || !search.value) {
 				for (const group of groups.values()) { group.open = group.element.open; }
 			}

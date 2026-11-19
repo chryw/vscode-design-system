@@ -44,7 +44,7 @@ test('the manifest preserves every original visible and archived topic and binds
 	for (const section of new Set(catalog.filter(topic => topic.id !== 'motion').map(topic => topic.section))) {
 		const { page, authored } = readPage(read, section);
 		assert.equal(authored.id, page.id);
-		assert.ok(authored.intro.trim(), section);
+		assert.equal(typeof authored.intro, 'string', section);
 	}
 });
 
@@ -157,6 +157,23 @@ test('guidance-only chapters project authored sections and saved source edits wi
 		],
 		edited: true,
 	});
+});
+
+test('composed chapters accept optional introductions and unheaded lead prose', () => {
+	const file = '.github/design-system/illustration.design.md';
+	const body = read(file).slice(read(file).indexOf('## Usage'));
+	const original = readPage(read, 'illustration');
+	const sections = page => page.sourceSections.map(({ sectionId, title, markdown }) => [sectionId, title, markdown]);
+	for (const [lead, intro] of [
+		['', ''],
+		['An unheaded **lead**.\n\n', 'An unheaded **lead**.'],
+		['## Introduction\n\nAn explicit lead.\n\n', 'An explicit lead.'],
+		['## Introduction\n\n', ''],
+		['A preamble.\n\n## Introduction\n\nAn explicit lead.\n\n', 'A preamble.\n\nAn explicit lead.'],
+	]) {
+		const updated = readPage(amend(file, () => `# Illustration\n\n${lead}${body}`), 'illustration');
+		assert.deepEqual({ intro: updated.authored.intro, sections: sections(updated) }, { intro, sections: sections(original) });
+	}
 });
 
 test('accessibility composes source guidance while retaining legacy heading-order pages', () => {
@@ -284,8 +301,8 @@ test('a saved authored edit invalidates only its dependent topic and refresh rer
 			intro: 'This saved edit changes the introduction.',
 			refreshed: 'This saved edit changes the introduction.',
 		});
-		writeFileSync(scratch, original.replace('## Introduction', '## Removed introduction'));
-		await assert.rejects(store.read('typography', { theme: 'Dark 2026' }), /Expected one section "Introduction"/);
+		writeFileSync(scratch, original.replace('## Hierarchy and reading rhythm', '## Removed required section'));
+		await assert.rejects(store.read('typography', { theme: 'Dark 2026' }), /Expected one section "Hierarchy and reading rhythm"/);
 	} finally {
 		store.close();
 		rmSync(scratch, { force: true });

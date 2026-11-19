@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 
-import { node, sourceLink, problemDetails, showProblem, codicon } from './ui.mjs';
+import { node, sourceLink, problemDetails, showProblem, disclosureSummary } from './ui.mjs';
 import {getTopic,topicId} from './topics/catalog.mjs';
 import { pageJumps, topicPresentation } from './navigation-model.mjs';
 import { createTopicLoader } from './topic-lifecycle.mjs';
@@ -241,7 +241,7 @@ export function mountReference(root, props, host) {
 				const text = props.section === 'components' && props.controlId
 					? system.controls.find(control => control.id === props.controlId).docs.summary
 					: system.authored?.intro ?? system.motionDocumentation?.intro ?? '';
-				if (system.authored?.markdownSource) {
+				if (text && system.authored?.markdownSource) {
 					guidance.append(documentMarkup({ id: system.authored.markdownSource, markdown: text }, {
 						level: 2, prefix: `${topicId(props)}-intro-`, resolveResource: host.documentResource,
 					}));
@@ -267,9 +267,7 @@ export function mountReference(root, props, host) {
 			}
 			sourceDocuments.hidden = !sourceList.hasChildNodes();
 			if (!sourceDocuments.hidden) {
-				const summary = node('summary');
-				summary.append(codicon('chevron-right'), node('span', 'Contributor resources'));
-				sourceDocuments.append(summary, node('p', 'Open these repository files when updating this topic\'s guidance or implementation. Files open in a new tab.', 'muted'), sourceList);
+				sourceDocuments.append(disclosureSummary('Contributor resources'), node('p', 'Open these repository files when updating this topic\'s guidance or implementation. Files open in a new tab.', 'muted'), sourceList);
 			}
 			references.replaceChildren();
 			references.hidden = !system.topicReferences?.length;
@@ -285,7 +283,7 @@ export function mountReference(root, props, host) {
 					item.append(link, node('p', reference.description, 'muted'));
 					list.append(item);
 				}
-				references.append(node('summary', 'Further reading'), list);
+				references.append(disclosureSummary('Further reading'), list);
 			}
 			actions.hidden = references.hidden && sourceDocuments.hidden;
 			measureContext();

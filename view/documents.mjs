@@ -5,7 +5,7 @@
 /* eslint-disable local/code-no-new-javascript-files -- No-build document views. */
 import { DocumentError, resolveDocumentReference } from '../model/documents.mjs';
 import { markdown } from './markdown.mjs';
-import { node } from './ui.mjs';
+import { node, codicon, disclosureSummary } from './ui.mjs';
 
 export function documentURL(id = '', { anchor = '', query = '', documentScope = '', documentOffset = 0 } = {}) {
 	const parameters = new URLSearchParams({ section: 'documentation', mode: 'all' });
@@ -86,7 +86,7 @@ export function renderDocumentation(target, system, host = {}) {
 		context.append(metadata);
 		if (document.metadata) {
 			const details = node('details');
-			details.append(node('summary', 'Document metadata'), node('pre', document.metadata));
+			details.append(disclosureSummary('Document metadata'), node('pre', document.metadata));
 			context.append(details);
 		}
 		const prose = documentMarkup(document, { skipTitle: true, prefix: 'document-', view, resolveResource: host.documentResource });
@@ -104,7 +104,7 @@ export function renderDocumentation(target, system, host = {}) {
 		field.type = 'hidden'; field.name = name; field.value = value; form.append(field);
 	}
 	const label = node('label', 'Search sources');
-	const search = node('input');
+	const search = node('input', undefined, 'chrome-input');
 	search.type = 'search'; search.name = 'query'; search.maxLength = 200; search.value = listing.query;
 	label.append(search);
 	const filterLabel = node('label', 'Source');
@@ -114,14 +114,16 @@ export function renderDocumentation(target, system, host = {}) {
 		const option = node('option', scope.title);
 		option.value = scope.id; option.selected = scope.id === listing.scope; filter.append(option);
 	}
-	filterLabel.append(filter);
-	const submit = node('button', 'Search');
+	const select = node('span', undefined, 'chrome-select');
+	select.append(filter, codicon('chevron-down'));
+	filterLabel.append(select);
+	const submit = node('button', 'Search', 'chrome-button');
 	submit.type = 'submit';
 	form.append(label, filterLabel, submit);
 	page.append(form, node('p', `${listing.total} matching documents · ${listing.indexed} indexed`, 'meta'));
 	if (!listing.complete) {
 		const problems = node('details', undefined, 'document-diagnostics');
-		problems.append(node('summary', 'Some sources could not be indexed'));
+		problems.append(disclosureSummary('Some sources could not be indexed'));
 		const list = node('ul');
 		for (const diagnostic of listing.diagnostics) { list.append(node('li', `${diagnostic.file}: ${diagnostic.reason}`)); }
 		problems.append(list); page.append(problems);

@@ -194,10 +194,9 @@ try {
 <title>Visual Studio Code Design System — Review snapshot</title><style>${css}</style></head>
 <body class="design-reference explorer book-layout">
 <a class="skip" href="#reference">Skip to content</a>
-<header class="explorer-heading"><div><p class="book-title">Visual Studio Code Design System</p>
-<nav class="page-history" aria-label="Page history"><button id="history-back" type="button" disabled>Back</button><button id="history-forward" type="button" disabled>Forward</button></nav>
-<p class="meta">Review snapshot · <time id="snapshot-date"></time> · Not a published specification</p>
-<details><summary>About this snapshot</summary><p>A shared starting point for reviewing the topic breakdown and deciding what to document and centralize. Topic data and interactive fixtures are frozen; topics without documentation remain open work.</p><p>Share a topic using its address. This static page doesn't save shared comments or edits.</p><p>Source links open the base commit on GitHub; local working changes in this snapshot may differ.</p></details></div></header>
+<header class="explorer-heading"><div class="site-bar"><div class="site-navigation"></div><p class="book-title" title="Visual Studio Code Design System"><span class="brand-product">VS Code </span>Design System</p>
+<nav class="page-history" aria-label="Page history"><button id="history-back" type="button" disabled>Back</button><button id="history-forward" type="button" disabled>Forward</button></nav></div></header>
+<details class="snapshot-info"><summary class="chrome-disclosure"><span class="chrome-icon codicon-chevron-right" aria-hidden="true"></span><span>Review snapshot · <time id="snapshot-date"></time></span></summary><p>Not a published specification. A shared starting point for reviewing the topic breakdown and deciding what to document and centralize. Topic data and interactive fixtures are frozen; topics without documentation remain open work.</p><p>Share a topic using its address. This static page doesn't save shared comments or edits.</p><p>Source links open the base commit on GitHub; local working changes in this snapshot may differ.</p></details>
 <div class="explorer-layout"><div id="book-navigation"></div><div class="explorer-article">
 <main id="reference" tabindex="-1"><p role="status">Opening the design-system snapshot...</p></main>
 </div></div><noscript>This interactive reference requires JavaScript.</noscript>

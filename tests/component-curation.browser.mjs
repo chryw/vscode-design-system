@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
 import test from 'node:test';
-import { controls } from './repository-helpers.mjs';
+import { catalog, controls } from './repository-helpers.mjs';
 import { chromium, expect } from './playwright.mjs';
 import { createExplorer } from '../runtime/server.mjs';
 import { mockFixtureRenderer } from './browser-helpers.mjs';
@@ -36,7 +36,8 @@ test('the full canvas browses canonical component families and preserves grouped
 		await expect(group.getByRole('link', { name: 'Multi-select', exact: true })).toBeFocused();
 		const patterns = navigation.locator(':scope > details').filter({ has: page.getByText('Patterns', { exact: true }) });
 		await patterns.locator('summary').click();
-		assert.deepEqual(await patterns.locator('a[href]').allTextContents(), ['Modal']);
+		assert.deepEqual(await patterns.locator('a[href]').allTextContents(),
+			catalog.filter(topic => topic.group === 'Patterns' && !topic.hidden).map(topic => topic.title));
 		await patterns.getByRole('link', { name: 'Modal', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="modal"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');

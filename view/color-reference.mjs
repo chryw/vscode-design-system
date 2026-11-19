@@ -77,7 +77,7 @@ export function renderColors(content, system, host, signal) {
 	const inventory = specimen('palette');
 	const filters = node('div', undefined, 'color-inventory-filters');
 	const label = node('label', 'Search colors');
-	const search = node('input');
+	const search = node('input', undefined, 'chrome-input');
 	search.type = 'search';
 	search.maxLength = 200;
 	search.value = system.view.query;
