@@ -97,6 +97,8 @@ test('compact sticky navigation excludes overview, exposes topic files, and relo
 					const bounds = selector => article.querySelector(selector).getBoundingClientRect();
 					const header = document.querySelector('.explorer-heading').getBoundingClientRect();
 					const context = bounds('.topic-context');
+					const search = document.querySelector('.book-search input');
+					const searchIcon = document.querySelector('.book-search .chrome-icon');
 					return {
 						siteStuck: Math.abs(header.top) < 1,
 						pageStuck: context.top >= header.bottom - 1 && context.top <= header.bottom + 54,
@@ -105,8 +107,9 @@ test('compact sticky navigation excludes overview, exposes topic files, and relo
 						sectionClear: bounds('#first-continue').top >= context.bottom,
 						noOverflow: document.documentElement.scrollWidth <= innerWidth,
 						compactToolbar: innerWidth !== 390 || document.querySelector('.checkout-details').getBoundingClientRect().height < 36,
+						searchClear: innerWidth < 760 || search.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(search).paddingLeft) >= searchIcon.getBoundingClientRect().right + 4,
 					};
-				}), { siteStuck: true, pageStuck: true, introGone: true, oneRow: true, sectionClear: true, noOverflow: true, compactToolbar: true }, `${colorScheme} ${width}px`);
+				}), { siteStuck: true, pageStuck: true, introGone: true, oneRow: true, sectionClear: true, noOverflow: true, compactToolbar: true, searchClear: true }, `${colorScheme} ${width}px`);
 				const files = article.locator('.topic-files > summary');
 				await files.focus();
 				await page.keyboard.press('Enter');
@@ -120,7 +123,7 @@ test('compact sticky navigation excludes overview, exposes topic files, and relo
 		}
 		fixture.saveBook(['first', 'second', 'third']);
 		const before = panel.state.views.first;
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.locator('#checkout-status')).toHaveText('Checkout reloaded');
 		await expect(page.locator('#book-navigation').getByRole('link', { name: 'third topic', exact: true })).toBeVisible();
 		assert.deepEqual(panel.state.views.first, before);

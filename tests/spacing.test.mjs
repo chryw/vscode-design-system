@@ -34,7 +34,8 @@ test('spacing patterns retain exact declarations, source locations, and lazy dep
 		assert.equal(store.documentLibrary, undefined);
 		assert.equal(result.coverage.find(item => item.expected === 'Product spacing patterns').status, 'implementation-only');
 		assert.equal(result.coverage.find(item => item.expected === 'Named semantic spacing roles').status, 'not-defined-in-covered-sources');
-		assert.ok(Buffer.byteLength(JSON.stringify(result)) < 100000);
+		assert.ok(Buffer.byteLength(JSON.stringify(result)) < 128000);
+		assert.ok(Buffer.byteLength(JSON.stringify({ ...result.data, catalog: [] })) < 50000);
 	} finally { store.close(); }
 });
 

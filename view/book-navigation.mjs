@@ -13,6 +13,7 @@ export function createBookNavigation(container, onNavigate) {
 	toolbar.className = 'book-toolbar';
 	const toggle = document.createElement('button');
 	toggle.type = 'button';
+	toggle.className = 'chrome-button secondary';
 	toggle.textContent = 'Browse topics';
 	toggle.setAttribute('aria-expanded', 'false');
 	const current = document.createElement('span');
@@ -28,7 +29,12 @@ export function createBookNavigation(container, onNavigate) {
 	header.className = 'book-panel-heading';
 	const close = document.createElement('button');
 	close.type = 'button';
-	close.textContent = 'Close';
+	close.className = 'chrome-icon-button';
+	const closeIcon = document.createElement('span');
+	closeIcon.className = 'chrome-icon codicon-close';
+	closeIcon.setAttribute('aria-hidden', 'true');
+	close.append(closeIcon);
+	close.title = 'Close topic navigation';
 	close.setAttribute('aria-label', 'Close topic navigation');
 	header.append(close);
 	const label = document.createElement('label');
@@ -42,7 +48,10 @@ export function createBookNavigation(container, onNavigate) {
 	search.placeholder = 'Search topics';
 	search.maxLength = 200;
 	search.autofocus = true;
-	label.append(search);
+	const searchIcon = document.createElement('span');
+	searchIcon.className = 'chrome-icon codicon-search';
+	searchIcon.setAttribute('aria-hidden', 'true');
+	label.append(searchIcon, search);
 	const navigation = document.createElement('nav');
 	navigation.className = 'book-topics';
 	navigation.setAttribute('aria-label', 'Topics');
@@ -164,6 +173,10 @@ export function createBookNavigation(container, onNavigate) {
 			element.className = 'book-group';
 			const summary = document.createElement('summary');
 			summary.textContent = title;
+			const chevron = document.createElement('span');
+			chevron.className = 'chrome-icon codicon-chevron-right';
+			chevron.setAttribute('aria-hidden', 'true');
+			summary.append(chevron);
 			const list = document.createElement('ul');
 			element.append(summary, list);
 			parent.append(element);

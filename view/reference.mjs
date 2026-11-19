@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 
-import { node, sourceLink, problemDetails, showProblem } from './ui.mjs';
+import { node, sourceLink, problemDetails, showProblem, codicon } from './ui.mjs';
 import {getTopic,topicId} from './topics/catalog.mjs';
 import { pageJumps, topicPresentation } from './navigation-model.mjs';
 import { createTopicLoader } from './topic-lifecycle.mjs';
@@ -279,7 +279,9 @@ export function mountReference(root, props, host) {
 			if (!sourceDocuments.hidden) {
 				const panel = node('div', undefined, 'topic-files-panel');
 				panel.append(node('p', 'Guidance and implementation files used by this topic. Files may contribute to more than one topic.', 'muted'), sourceList);
-				sourceDocuments.append(node('summary', 'Topic files'), panel);
+				const summary = node('summary');
+				summary.append(codicon('chevron-right'), node('span', 'Topic files'));
+				sourceDocuments.append(summary, panel);
 			}
 			references.replaceChildren();
 			references.hidden = !system.topicReferences?.length;
@@ -304,7 +306,7 @@ export function mountReference(root, props, host) {
 		},
 		report: error => {
 			const message = error.message.replace(/^Couldn't load the design system: /, '').replace(/[.!?]$/, '');
-			showProblem(problem, snapshot ? 'Couldn\'t refresh this topic — showing last loaded content' : 'Couldn\'t load this topic — details', `${message}. Use Reload checkout to retry.`);
+			showProblem(problem, snapshot ? 'Couldn\'t refresh this topic — showing last loaded content' : 'Couldn\'t load this topic — details', `${message}. Use Refresh to retry.`);
 			content.dataset.topicState = 'error';
 		},
 		busy: value => {

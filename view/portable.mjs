@@ -10,7 +10,7 @@ import { documentView, resolveDocumentReference } from '../model/documents.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
-import { createPageHistory } from './page-history.mjs';
+import { createPageHistory } from './ui.mjs';
 
 const snapshot = globalThis.designSnapshot;
 setRepository(snapshot.repository);

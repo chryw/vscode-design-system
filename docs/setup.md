@@ -31,11 +31,11 @@ Reuse that checkout's existing dependencies and client output when they are alre
 
 The repository's `.plugin/plugin.json` declares the independent viewer, and `.plugin/marketplace.json` supplies its marketplace entry. The plugin extension imports the shared viewer implementation; it packages no product guidance or book data. Install through the client's native manager as described in the README. For CLI source development, `copilot --plugin-dir /absolute/path/to/vscode-design-system` loads the source package without installing a copy.
 
-Use **Checkout: [worktree]** in the canvas header, or the `select_checkout` canvas action with an absolute `root`, to browse another clone or worktree in the same panel and on the same server. The picker shows branch/worktree names and the selected checkout's full path separately. Choose a worktree and select **Browse checkout** to apply it; Escape dismisses the picker. Selection is saved privately per originating workspace and panel, with topic views separately keyed by checkout and book mode. Reopening after a provider restart restores that selection. Another checkout is never modified as a side effect of browsing.
+Use the chevron beside **Refresh** in the canvas header, or the `select_checkout` canvas action with an absolute `root`, to browse another clone or worktree in the same panel and on the same server. Refresh is the split button's main action; only the chevron opens its anchored checkout popup. The picker shows branch/worktree names and the selected checkout's full path separately. Choose a worktree and select **Browse checkout** to apply it. Escape dismisses the popup and restores focus to the chevron; outside clicks dismiss it too. Arrow Down from either half opens the picker, and Left/Right moves between the halves. Selection is saved privately per originating workspace and panel, with topic views separately keyed by checkout and book mode. Reopening after a provider restart restores that selection. Another checkout is never modified as a side effect of browsing.
 
 The canvas checks the local Git branch and commit periodically. An external branch change recreates its source readers and watches, rereads the checkout-owned catalog, and refreshes the same panel. A topic absent from the new branch returns to that branch's default topic. Source-library mode explicitly explains why curated topics and live examples are unavailable. Invalid checkout selection preserves the current book and reports the error.
 
-After adding, removing, or moving topics, changing document discovery scopes, or editing fixture bindings without a Git branch change, choose **Reload checkout**. This rereads saved content, the catalog, and bindings on the same server, retaining available topics, focused/comparison scope, themes, anchors, document selections, and local example controls. Removed topics are reconciled to the available catalog; an invalid candidate leaves the current book open with an error. Agents can use `select_checkout` with the current absolute `root` for the same operation. Reload does not fetch Git changes or load updated viewer modules.
+After adding, removing, or moving topics, changing document discovery scopes, or editing fixture bindings without a Git branch change, choose **Refresh**. This rereads saved content, the catalog, and bindings on the same server, retaining available topics, focused/comparison scope, themes, anchors, document selections, and local example controls. Removed topics are reconciled to the available catalog; an invalid candidate leaves the current book open with an error. Agents can use `select_checkout` with the current absolute `root` for the same operation. Refresh does not fetch Git changes or load updated viewer modules.
 
 **Back** and **Forward** work inside the canvas without browser chrome, including links between chapters and authored documents. They restore reading position and do not leave the book. Same-page section links do not add redundant page visits. **Topic files** in the page header lists that topic's guidance documents and its implementation entry point as direct file links, rather than routing through the old raw-document library. There may be multiple guidance files per topic and multiple topics per file. The Source library is no longer a curated-book navigation destination; document search and old document URLs remain available to headless tools and checkouts without a curated book.
 
@@ -70,7 +70,7 @@ Panels are chat-scoped, not worktree-global. A session in the same worktree can 
 
 Where a worktree has a coordination record, use it for the intended content root, shared edits, and any active reload operation, not as a requirement to route every open through another chat. Record a useful working panel reference when that record's ownership permits it. The selected checkout, book, and panel ID identify private saved view state; check the header and restored view after opening.
 
-Refresh the current chat's instance with the combined saved worktree, including uncommitted changes, rather than a contributor's isolated snapshot. Use **Reload checkout** for guidance, product sources, catalog, and fixture bindings. External Git branch or commit changes refresh the catalog automatically; saved topics absent from that catalog are dropped with an explanation. Viewer changes arrive through native plugin updates, or an updated managed installation for the legacy route, followed by a provider reload when required. Serialize shared edits and reloads with active contributors, validate a coherent candidate, and preserve the current topic and view. Do not install partially written changes or postpone every refresh indefinitely behind new work.
+Refresh the current chat's instance with the combined saved worktree, including uncommitted changes, rather than a contributor's isolated snapshot. Use **Refresh** for guidance, product sources, catalog, and fixture bindings. External Git branch or commit changes refresh the catalog automatically; saved topics absent from that catalog are dropped with an explanation. Viewer changes arrive through native plugin updates, or an updated managed installation for the legacy route, followed by a provider reload when required. Serialize shared edits and reloads with active contributors, validate a coherent candidate, and preserve the current topic and view. Do not install partially written changes or postpone every refresh indefinitely behind new work.
 
 Retire obsolete instances with the host's **Close Canvas** action. Closing an editor tab or stopping a viewer server alone does not remove a canvas from the picker. Do not edit host storage or create a suffixed instance to bypass an old provider binding. Preserve unrelated canvases.
 
@@ -121,7 +121,7 @@ To uninstall a canvas, remove the installed `.github/extensions/vscode-design-sy
 
 ## Development
 
-The installed plugin and local source viewer read saved, uncommitted content from the selected checkout, but execute their own viewer code. **Reload checkout** rereads content, the catalog, and bindings. It does not update viewer code or add a renderer capability.
+The installed plugin and local source viewer read saved, uncommitted content from the selected checkout, but execute their own viewer code. **Refresh** rereads content, the catalog, and bindings. It does not update viewer code or add a renderer capability.
 
 For unpublished viewer changes in regular canvas sessions, the native CLI manager supports a live local marketplace:
 
@@ -138,8 +138,8 @@ Once the live source is discovered, use the appropriate refresh:
 
 | Changed source | Refresh |
 | --- | --- |
-| Guidance or product source | **Reload checkout**. |
-| Added, removed, or moved topics; catalog or binding changes | **Reload checkout**. |
+| Guidance or product source | **Refresh**. |
+| Added, removed, or moved topics; catalog or binding changes | **Refresh**. |
 | Viewer modules or client assets | Reload extension providers and reopen the same canvas. Content refresh does not reload running viewer modules. |
 | Installed plugin source or membership | Full customization refresh in affected existing sessions; verify the loaded source path. |
 

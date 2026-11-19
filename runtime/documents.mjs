@@ -12,7 +12,7 @@ import { DocumentError, documentSection, documentView, findDocument, isRepositor
 
 const bookPrefix = '.github/design-system/';
 const ignoredDirectories = new Set(['.git', 'node_modules', '.build', 'out', 'dist', 'vendor']);
-const maximumDocumentBytes = 256 * 1024;
+const maximumDocumentBytes = 512 * 1024;
 const maximumCorpusBytes = 16 * 1024 * 1024;
 const maximumDocuments = 1000;
 const imageTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml' };

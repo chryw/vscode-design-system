@@ -88,10 +88,10 @@ test('direct product interaction finishes the player and stale or reset messages
 test('Motion renders source guidance and composition without implementation clutter', { timeout: 30000 }, async () => {
 	const read = file => readFileSync(`${root}/${file}`, 'utf8');
 	const spec = read(motionGuidanceFile)
-		.replace('Motion helps people acknowledge a change', 'Motion explains a meaningful change');
+		.replace('Help people understand a change', 'Motion explains a meaningful change');
 	const implementation = read(motionImplementationFile).replace('.surface {', '.surface.updated-reference {');
 	const exampleFile = '.github/design-system/motion/examples.md';
-	const examples = read(exampleFile).replace('The change is easier to understand than its immediate, still alternative', 'Clarify meaningful change.');
+	const examples = read(exampleFile).replace('owns the principles.', 'Clarify meaningful change.');
 	const composition = JSON.parse(read(motionPageFile));
 	composition.sections[0].blocks.reverse();
 	const context = {
@@ -114,11 +114,11 @@ test('Motion renders source guidance and composition without implementation clut
 		await page.goto(panel.url);
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('.topic-intro')).toContainText('Motion explains a meaningful change');
-		assert.deepEqual(await page.locator('#motion-principles > h3').allTextContents(), ['Principles in practice', 'Motion styles', 'When to use motion']);
+		assert.deepEqual(await page.locator('#motion-principles > h3').allTextContents(), ['Apply shared principles', 'Motion styles', 'When to use motion']);
 		await expect(page.locator('#motion-principles')).toContainText('Clarify meaningful change.');
 		await expect(page.locator('#motion-principles')).not.toContainText('Keep attention on the task, not on the transition.');
-		await expect(page.locator('#motion-principles')).toContainText('Would the change be harder to understand without motion?');
-		await expect(page.locator('#motion-practices')).toContainText('The 1-second and 3-second boundaries are starting points');
+		await expect(page.locator('#motion-principles')).toContainText('Ask whether the change would be harder to understand without motion.');
+		await expect(page.locator('#motion-practices')).toContainText('These boundaries guide scenario validation');
 		await expect(page.locator('#motion-review')).toContainText('Pause decorative updates when hidden or offscreen');
 		await expect(page.locator('#motion-accessibility')).toContainText('Do not force a streaming surface back to the latest output');
 		await expect(page.locator('#motion-review')).toContainText('normal and reduced motion');
@@ -171,6 +171,7 @@ test('duration studies isolate source timing, compare together, and keep product
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const page = await browser.newPage();
+		page.setDefaultTimeout(5000);
 		await mockFixtureRenderer(page, root, motionControls.map(control => control.id));
 		await page.goto(panel.url);
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
@@ -219,7 +220,7 @@ test('duration studies isolate source timing, compare together, and keep product
 		await page.locator('.topic-files > summary').click();
 		assert.equal(new URL(await page.locator('.topic-files a').filter({ hasText: motionGuidanceFile }).first().getAttribute('href'), panel.url).searchParams.get('file'), motionGuidanceFile);
 		await page.keyboard.press('Escape');
-		await study.getByRole('link', { name: 'Design tokens', exact: true }).click();
+		await study.getByRole('link', { name: 'base scale', exact: true }).click();
 		const reference = page.locator('[data-topic="tokens"] #tokens-motion');
 		await expect(reference).toBeFocused();
 		await expect(reference).toHaveAttribute('open', '');
@@ -296,7 +297,7 @@ test('motion explains intent with canvas-owned independent playback and one toke
 		assert.equal(await article.locator('[data-motion-property]').count(), 0);
 		assert.equal(await article.locator('.motion-doc-property-list').count(), 0);
 		assert.equal(await article.locator('.motion-doc-property').count(), 0);
-		assert.deepEqual(await article.locator('#motion-principles > h3').allTextContents(), ['When to use motion', 'Motion styles', 'Principles in practice']);
+		assert.deepEqual(await article.locator('#motion-principles > h3').allTextContents(), ['When to use motion', 'Motion styles', 'Apply shared principles']);
 		assert.equal(await article.locator('#motion-principles dl').count(), 0);
 		assert.deepEqual(await article.locator('#motion-transitions > [data-motion-recipe] > h4').allTextContents(), ['Appear and dismiss', 'Changes in layout']);
 		assert.deepEqual(await article.locator('#motion-foundations > h3').allTextContents(), ['Choose what changes']);
@@ -310,7 +311,7 @@ test('motion explains intent with canvas-owned independent playback and one toke
 		await expect(article.locator('#motion-accessibility')).toContainText('while retaining content and state');
 		await expect(article.locator('#motion-accessibility')).toContainText('Screen-reader announcements and motion preferences are separate');
 		assert.equal(await article.locator('.motion-doc .token-copy, .motion-doc input[type="range"], .motion-doc-playback-state').count(), 0);
-		assert.equal(await article.locator('#motion-practices table, #motion-accessibility table').count(), 0);
+		assert.equal(await article.locator('#motion-accessibility table').count(), 0);
 		assert.equal(await article.getByRole('combobox', { name: /^Playback speed:/ }).count(), 0);
 		assert.equal(await article.locator('.motion-doc pre, .motion-doc select').count(), 0);
 		assert.equal(await article.getByRole('link', { name: 'Open in Component Explorer', exact: true }).count(), 0);

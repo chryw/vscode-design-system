@@ -17,6 +17,69 @@ export const node = (tag, text, className) => {
 	return element;
 };
 
+export function codicon(id) {
+	const icon = node('span', undefined, `chrome-icon codicon-${id}`);
+	icon.setAttribute('aria-hidden', 'true');
+	return icon;
+}
+
+export function createPageHistory(onRestore, signal) {
+	const back = document.querySelector('#history-back');
+	const forward = document.querySelector('#history-forward');
+	for (const [button, id] of [[back, 'arrow-left'], [forward, 'arrow-right']]) {
+		const label = button.textContent;
+		button.setAttribute('aria-label', label);
+		button.title = label;
+		button.classList.add('chrome-icon-button');
+		button.replaceChildren(codicon(id));
+	}
+	let index = 0;
+	let end = 0;
+	let restoring = false;
+	const heading = document.querySelector('.explorer-heading');
+	const resize = new ResizeObserver(() => {
+		document.body.style.setProperty('--site-header-height', `${heading.getBoundingClientRect().height}px`);
+	});
+	resize.observe(heading);
+	signal.addEventListener('abort', () => resize.disconnect(), { once: true });
+	const update = () => {
+		back.disabled = restoring || index === 0;
+		forward.disabled = restoring || index === end;
+	};
+	const replace = url => history.replaceState({ ...history.state, bookPage: { index, x: scrollX, y: scrollY } }, '', url);
+	replace(location.href);
+	history.scrollRestoration = 'manual';
+	back.addEventListener('click', () => history.back(), { signal });
+	forward.addEventListener('click', () => history.forward(), { signal });
+	window.addEventListener('scroll', () => {
+		if (!restoring) { replace(location.href); }
+	}, { passive: true, signal });
+	window.addEventListener('popstate', async event => {
+		const destination = event.state?.bookPage;
+		if (destination) { index = destination.index; }
+		restoring = true;
+		update();
+		try {
+			await onRestore();
+			if (destination) { window.scrollTo(destination.x, destination.y); }
+			else { replace(location.href); }
+		} finally {
+			restoring = false;
+			update();
+		}
+	}, { signal });
+	update();
+	return {
+		replace,
+		push(url) {
+			replace(location.href);
+			history.pushState({ bookPage: { index: ++index, x: 0, y: 0 } }, '', url);
+			end = index;
+			update();
+		},
+	};
+}
+
 export function tokenButton(token, label = token.id) {
 	const button = node('button', undefined, 'token-copy');
 	button.type = 'button';
@@ -108,7 +171,7 @@ export function showProblem(target, title, message) {
 
 export function problem(error, context = document.activeElement) {
 	const target = context?.closest?.('.topic-pane')?.querySelector('#problem') ?? document.querySelector('#problem');
-	showProblem(target, 'Action failed — details', `${error.message}. Use Reload checkout to retry.`);
+	showProblem(target, 'Action failed — details', `${error.message}. Use Refresh to retry.`);
 }
 
 export async function request(url, options) {

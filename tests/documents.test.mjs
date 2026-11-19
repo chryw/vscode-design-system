@@ -149,7 +149,7 @@ test('document resources cannot escape the checkout or serve unreferenced files'
 
 test('oversized documents are explicit diagnostics, and bounded reads retain provenance', t => {
 	const fixture = checkout(t);
-	fixture.write('src/vs/feature/large.md', '# Large\n' + 'x'.repeat(256 * 1024));
+	fixture.write('src/vs/feature/large.md', '# Large\n' + 'x'.repeat(512 * 1024));
 	const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
 	try {
 		const listing = library.list();
@@ -164,6 +164,16 @@ test('oversized documents are explicit diagnostics, and bounded reads retain pro
 		}, {
 			complete: false, reason: 'document-too-large', bounded: true, revision: true,
 			source: '.github/instructions/example.instructions.md', truncated: true,
+		});
+
+		test('upstream-sized architecture guidance remains discoverable', t => {
+			const fixture = checkout(t);
+			const id = 'src/vs/feature/AGENTS.md';
+			fixture.write(id, '# Architecture\n' + 'Guidance.\n'.repeat(30000));
+			const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
+			try {
+				assert.equal(library.read(id).id, id);
+			} finally { library.close(); }
 		});
 	} finally { library.close(); }
 });

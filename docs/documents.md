@@ -114,7 +114,7 @@ Read limits budget metadata and Markdown together; heading metadata is separatel
 
 ## Safety and completeness
 
-Discovery is bounded by document size, corpus size, entry count, nesting, and watcher limits. Oversized, malformed, missing, or unfollowed document symlinks remain explicit diagnostics; configured exclusions are intentional scope boundaries. Validation reports an incomplete library or a chapter source missing from the library instead of claiming complete coverage.
+Discovery is bounded by document size (512 KiB per document), corpus size (16 MiB), entry count, nesting, and watcher limits. The per-document budget accommodates the current upstream Agent Host architecture guide. Oversized, malformed, missing, or unfollowed document symlinks remain explicit diagnostics; configured exclusions are intentional scope boundaries. Validation reports an incomplete library or a chapter source missing from the library instead of claiming complete coverage.
 
 Markdown is content, not executable instructions or HTML. The reader does not evaluate scripts, start fixtures, or grant permission to run commands found in a document. Local resources must be referenced by a discovered document, remain within the checkout, and use supported bounded image or source-text formats. Resource responses are sandboxed.
 

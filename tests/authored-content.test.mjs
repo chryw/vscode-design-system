@@ -139,18 +139,18 @@ test('source composition supports both topic-map locations and rejects malformed
 test('guidance-only chapters project authored sections and saved source edits without viewer copy', () => {
 	const file = '.github/design-system/illustration.design.md';
 	const updated = readPage(amend(file, text => text.replace(
-		'The art sits back so the task stays in front.',
+		markdownSection(read(file), 'Principles', file),
 		'Changed illustration guidance.',
 	)), 'illustration');
 	assert.deepEqual({
 		intro: updated.authored.intro,
 		sections: updated.sourceSections.map(section => [section.sectionId, section.title, section.source.file]),
-		edited: updated.sourceSections[0].markdown.includes('Changed illustration guidance.'),
+		edited: updated.sourceSections.find(section => section.sectionId === 'illustration-principles').markdown.includes('Changed illustration guidance.'),
 	}, {
 		intro: markdownSection(read(file), 'Introduction', file),
 		sections: [
-			['illustration-principles', 'Principles', file],
 			['illustration-usage', 'Usage', file],
+			['illustration-principles', 'Explain one idea', file],
 			['illustration-style', 'Visual style', file],
 			['illustration-accessibility', 'Accessibility', file],
 			['illustration-review', 'Build and review', file],
@@ -212,10 +212,10 @@ test('elevation guidance and scenario captions come from the owning document and
 	assert.equal(readPage(relocatedRead, 'elevation').authored.markdownSource, relocated);
 	const edited = readPage(amend(file, text => text
 		.replace('These are implemented treatments, not a requirement to make every surface look identical.', 'Changed consumer guidance.')
-		.replace('Put validation and recoverable errors in the current dialog.', 'Changed modal guidance.')
-		.replace('Surface schematic: 1 pairs', 'Changed construction caption.')
-		.replace("Pair the owning component's background and foreground.", 'Changed fill guidance.')
-		.replace('Clipping schematic:', 'Changed hosting caption.')), 'elevation').authored;
+		.replace('Keep validation and recoverable errors in the current dialog.', 'Changed modal guidance.')
+		.replace('The numbered cues pair', 'Changed construction caption.')
+		.replace("Pair the component's background and foreground", 'Changed fill guidance.')
+		.replace('Both overlays extend beyond a scroll container;', 'Changed hosting caption.')), 'elevation').authored;
 	assert.deepEqual({
 		consumerGuidance: edited.sections.shadows.paragraphs.some(text => text.includes('Changed consumer guidance.')),
 		modalGuidance: edited.sections.role.paragraphs.some(text => text.includes('Changed modal guidance.')),

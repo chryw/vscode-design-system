@@ -152,7 +152,7 @@ test('Motion composition and guidance are tracked source dependencies, not rende
 		recipeSources: [motionImplementationFile],
 		css: [['surface', true], ['layout', true], ['content', true], ['feedback', true]],
 	});
-	assert.match(model.sections['content-replacement'].markdown, /Editor tabs, typing, search keystrokes, and streaming remain immediate/);
+	assert.match(model.sections['content-replacement'].markdown, /Editor tabs, typing, search keystrokes, streaming, and background updates do not replay entrances/);
 	assert.doesNotMatch(readFileSync(`${root}/${motionGuidanceFile}`, 'utf8'), /canvas recipe reference|motion-recipes\.mjs/);
 });
 
@@ -185,7 +185,7 @@ test('chapter copy is curated while specifications and timing remain source-back
 test('saved Markdown, CSS examples, and declarative composition refresh without a product rebuild', () => {
 	const original = context();
 	const spec = original.read(motionGuidanceFile)
-		.replace('Make changes easier to understand.', 'Clarify meaningful change.')
+		.replace('Name what becomes easier to recognize or follow.', 'Clarify meaningful change.')
 		.replace('Use a small cue beside a stable status label', 'Use one compact cue beside a stable status label');
 	const implementation = original.read(motionImplementationFile).replace('.surface {', '.surface.test-change {');
 	const page = JSON.parse(original.read(motionPageFile));
@@ -438,7 +438,7 @@ test('analysis follows saved source timing and groups only tracks with shared pa
 		settle: updated.settle2PercentMs,
 		peak: updated.speed.peak.value,
 	}, {
-		properties: [['transform', 'width'], ['scale']],
+		properties: [['translate', 'width'], ['scale']],
 		source: motionDefinitionFiles[1],
 		duration: track.durationMs * 2,
 		response: track.response50Ms * 2,
@@ -483,7 +483,7 @@ test('fenced heading-like text is code, and CRLF source headings retain their au
 	}, readMotionDefinitions(context()));
 	assert.deepEqual({
 		headingCreated: Boolean(model.sections['not-a-guidance-heading']),
-		purposeful: model.sections.purposeful.markdown.startsWith('Make changes easier to understand.'),
+		purposeful: model.sections.purposeful.markdown.startsWith('Name what becomes easier to recognize or follow.'),
 		sourceLine: model.sections['notification-arrival-composition'].source.line,
 	}, {
 		headingCreated: false,

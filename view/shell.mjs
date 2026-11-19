@@ -4,13 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { mountReference } from './reference.mjs';
-import { node, request, problemDetails, showProblem } from './ui.mjs';
+import { node, request, problemDetails, showProblem, createPageHistory } from './ui.mjs';
 import { bookTitle, topicId, visibleTopicIds } from './topics/catalog.mjs';
 import { createBookNavigation } from './book-navigation.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation, UnknownTopicError } from '../model/catalog.mjs';
-import { createPageHistory } from './page-history.mjs';
 
 const lifetime = new AbortController();
 const panes = new Map();
@@ -21,7 +20,7 @@ const checkoutChoice = document.querySelector('#checkout-choice');
 const checkoutPath = document.querySelector('#checkout-path');
 const checkoutForm = document.querySelector('#checkout-form');
 const checkoutPicker = document.querySelector('#checkout-picker');
-const checkoutSummary = checkoutPicker.querySelector('summary');
+const checkoutToggle = document.querySelector('#checkout-toggle');
 const pageHistory = createPageHistory(() => applyURL().then(() => focusArticle(state.scope.active)).catch(problem), lifetime.signal);
 const contents = createBookNavigation(navigation, id => {
 	void navigate(id).then(() => focusArticle(id)).catch(error => {
@@ -48,6 +47,49 @@ const problem = error => {
 	if (!message) { message = problemDetails('shell-problem'); document.querySelector('.explorer-heading').after(message); }
 	showProblem(message, 'Canvas update failed — details', error.message);
 };
+function positionCheckout({ opening = false } = {}) {
+	if (!opening && !checkoutPicker.matches(':popover-open')) { return; }
+	const trigger = checkoutToggle.getBoundingClientRect();
+	const popup = opening ? { width: Number.parseFloat(getComputedStyle(checkoutPicker).width), height: 0 } : checkoutPicker.getBoundingClientRect();
+	const below = innerHeight - trigger.bottom - 8;
+	const above = trigger.top - 8;
+	const height = Math.min(popup.height, Math.max(below, above));
+	checkoutPicker.style.maxHeight = `${Math.max(below, above)}px`;
+	checkoutPicker.style.top = `${below >= popup.height || below >= above ? trigger.bottom + 4 : trigger.top - height - 4}px`;
+	checkoutPicker.style.left = `${Math.max(8, Math.min(trigger.right - popup.width, innerWidth - popup.width - 8))}px`;
+}
+const popupObserver = new ResizeObserver(positionCheckout);
+popupObserver.observe(checkoutPicker);
+lifetime.signal.addEventListener('abort', () => popupObserver.disconnect(), { once: true });
+window.addEventListener('resize', positionCheckout, { signal: lifetime.signal });
+window.addEventListener('scroll', positionCheckout, { passive: true, signal: lifetime.signal });
+checkoutPicker.addEventListener('beforetoggle', event => {
+	const open = event.newState === 'open';
+	checkoutToggle.setAttribute('aria-expanded', String(open));
+	if (open) { positionCheckout({ opening: true }); }
+}, { signal: lifetime.signal });
+checkoutPicker.addEventListener('toggle', event => {
+	if (event.target !== checkoutPicker) { return; }
+	if (event.newState === 'open') { positionCheckout(); }
+}, { signal: lifetime.signal });
+document.querySelector('.checkout-split').addEventListener('keydown', event => {
+	if (event.key === 'ArrowDown') {
+		event.preventDefault();
+		checkoutPicker.showPopover();
+	} else if (event.key === 'ArrowRight' && event.target === refresh) {
+		event.preventDefault();
+		checkoutToggle.focus();
+	} else if (event.key === 'ArrowLeft' && event.target === checkoutToggle) {
+		event.preventDefault();
+		refresh.focus();
+	}
+}, { signal: lifetime.signal });
+function updateRefresh() {
+	refresh.disabled = refreshing || !selectedCheckout;
+	checkoutToggle.disabled = refresh.disabled;
+	document.querySelector('#refresh-label').textContent = refreshing ? 'Refreshing…' : 'Refresh';
+	refresh.setAttribute('aria-busy', String(refreshing));
+}
 async function updateCheckoutChoices(result) {
 	result ??= await request('/api/checkouts', { signal: lifetime.signal });
 	selectedCheckout = result.checkout;
@@ -63,8 +105,10 @@ async function updateCheckoutChoices(result) {
 	checkoutChoice.append(other);
 	checkoutPath.value = result.checkout;
 	checkoutChoice.title = result.checkout;
-	checkoutSummary.title = `Choose a checkout. Current checkout: ${result.checkout}`;
-	document.querySelector('#checkout').textContent = result.checkout.split(/[\\/]/).at(-1);
+	checkoutToggle.title = `Checkout details: ${result.checkout}`;
+	const checkoutName = document.querySelector('#checkout');
+	checkoutName.textContent = result.checkout.split(/[\\/]/).at(-1);
+	checkoutName.title = result.checkout;
 	document.querySelector('#checkout-location').textContent = result.checkout;
 	checkoutPath.hidden = true;
 	checkoutPath.required = false;
@@ -72,6 +116,7 @@ async function updateCheckoutChoices(result) {
 	document.querySelector('#checkout-mode').textContent = result.mode === 'basic'
 		? 'Source library: this checkout has no curated design book. Browse local documentation; curated topics and live examples are unavailable.'
 		: result.unavailableTopics?.length ? 'Some saved topics are unavailable on this branch. Showing the available content.' : '';
+	updateRefresh();
 }
 checkoutChoice.addEventListener('change', () => {
 	const other = !checkoutChoice.value;
@@ -83,14 +128,11 @@ checkoutChoice.addEventListener('change', () => {
 	if (other) { checkoutPath.focus(); }
 }, { signal: lifetime.signal });
 checkoutPicker.addEventListener('keydown', event => {
-	if (event.key === 'Escape' && checkoutPicker.open) {
+	if (event.key === 'Escape' && checkoutPicker.matches(':popover-open')) {
 		event.preventDefault();
-		checkoutPicker.open = false;
-		checkoutSummary.focus();
+		checkoutPicker.hidePopover();
+		checkoutToggle.focus();
 	}
-}, { signal: lifetime.signal });
-document.addEventListener('click', event => {
-	if (!checkoutPicker.contains(event.target)) { checkoutPicker.open = false; }
 }, { signal: lifetime.signal });
 let checkoutRefresh;
 function reloadCheckout() {
@@ -114,13 +156,19 @@ function reloadCheckout() {
 checkoutForm.addEventListener('submit', async event => {
 	event.preventDefault();
 	const button = checkoutForm.querySelector('button');
+	const errorMessage = document.querySelector('#checkout-error');
+	errorMessage.hidden = true;
+	errorMessage.textContent = '';
 	button.disabled = true;
 	try {
 		await post('/api/checkout', { root: checkoutChoice.value || checkoutPath.value });
 		await reloadCheckout();
-		checkoutPicker.open = false;
-		checkoutSummary.focus();
-	} catch (error) { problem(error); }
+		checkoutPicker.hidePopover();
+		checkoutToggle.focus();
+	} catch (error) {
+		errorMessage.textContent = error.message;
+		errorMessage.hidden = false;
+	}
 	finally { button.disabled = false; }
 }, { signal: lifetime.signal });
 const urlFor = id => {
@@ -178,8 +226,7 @@ async function changeScope(input) {
 }
 function reconcile(next) {
 	state = next;
-	refresh.disabled = refreshing;
-	refresh.textContent = refreshing ? 'Reloading…' : 'Reload checkout';
+	updateRefresh();
 	refresh.title = 'Reread saved content, the topic list, and live examples from the selected checkout';
 	const all = state.scope.mode === 'all';
 	document.body.classList.toggle('book-layout', all);
@@ -255,8 +302,7 @@ const ready = () => Promise.all([...panes.values()].filter(pane => !pane.element
 refresh.addEventListener('click', async () => {
 	if (refreshing) { return; }
 	refreshing = true;
-	refresh.disabled = true;
-	refresh.textContent = 'Reloading…';
+	updateRefresh();
 	document.querySelector('#shell-problem')?.remove();
 	try {
 		await post('/api/checkout', { root: selectedCheckout });
@@ -267,8 +313,7 @@ refresh.addEventListener('click', async () => {
 		problem(error);
 	} finally {
 		refreshing = false;
-		refresh.disabled = false;
-		refresh.textContent = 'Reload checkout';
+		updateRefresh();
 	}
 }, { signal: lifetime.signal });
 async function applyURL() {

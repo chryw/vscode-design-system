@@ -296,7 +296,8 @@ test('Typography excludes unrelated readers, Spacing reuses registrations, all s
 		assert.equal(spacing.data.spacing.patterns.length, 5);
 		assert.equal(store.metrics.parses.spacing, 1);
 		assert.equal(typography.data.typography.tokens.filter(item => item.id.startsWith('fontSize.') && !item.deprecated).length, 8);
-		assert.ok(Buffer.byteLength(JSON.stringify(await store.read('spacing', settings))) < 100000);
+		assert.ok(Buffer.byteLength(JSON.stringify(spacing)) < 128000);
+		assert.ok(Buffer.byteLength(JSON.stringify({ ...spacing.data, catalog: [] })) < 50000);
 		assert.equal(store.metrics.reads[sizeFile], 1);
 	} finally { store.close(); }
 });

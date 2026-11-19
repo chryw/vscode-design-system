@@ -42,9 +42,9 @@ If opening reports that `design-book` is already owned by a different canvas, th
 ## Browse content from a checkout
 
 - **Current checkout:** the canvas starts from the session's workspace. A previously selected checkout is restored when you reopen the same panel; check the header to confirm what you are browsing.
-- **Another checkout:** open **Checkout: [worktree]**, select a local worktree, or choose **Other checkout…** and enter an absolute clone/worktree path. Select **Browse checkout** to switch content in the same panel.
+- **Another checkout:** open the chevron beside **Refresh**, select a local worktree, or choose **Other checkout…** and enter an absolute clone/worktree path. Select **Browse checkout** to switch content in the same panel. The current checkout name remains visible beside the split button.
 - **Another branch:** select a worktree already on that branch. The canvas never pulls, switches branches, or creates worktrees. If you change branches externally, it reloads the checkout's catalog.
-- **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; **Reload checkout** rereads saved content, the topic catalog, and live examples from the selected checkout while preserving the current view. It does not update the viewer or fetch Git changes.
+- **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; the main **Refresh** button rereads saved content, the topic catalog, and live examples from the selected checkout while preserving the current view. It does not open the checkout picker, update the viewer, or fetch Git changes.
 - **Reading:** **Back** and **Forward** retrace visited topics and document references, restoring reading position. The compact section navigation stays with the page title; the overview scrolls with the content.
 - **Topic files:** open this page-header disclosure for the guidance and implementation files used by a topic. It can list several files, and the same file can serve several topics. Files open directly in a separate tab; this is not the checkout selector.
 

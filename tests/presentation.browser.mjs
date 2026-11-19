@@ -75,7 +75,7 @@ test('topic files are distinct from explicitly curated further reading', { timeo
 				}
 			}
 		}
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(article.locator('.topic-files')).toBeVisible();
 		panel.setScope({ operation: 'all', active: 'illustration' });
@@ -153,12 +153,12 @@ test('Illustration uses the shared book frame, source sections, and keyboard out
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(article.locator('h1')).toHaveText('Illustration');
 		await expect(article.locator('.reference-empty, .guide-doc')).toHaveCount(0);
-		await expect(article.locator('.source-guidance > h2')).toHaveText(['Principles', 'Usage', 'Visual style', 'Accessibility', 'Build and review']);
+		await expect(article.locator('.source-guidance > h2')).toHaveText(['Usage', 'Explain one idea', 'Visual style', 'Accessibility', 'Build and review']);
 		const outline = article.getByRole('navigation', { name: 'On this page' });
 		await outline.getByRole('link', { name: 'Visual style', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(article.locator('#illustration-style')).toBeFocused();
-		await expect(article.getByRole('link', { name: 'Motion', exact: true })).toHaveAttribute('href', /documentId=src%2Fvs%2Fplatform%2Ftheme%2Fcommon%2Fmotion%2Fmotion\.design\.md/);
+		await expect(article.getByRole('link', { name: 'Motion', exact: true })).toHaveAttribute('href', /documentId=\.github%2Fdesign-system%2Fmotion\.design\.md/);
 		for (const theme of ['Dark 2026', 'Light 2026', 'High Contrast Dark', 'High Contrast Light']) {
 			panel.setView({ theme });
 			for (const width of [390, 1440]) {
@@ -239,7 +239,7 @@ test('compact topic context stays visible and recoverable errors do not displace
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('.checkout-details')).not.toHaveJSProperty('tagName', 'DETAILS');
 		await expect(page.locator('#checkout')).toBeVisible();
-		await expect(page.locator('.checkout-details').getByRole('button', { name: 'Reload checkout', exact: true })).toBeVisible();
+		await expect(page.locator('.checkout-details').getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
 		for (const width of [390, 800, 1199]) {
 			await page.setViewportSize({ width, height: 900 });
 			await page.evaluate(() => scrollTo(0, 0));
@@ -262,7 +262,7 @@ test('compact topic context stays visible and recoverable errors do not displace
 		}
 		const original = await content.locator('.typography-style-list').elementHandle();
 		await page.route('**/api/topic?*', route => route.fulfill({ status: 503, body: 'Source unavailable. Keep reading the last loaded topic.' }));
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		const problem = article.locator('#problem');
 		await expect(problem).toBeVisible();
 		await expect(problem.locator('summary')).toContainText('showing last loaded content');
@@ -274,11 +274,11 @@ test('compact topic context stays visible and recoverable errors do not displace
 		await expect(problem).toContainText('Source unavailable');
 		assert.equal(await original.evaluate(element => element.isConnected), true);
 		await page.unroute('**/api/topic?*');
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(problem).toBeHidden();
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
 		await page.route('**/api/checkout', route => route.fulfill({ status: 503, body: 'Checkout read failed' }));
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.locator('#shell-problem > summary')).toBeVisible();
 		assert.equal(await page.locator('#shell-problem').evaluate(element => element.open), false);
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
@@ -435,13 +435,13 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 		await mockFixtureRenderer(page, root, ['button', 'icon-label', 'input', 'radio', ...motionControls.map(control => control.id)]);
 		const checkedSources = new Set();
 		const sequences = {
-			typography: ['Hierarchy and reading rhythm', 'Weight and emphasis', 'UI type roles', 'Font families'],
+			typography: ['Hierarchy and reading rhythm', 'UI type roles', 'Weight and emphasis', 'Font families'],
 			shape: ['Round by surface role', 'Corner scale'],
 			size: ['Choose a glyph size', 'Size reference'],
 			stroke: ['Use strokes to define boundaries', 'Stroke reference'],
 			layout: ['Arrange the primary task', 'Adapt to available space'],
-			elevation: ['Choose the surface relationship', 'What makes elevation', 'Use the existing shadow scale',
-				'Apply elevation to real tasks', 'Compose a reusable surface', 'Keep surfaces accessible and responsive'],
+			elevation: ['Choose the surface relationship', 'Apply elevation to real tasks', 'What makes elevation',
+				'Use the existing shadow scale', 'Compose a reusable surface', 'Keep surfaces accessible and responsive'],
 			theming: ['Keep meaning in high contrast', 'Theme comparisons'],
 			spacing: ['Make relationships visible', 'Give each interval one owner', 'Choose a spacing pattern', 'Spacing between controls', 'When space gets tight', 'Spacing ramp'],
 		};
@@ -493,7 +493,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 					const { renderElevation } = await import('/elevation.mjs');
 					const target = document.createElement('div');
 					renderElevation(target, { ...data, authored: { ...data.authored, markdownSource: relocated } }, { previewState: new Map() });
-					return target.querySelector('.elevation-guide a').getAttribute('href');
+					return [...target.querySelectorAll('.elevation-guide a')].find(link => link.textContent === 'workbench styles').getAttribute('href');
 				}, { data: { view: data.view, authored: data.authored, sizes: data.sizes, elevation: data.elevation }, relocated });
 				assert.equal(new URL(relocatedLink, page.url()).searchParams.get('id'), relocated);
 			}
@@ -509,7 +509,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			assert.equal(await article.getByRole('navigation', { name: 'On this page', exact: true }).count(), majorHeadings.length >= 2 ? 1 : 0, id);
 			assert.equal(await article.locator('.topic-content a').evaluateAll(links => links.filter(link => !link.closest('.source-guidance, .motion-doc-analysis')).every(link => {
 				if (['Open in Component Explorer', 'View Figma specification'].includes(link.textContent.trim())) { return true; }
-				if (link.closest('.elevation-guide, .component-doc-section .prose')) {
+				if (link.closest('.prose, .elevation-guide, .component-doc-section')) {
 					const url = new URL(link.href);
 					return url.protocol === 'https:' || url.origin === location.origin
 						&& (url.pathname === '/api/document-resource'
@@ -598,8 +598,8 @@ test('elevation studies preserve overlay separation, keyboard choices, and sourc
 		await expect(article.locator('.elevation-scenario')).toHaveCount(4);
 		await expect(article.locator('.elevation-scenario figure, .elevation-study, .depth-illustration')).toHaveCount(0);
 		await expect(article.locator('.elevation-construction-parts > li')).toHaveCount(3);
-		await expect(article.locator('.elevation-construction figcaption')).toContainText("1 pairs the overlay's fill and text");
-		await expect(article.locator('.elevation-hosting figcaption')).toContainText("owner's supported overlay host");
+		await expect(article.locator('.elevation-construction figcaption')).toContainText('The numbered cues pair fill and text');
+		await expect(article.locator('.elevation-hosting figcaption')).toContainText('The supported overlay host keeps content visible');
 		const partShadows = article.getByRole('checkbox', { name: 'Turn off part shadows' });
 		const samples = () => article.evaluate(article => {
 			const style = selector => getComputedStyle(article.querySelector(selector));
@@ -663,8 +663,8 @@ test('elevation studies preserve overlay separation, keyboard choices, and sourc
 		await copy.focus();
 		await page.keyboard.press('Enter');
 		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'var(--vscode-shadow-lg)');
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 		await expect(partShadows).toBeChecked();
 		await expect(article.getByRole('radio', { name: 'High contrast light', exact: true })).toBeChecked();
 		const outline = article.getByRole('navigation', { name: 'On this page', exact: true });
@@ -703,7 +703,7 @@ test('live stream reconnection rereads visible data and clears only its connecti
 		assert.ok(streams >= 2 && reads >= 2);
 		await expect(page.getByText('Live updates disconnected; reconnecting automatically…', { exact: true })).not.toBeVisible();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toHaveCount(1);
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(1);
 	} finally {
 		await browser?.close();
 		await panel.close();
@@ -790,8 +790,8 @@ test('Spacing keeps concise guidance, one token ramp, and an automatic product p
 		await copy.focus();
 		assert.equal(await copy.evaluate(element => getComputedStyle(element).outlineStyle), 'solid');
 		assert.notEqual(await page.locator('.spacing-bar').last().evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 		await expect(page.locator('.spacing-token-table tbody tr')).toHaveCount(tokens.length);
 		await expect(page.locator('#spacing-example')).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
@@ -873,7 +873,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await expect.poll(() => panel.view.fixtureId).toBe('button/Dark');
 		assert.equal(await frame.evaluate(element => element === document.querySelector('.component-preview')), true);
 		const store = panel.store;
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect.poll(() => discoveries).toBe(2);
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
@@ -885,20 +885,20 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		}
 		await page.route('**/api/checkout', route => route.fulfill({ status: 503, body: 'Source temporarily unavailable' }));
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.locator('#shell-problem')).toContainText('Source temporarily unavailable');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
 		await page.unroute('**/api/checkout');
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		unavailable = true;
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-		await expect(page.locator('.preview-status')).toContainText('Use Reload checkout to retry');
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(page.locator('.preview-status')).toContainText('Use Refresh to retry');
 		await expect(page.getByRole('button', { name: /Refresh|Reload|Reconnect|Select default/ })).toHaveCount(1);
 		unavailable = false;
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
 		panel.setView({ fixtureId: 'removed-variant' });
@@ -911,7 +911,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await expect(page.locator('[data-topic="motion"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const motionCount = await page.locator('[data-motion-example]').count();
 		const allMotionReady = async () => {
-			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 			for (const summary of await page.locator('.motion-doc-reference:not([open]) > summary').all()) {
 				await summary.click();
 			}
@@ -924,13 +924,13 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		const reducedCount = await page.getByRole('checkbox', { name: 'Reduced motion', exact: true }).count();
 		await page.locator('[data-motion-example="delayed-content"]').getByRole('radio', { name: 'Fast', exact: true }).check();
 		const beforeMotion = discoveries;
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 		await allMotionReady();
 		await expect(page.locator('[data-motion-example="delayed-content"]').getByRole('radio', { name: 'Fast', exact: true })).toBeChecked();
 		await expect.poll(() => discoveries).toBe(beforeMotion + motionCount);
 		await page.locator('[data-motion-example="selection"]').getByRole('checkbox', { name: 'Reduced motion', exact: true }).check();
-		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await allMotionReady();
 		await expect.poll(() => discoveries).toBe(beforeMotion + 2 * motionCount);
 		await expect(page.locator('[data-motion-example="selection"]').getByRole('checkbox', { name: 'Reduced motion', exact: true })).toBeChecked();
@@ -1113,9 +1113,9 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.getByRole('navigation', { name: 'On this page' })).toHaveCount(2);
 			panel.setScope({ operation: 'replace', topics: ['spacing', 'typography'], active: 'spacing', layout: 'compare' });
 			await expect(page.locator('#reference')).toHaveClass('comparison-layout');
-			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toHaveCount(1);
-			await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(1);
+			await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 			await ready('spacing');
 			await ready('typography');
 			await expect(page.locator('#shell-problem')).toHaveCount(0);
@@ -1216,8 +1216,8 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await search.fill('spacing.size160');
 			await expect(search).toBeFocused();
 			await expect(page.locator('[data-topic="tokens"] #status')).toContainText('matching entries');
-			await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
-			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+			await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 			await expect(search).toHaveValue('spacing.size160');
 			await ready('tokens');
 			await expect(page.locator('.book-panel a[aria-current="page"]')).toHaveText('Design tokens');

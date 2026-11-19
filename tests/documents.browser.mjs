@@ -91,9 +91,9 @@ test('Illustration has the same opening hierarchy in the chapter and the source 
 			title: await reader.locator('h1').innerText(),
 			introduction: await reader.locator('.topic-intro').innerText(),
 			sections: await reader.locator('.article-outline a').allTextContents(),
-		}, opening);
+		}, { ...opening, sections: ['Usage', 'Principles', 'Visual style', 'Accessibility', 'Build and review'] });
 		await expect(reader.getByRole('heading', { name: 'Introduction', exact: true })).toHaveCount(0);
-		await expect(reader.locator('.documentation > .prose > h2').first()).toHaveText('Principles');
+		await expect(reader.locator('.documentation > .prose > h2').first()).toHaveText('Usage');
 	} finally { await browser.close(); await panel.close(); }
 });
 
@@ -275,7 +275,7 @@ test('an unavailable document deep link leaves topic navigation usable', { timeo
 		await page.locator('#shell-problem > summary').click();
 		await expect(page.locator('#shell-problem')).toContainText('not available');
 		await expect(page.getByRole('searchbox', { name: 'Search topics', exact: true })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 	} finally { await browser.close(); await panel.close(); }
 });
 

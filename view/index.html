@@ -20,24 +20,29 @@
 					<button id="history-back" type="button" disabled>Back</button>
 					<button id="history-forward" type="button" disabled>Forward</button>
 				</nav>
-				<details id="checkout-picker">
-					<summary>Checkout: <span id="checkout">Loading…</span></summary>
-					<form id="checkout-form">
-						<label for="checkout-choice">Local worktree</label>
-						<select id="checkout-choice" name="checkout" aria-describedby="checkout-help"></select>
-						<p id="checkout-location" class="document-path"></p>
-						<label for="checkout-path" hidden>Checkout path</label>
-						<input id="checkout-path" name="path" type="text" autocomplete="off" hidden>
-						<button type="submit">Browse checkout</button>
-						<p id="checkout-help">Read saved content from this checkout. Reload checkout also rereads the topic list and examples. Neither action switches or pulls Git branches.</p>
-					</form>
-				</details>
-				<button id="refresh" type="button" disabled>Reload checkout</button>
+				<p id="checkout" class="checkout-name">Loading checkout…</p>
+				<div class="checkout-split" role="group" aria-label="Checkout">
+					<button id="refresh" class="chrome-button secondary" type="button" disabled><span class="chrome-icon codicon-refresh" aria-hidden="true"></span><span id="refresh-label">Refresh</span></button>
+					<button id="checkout-toggle" class="chrome-button secondary" type="button" aria-label="Checkout details" aria-haspopup="dialog" aria-controls="checkout-picker" aria-expanded="false" popovertarget="checkout-picker" disabled><span class="chrome-icon codicon-chevron-down" aria-hidden="true"></span></button>
+				</div>
 			</div>
 			<p id="checkout-mode" class="meta" role="status"></p>
 			<p id="checkout-status" class="sr-only" role="status"></p>
 		</div>
 	</header>
+	<section id="checkout-picker" class="checkout-popup" popover="auto" role="dialog" aria-labelledby="checkout-title">
+		<h2 id="checkout-title">Checkout</h2>
+		<form id="checkout-form">
+			<label for="checkout-choice">Local worktree</label>
+			<div class="chrome-select"><select id="checkout-choice" name="checkout" aria-describedby="checkout-help checkout-location" autofocus></select><span class="chrome-icon codicon-chevron-down" aria-hidden="true"></span></div>
+			<p id="checkout-location" class="document-path"></p>
+			<label for="checkout-path" hidden>Checkout path</label>
+			<input id="checkout-path" name="path" type="text" autocomplete="off" hidden>
+			<p id="checkout-error" class="checkout-error" role="alert" hidden></p>
+			<button class="chrome-button" type="submit">Browse checkout</button>
+			<p id="checkout-help">Reads saved content, topics, and examples. Does not switch or pull Git branches.</p>
+		</form>
+	</section>
 	<div class="explorer-layout">
 		<div id="book-navigation" hidden></div>
 		<div class="explorer-article">
