@@ -29,6 +29,153 @@ export function disclosureSummary(...content) {
 	return summary;
 }
 
+export function anchorPopup(popup, trigger, signal) {
+	const position = (opening = false) => {
+		if (!opening && !popup.matches(':popover-open')) { return; }
+		const anchor = trigger.getBoundingClientRect();
+		const bounds = opening ? { width: Number.parseFloat(getComputedStyle(popup).width), height: 0 } : popup.getBoundingClientRect();
+		const below = innerHeight - anchor.bottom - 8;
+		const above = anchor.top - 8;
+		const height = Math.min(bounds.height, Math.max(below, above));
+		popup.style.maxHeight = `${Math.max(below, above)}px`;
+		popup.style.top = `${below >= bounds.height || below >= above ? anchor.bottom + 4 : anchor.top - height - 4}px`;
+		popup.style.left = `${Math.max(8, Math.min(anchor.right - bounds.width, innerWidth - bounds.width - 8))}px`;
+	};
+	const observer = new ResizeObserver(() => position());
+	observer.observe(popup);
+	signal.addEventListener('abort', () => observer.disconnect(), { once: true });
+	window.addEventListener('resize', () => position(), { signal });
+	window.addEventListener('scroll', () => position(), { passive: true, signal });
+	popup.addEventListener('beforetoggle', event => {
+		if (event.target !== popup) { return; }
+		trigger.setAttribute('aria-expanded', String(event.newState === 'open'));
+		if (event.newState === 'open') { position(true); }
+	}, { signal });
+	popup.addEventListener('toggle', event => {
+		if (event.target === popup && event.newState === 'open') { position(); }
+	}, { signal });
+	popup.addEventListener('keydown', event => {
+		if (event.key === 'Escape' && popup.matches(':popover-open')) {
+			event.preventDefault();
+			popup.hidePopover();
+			trigger.focus();
+		}
+	}, { signal });
+}
+
+let appearanceId = 0;
+export function createAppearancePicker(history, signal, storage = () => localStorage) {
+	const control = node('div', undefined, 'appearance-control');
+	const button = node('button', undefined, 'chrome-icon-button');
+	button.type = 'button';
+	button.setAttribute('aria-haspopup', 'menu');
+	button.setAttribute('aria-expanded', 'false');
+	button.append(codicon('color-mode'));
+	const popup = node('div', undefined, 'chrome-popup appearance-popup');
+	popup.id = `appearance-${++appearanceId}`;
+	popup.setAttribute('popover', 'auto');
+	button.setAttribute('aria-controls', popup.id);
+	button.popoverTargetElement = popup;
+	const group = node('div', undefined, 'appearance-choices');
+	group.setAttribute('role', 'menu');
+	group.setAttribute('aria-label', 'Appearance');
+	const options = new Map();
+	for (const [value, label] of [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]) {
+		const choice = node('button');
+		choice.type = 'button';
+		choice.value = value;
+		choice.setAttribute('role', 'menuitemradio');
+		choice.append(codicon('check'), node('span', label));
+		group.append(choice);
+		options.set(value, { choice, label });
+	}
+	const message = node('p', undefined, 'appearance-message');
+	message.setAttribute('role', 'status');
+	message.hidden = true;
+	popup.append(group, message);
+	control.append(button, popup);
+	history.after(control);
+	anchorPopup(popup, button, signal);
+	signal.addEventListener('abort', () => control.remove(), { once: true });
+	const report = text => {
+		message.textContent = text;
+		message.hidden = false;
+		console.warn(text);
+	};
+	const apply = value => {
+		document.documentElement.style.colorScheme = value === 'system' ? 'light dark' : value;
+		for (const [id, { choice }] of options) {
+			choice.setAttribute('aria-checked', String(id === value));
+			choice.autofocus = id === value;
+			choice.tabIndex = id === value ? 0 : -1;
+		}
+		button.title = `Appearance: ${options.get(value).label}`;
+		button.setAttribute('aria-label', button.title);
+	};
+	const key = 'vscode-design-system.appearance';
+	let saved;
+	try { saved = storage().getItem(key); }
+	catch (error) {
+		if (!(error instanceof DOMException) || error.name !== 'SecurityError') { throw error; }
+		report('This browser blocks appearance storage. Your choice can be changed here but will not be remembered after reload.');
+	}
+	if (saved !== null && saved !== undefined && !options.has(saved)) {
+		report('The saved appearance is invalid. Choose System, Light, or Dark to replace it.');
+	}
+	apply(options.has(saved) ? saved : 'system');
+	group.addEventListener('click', event => {
+		const value = event.target.closest('button')?.value;
+		if (!options.has(value)) { return; }
+		apply(value);
+		try {
+			if (value === 'system') { storage().removeItem(key); }
+			else { storage().setItem(key, value); }
+			message.hidden = true;
+			popup.hidePopover();
+			button.focus();
+		} catch (error) {
+			if (!(error instanceof DOMException) || !['SecurityError', 'QuotaExceededError'].includes(error.name)) { throw error; }
+			report('Appearance changed for this page, but this browser could not save it. It will not be remembered after reload.');
+		}
+	}, { signal });
+	const choices = [...options.values()].map(({ choice }) => choice);
+	const focusChoice = choice => {
+		for (const item of choices) { item.tabIndex = item === choice ? 0 : -1; }
+		choice.focus();
+	};
+	popup.addEventListener('beforetoggle', event => {
+		if (event.newState === 'open') {
+			for (const choice of choices) { choice.tabIndex = choice.getAttribute('aria-checked') === 'true' ? 0 : -1; }
+		}
+	}, { signal });
+	button.addEventListener('keydown', event => {
+		if (!['ArrowDown', 'ArrowUp'].includes(event.key)) { return; }
+		event.preventDefault();
+		popup.showPopover();
+		focusChoice(event.key === 'ArrowDown' ? choices[0] : choices.at(-1));
+	}, { signal });
+	group.addEventListener('keydown', event => {
+		if (event.key === 'Tab') {
+			popup.hidePopover();
+			button.focus();
+			return;
+		}
+		const index = choices.indexOf(document.activeElement);
+		let next;
+		if (event.key === 'ArrowDown') { next = choices[(index + 1) % choices.length]; }
+		else if (event.key === 'ArrowUp') { next = choices[(index + choices.length - 1) % choices.length]; }
+		else if (event.key === 'Home') { next = choices[0]; }
+		else if (event.key === 'End') { next = choices.at(-1); }
+		else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			next = choices.find(choice => choice.textContent.toLowerCase().startsWith(event.key.toLowerCase()));
+		}
+		if (next) {
+			event.preventDefault();
+			focusChoice(next);
+		}
+	}, { signal });
+}
+
 export function createPageHistory(onRestore, signal) {
 	const back = document.querySelector('#history-back');
 	const forward = document.querySelector('#history-forward');

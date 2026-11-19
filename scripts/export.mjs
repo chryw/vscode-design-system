@@ -153,8 +153,6 @@ try {
 	browser = undefined;
 	const portable = await bundle('reference', path.join(assets, 'portable.mjs'), true);
 	let css = (await Promise.all(['canvas.css', 'shell.css', 'book-navigation.css', 'motion.css'].map(file => readFile(path.join(assets, file), 'utf8')))).join('\n');
-	if (!css.includes('color-scheme: light dark;')) { throw new Error('Portable export needs the reference color-scheme declaration'); }
-	css = `html { color-scheme: dark; }\n${css.replace('color-scheme: light dark;', 'color-scheme: inherit;')}`;
 	const font = await readFile(path.join(root, 'node_modules/@vscode/codicons/dist/codicon.ttf'));
 	css = css.replace('/codicon.ttf', `data:font/ttf;base64,${font.toString('base64')}`);
 	for (const content of [JSON.stringify(snapshot), fixtureHTML, portable.js, css]) {

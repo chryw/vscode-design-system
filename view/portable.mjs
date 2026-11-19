@@ -10,7 +10,7 @@ import { documentView, resolveDocumentReference } from '../model/documents.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
-import { createPageHistory } from './ui.mjs';
+import { createPageHistory, createAppearancePicker } from './ui.mjs';
 
 const snapshot = globalThis.designSnapshot;
 setRepository(snapshot.repository);
@@ -20,6 +20,7 @@ let reference;
 let active;
 let view;
 const lifetime = new AbortController();
+createAppearancePicker(document.querySelector('.page-history'), lifetime.signal);
 const pageHistory = createPageHistory(restore, lifetime.signal);
 const contents = createBookNavigation(navigation, id => show(id, true), document.querySelector('.site-navigation') ?? navigation);
 const topicURL = id => {

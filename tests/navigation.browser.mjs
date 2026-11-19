@@ -8,8 +8,9 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, expect } from './playwright.mjs';
-import { createDocumentCheckout } from './document-helpers.mjs';
+import { createDocumentCheckout, checkoutRoot } from './document-helpers.mjs';
 import { createExplorer } from '../runtime/server.mjs';
+import { mockFixtureRenderer } from './browser-helpers.mjs';
 
 function navigationCheckout(t) {
 	const fixture = createDocumentCheckout(t);
@@ -221,5 +222,147 @@ test('compact global navigation and a single local heading remain distinct and g
 		await expect(page.locator('[data-topic="second"] h1')).toBeFocused();
 		await expect(page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true })).toBeVisible();
 		assert.deepEqual(errors, []);
+	} finally { await browser.close(); await panel.close(); }
+});
+
+test('reader appearance overrides the host preference and survives navigation and reload without changing topic views', { timeout: 30000 }, async () => {
+	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'typography' }, watchCheckout: false });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ colorScheme: 'dark', viewport: { width: 1100, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await mockFixtureRenderer(page, checkoutRoot, ['button']);
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="typography"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		const background = () => page.locator('.explorer-heading').evaluate(header => getComputedStyle(header).backgroundColor);
+		await expect.poll(background).toBe('rgb(31, 31, 31)');
+		const before = panel.state;
+		const body = await article.locator('.topic-content').elementHandle();
+		const appearance = page.getByRole('button', { name: /^Appearance:/ });
+		await appearance.focus();
+		await page.keyboard.press('Enter');
+		const popup = page.getByRole('menu', { name: 'Appearance', exact: true });
+		await expect(popup.getByRole('menuitemradio', { name: 'System', exact: true })).toBeFocused();
+		assert.deepEqual(await popup.locator('button').allTextContents(), ['System', 'Light', 'Dark']);
+		await expect(page.locator('.appearance-popup h2, .appearance-popup p:visible')).toHaveCount(0);
+		await page.keyboard.press('ArrowDown');
+		await expect(popup.getByRole('menuitemradio', { name: 'Light', exact: true })).toBeFocused();
+		await expect.poll(background).toBe('rgb(31, 31, 31)');
+		await page.keyboard.press('Enter');
+		await expect(popup).toBeHidden();
+		await expect(appearance).toBeFocused();
+		await expect.poll(background).toBe('rgb(255, 255, 255)');
+		assert.equal(await body.evaluate(element => element.isConnected), true);
+		assert.deepEqual(panel.state, before);
+		await page.emulateMedia({ colorScheme: 'light' });
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await expect.poll(background).toBe('rgb(255, 255, 255)');
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('End');
+		await expect(popup.getByRole('menuitemradio', { name: 'Dark', exact: true })).toBeFocused();
+		await page.keyboard.press('ArrowDown');
+		await expect(popup.getByRole('menuitemradio', { name: 'System', exact: true })).toBeFocused();
+		await page.keyboard.press('Home');
+		await page.keyboard.press('l');
+		await expect(popup.getByRole('menuitemradio', { name: 'Light', exact: true })).toBeFocused();
+		await page.keyboard.press('Escape');
+		await expect(appearance).toBeFocused();
+		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'Spacing', exact: true }).click();
+		await expect(page.locator('[data-topic="spacing"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(appearance).toHaveAttribute('aria-label', 'Appearance: Light');
+		await page.reload();
+		await expect(page.locator('[data-topic="spacing"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect.poll(background).toBe('rgb(255, 255, 255)');
+		await expect(appearance).toHaveAttribute('aria-label', 'Appearance: Light');
+		const spacing = page.locator('[data-topic="spacing"]');
+		await spacing.getByRole('radio', { name: 'Dark', exact: true }).check();
+		await expect(spacing.locator('.control-stage')).toHaveAttribute('data-preview-state', 'ready');
+		const frame = await spacing.locator('.component-preview').elementHandle();
+		const spacingView = panel.state.views.spacing;
+		await appearance.click();
+		await popup.getByRole('menuitemradio', { name: 'Dark', exact: true }).click();
+		await expect.poll(background).toBe('rgb(31, 31, 31)');
+		await page.emulateMedia({ colorScheme: 'light' });
+		await expect.poll(background).toBe('rgb(31, 31, 31)');
+		await appearance.click();
+		await popup.getByRole('menuitemradio', { name: 'System', exact: true }).click();
+		await expect.poll(background).toBe('rgb(255, 255, 255)');
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await expect.poll(background).toBe('rgb(31, 31, 31)');
+		assert.deepEqual(panel.state.views.spacing, spacingView);
+		await expect(spacing.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
+		assert.equal(await frame.evaluate(frame => frame.isConnected), true);
+		await appearance.click();
+		for (const width of [320, 390, 800, 1440]) {
+			await page.setViewportSize({ width, height: 900 });
+			await expect.poll(() => page.locator('.appearance-popup').evaluate(popup => {
+				const bounds = popup.getBoundingClientRect();
+				return {
+					contained: bounds.left >= 0 && bounds.right <= innerWidth && bounds.top >= 0 && bounds.bottom <= innerHeight,
+					menuSized: bounds.width <= 180 && bounds.height <= 110,
+					compact: document.querySelector('.explorer-heading').getBoundingClientRect().height === 45,
+					brandFits: document.querySelector('.book-title').scrollWidth <= document.querySelector('.book-title').clientWidth,
+					noOverflow: document.documentElement.scrollWidth <= innerWidth,
+				};
+			}), { message: `${width}px` }).toEqual({ contained: true, menuSized: true, compact: true, brandFits: true, noOverflow: true });
+		}
+		await popup.getByRole('menuitemradio', { name: 'Light', exact: true }).click();
+		await page.keyboard.press('ArrowDown');
+		await page.keyboard.press('Tab');
+		await expect(popup).toBeHidden();
+		await expect(page.locator('#refresh')).toBeFocused();
+		await page.emulateMedia({ forcedColors: 'active' });
+		await appearance.focus();
+		await appearance.hover();
+		assert.equal(await appearance.evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
+		assert.ok(await appearance.evaluate(button => {
+			const luminance = color => {
+				const channels = color.match(/\d+/g).slice(0, 3).map(value => {
+					const channel = Number(value) / 255;
+					return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+				});
+				return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+			};
+			const icon = luminance(getComputedStyle(button.querySelector('.chrome-icon')).backgroundColor);
+			const background = luminance(getComputedStyle(document.querySelector('.explorer-heading')).backgroundColor);
+			return (Math.max(icon, background) + 0.05) / (Math.min(icon, background) + 0.05);
+		}) >= 3);
+		await page.keyboard.press('Enter');
+		const light = popup.getByRole('menuitemradio', { name: 'Light', exact: true });
+		await expect(light).toBeFocused();
+		await light.hover();
+		assert.equal(await light.evaluate(choice => getComputedStyle(choice).outlineStyle), 'solid');
+		assert.deepEqual(errors, []);
+	} finally { await browser.close(); await panel.close(); }
+});
+
+test('unavailable appearance storage is explicit without blocking the current-page override', { timeout: 30000 }, async t => {
+	const fixture = navigationCheckout(t);
+	const panel = await createExplorer(fixture.root, { watchCheckout: false });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ colorScheme: 'light' });
+		const errors = [];
+		const warnings = [];
+		page.on('pageerror', error => errors.push(error.message));
+		page.on('console', message => { if (message.type() === 'warning') { warnings.push(message.text()); } });
+		await page.goto(panel.url);
+		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await page.evaluate(async () => {
+			const { createAppearancePicker } = await import('/ui.mjs');
+			const host = document.createElement('nav');
+			host.id = 'appearance-storage-test';
+			document.body.append(host);
+			createAppearancePicker(host, new AbortController().signal, () => { throw new DOMException('Storage blocked', 'SecurityError'); });
+		});
+		const control = page.locator('#appearance-storage-test + .appearance-control');
+		await control.getByRole('button', { name: 'Appearance: System', exact: true }).click();
+		await expect(control.locator('.appearance-message')).toContainText('blocks appearance storage');
+		await control.getByRole('menuitemradio', { name: 'Dark', exact: true }).click();
+		await expect.poll(() => page.locator('.explorer-heading').evaluate(header => getComputedStyle(header).backgroundColor)).toBe('rgb(31, 31, 31)');
+		await expect(control.locator('.appearance-message')).toContainText('could not save');
+		assert.deepEqual({ errors, warnings: warnings.length }, { errors: [], warnings: 2 });
 	} finally { await browser.close(); await panel.close(); }
 });

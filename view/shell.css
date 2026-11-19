@@ -14,6 +14,7 @@ body { margin: 0; }
 .snapshot-info > p { margin-top: 8px; }
 @media (max-width: 479px) {
 	.site-bar { gap: 8px; }
+	.checkout-details { gap: 4px; }
 	.book-title { font-size: 13px; }
 	.brand-product, #refresh-label { display: none; }
 }
@@ -28,13 +29,15 @@ body { margin: 0; }
 .codicon-search { --chrome-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.0195 10.7266C9.06578 11.5217 7.83875 12 6.5 12C3.46243 12 1 9.53757 1 6.5C1 3.46243 3.46243 1 6.5 1C9.53757 1 12 3.46243 12 6.5C12 7.83875 11.5217 9.06578 10.7266 10.0195L13.8535 13.1464C14.0488 13.3417 14.0488 13.6583 13.8535 13.8536C13.6583 14.0488 13.3417 14.0488 13.1464 13.8536L10.0195 10.7266ZM11 6.5C11 4.01472 8.98528 2 6.5 2C4.01472 2 2 4.01472 2 6.5C2 8.98528 4.01472 11 6.5 11C8.98528 11 11 8.98528 11 6.5Z'/%3E%3C/svg%3E"); }
 .codicon-close { --chrome-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13.85 13.1502C14.05 13.3502 14.05 13.6602 13.85 13.8602C13.75 13.9602 13.62 14.0102 13.5 14.0102C13.38 14.0102 13.24 13.9602 13.15 13.8602L8 8.71023L2.85 13.8602C2.75 13.9602 2.62 14.0102 2.5 14.0102C2.38 14.0102 2.24 13.9602 2.15 13.8602C1.95 13.6602 1.95 13.3502 2.15 13.1502L7.3 8.00023L2.15 2.85023C1.95 2.65023 1.95 2.34023 2.15 2.14023C2.35 1.94023 2.66 1.94023 2.86 2.14023L8.01 7.29023L13.16 2.14023C13.36 1.94023 13.67 1.94023 13.87 2.14023C14.07 2.34023 14.07 2.65023 13.87 2.85023L8.72 8.00023L13.87 13.1502H13.85Z'/%3E%3C/svg%3E"); }
 .codicon-menu { --chrome-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 3.5C2 3.22386 2.22386 3 2.5 3H13.5C13.7761 3 14 3.22386 14 3.5C14 3.77614 13.7761 4 13.5 4H2.5C2.22386 4 2 3.77614 2 3.5ZM2 7.5C2 7.22386 2.22386 7 2.5 7H13.5C13.7761 7 14 7.22386 14 7.5C14 7.77614 13.7761 8 13.5 8H2.5C2.22386 8 2 7.77614 2 7.5ZM2 11.5C2 11.2239 2.22386 11 2.5 11H13.5C13.7761 11 14 11.2239 14 11.5C14 11.7761 13.7761 12 13.5 12H2.5C2.22386 12 2 11.7761 2 11.5Z'/%3E%3C/svg%3E"); }
+.codicon-color-mode { --chrome-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.00195C6.61553 1.00195 5.26216 1.4125 4.11101 2.18167C2.95987 2.95084 2.06266 4.04409 1.53285 5.32317C1.00303 6.60225 0.86441 8.00972 1.13451 9.36759C1.4046 10.7255 2.07129 11.9727 3.05026 12.9517C4.02922 13.9307 5.27651 14.5974 6.63437 14.8675C7.99224 15.1375 9.3997 14.9989 10.6788 14.4691C11.9579 13.9393 13.0511 13.0421 13.8203 11.8909C14.5895 10.7398 15 9.38642 15 8.00195C15 6.14544 14.2625 4.36496 12.9498 3.05221C11.637 1.73945 9.85652 1.00195 8 1.00195ZM8 14.002V2.00195C9.5913 2.00195 11.1174 2.63409 12.2426 3.75931C13.3679 4.88453 14 6.41065 14 8.00195C14 9.59325 13.3679 11.1194 12.2426 12.2446C11.1174 13.3698 9.5913 14.002 8 14.002Z'/%3E%3C/svg%3E"); }
+.codicon-check { --chrome-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13.6572 3.13573C13.8583 2.9465 14.175 2.95614 14.3643 3.15722C14.5535 3.35831 14.5438 3.675 14.3428 3.86425L5.84277 11.8642C5.64597 12.0494 5.33756 12.0446 5.14648 11.8535L1.64648 8.35351C1.45121 8.15824 1.45121 7.84174 1.64648 7.64647C1.84174 7.45121 2.15825 7.45121 2.35351 7.64647L5.50976 10.8027L13.6572 3.13573Z'/%3E%3C/svg%3E"); }
 .chrome-button, .chrome-icon-button { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; min-height: 26px; padding: 4px 8px; border: 1px solid var(--vscode-button-border, transparent); border-radius: var(--control-radius); font-size: 12px; line-height: 16px; }
 .chrome-button { color: var(--vscode-button-foreground, var(--page)); background: var(--vscode-button-background, var(--accent)); }
 .chrome-button:not(:disabled):hover { background: var(--vscode-button-hoverBackground, color-mix(in srgb, var(--accent) 90%, var(--ink))); }
 .chrome-button.secondary { color: var(--vscode-button-secondaryForeground, var(--ink)); background: var(--vscode-button-secondaryBackground, var(--recessed)); border-color: var(--vscode-button-secondaryBorder, var(--line)); }
 .chrome-button.secondary:not(:disabled):hover { background: var(--vscode-button-secondaryHoverBackground, color-mix(in srgb, var(--recessed) 92%, var(--ink))); }
 .chrome-icon-button { width: 26px; padding: 4px; color: var(--vscode-icon-foreground, var(--ink)); background: transparent; border: 0; }
-.chrome-icon-button:not(:disabled):hover { background: var(--vscode-toolbar-hoverBackground, var(--recessed)); }
+.chrome-icon-button:not(:disabled):hover, .appearance-control > .chrome-icon-button[aria-expanded="true"] { background: var(--vscode-toolbar-hoverBackground, var(--recessed)); }
 .chrome-icon-button:disabled:hover { background: transparent; }
 .chrome-button:not(.secondary):disabled:hover { background: var(--vscode-button-background, var(--accent)); }
 :is(.chrome-button, .chrome-icon-button):focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--focus)); outline-offset: -2px; }
@@ -49,9 +52,18 @@ details[open] > .chrome-disclosure > .chrome-icon { transform: rotate(90deg); }
 .checkout-split > #checkout-toggle { width: 26px; padding-inline: 4px; border-start-start-radius: 0; border-end-start-radius: 0; border-inline-start-color: var(--vscode-button-separator, var(--line)); }
 #checkout-toggle[aria-expanded="true"] { background: var(--vscode-button-secondaryHoverBackground, var(--recessed)); }
 #checkout-toggle[aria-expanded="true"] .chrome-icon { transform: rotate(180deg); }
-.checkout-popup { position: fixed; inset: auto; box-sizing: border-box; display: grid; gap: 12px; width: min(420px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; margin: 0; padding: 16px; border: 1px solid var(--vscode-editorWidget-border, var(--line)); border-radius: var(--outer-radius); background: var(--vscode-editorWidget-background, var(--page)); color: var(--vscode-editorWidget-foreground, var(--ink)); box-shadow: var(--vscode-shadow-lg, 0 4px 12px color-mix(in srgb, var(--ink) 18%, transparent)); font-size: 13px; line-height: 1.5; }
-.checkout-popup:not(:popover-open) { display: none; }
-.checkout-popup h2 { font-size: 13px; }
+.chrome-popup { position: fixed; inset: auto; box-sizing: border-box; display: grid; gap: 12px; max-height: calc(100dvh - 16px); overflow: auto; margin: 0; padding: 16px; border: 1px solid var(--vscode-editorWidget-border, var(--line)); border-radius: var(--outer-radius); background: var(--vscode-editorWidget-background, var(--page)); color: var(--vscode-editorWidget-foreground, var(--ink)); box-shadow: var(--vscode-shadow-lg, 0 4px 12px color-mix(in srgb, var(--ink) 18%, transparent)); font-size: 13px; line-height: 1.5; }
+.chrome-popup:not(:popover-open) { display: none; }
+.chrome-popup h2 { font-size: 13px; }
+.checkout-popup { width: min(420px, calc(100vw - 16px)); }
+.appearance-control { display: flex; flex: none; }
+.appearance-popup { width: min(160px, calc(100vw - 16px)); gap: 0; padding: 4px; border-color: var(--vscode-menu-border, var(--line)); background: var(--vscode-menu-background, var(--page)); color: var(--vscode-menu-foreground, var(--ink)); }
+.appearance-choices { display: grid; min-width: 0; }
+.appearance-choices button { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 4px 8px; border: 0; border-radius: var(--control-radius); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.appearance-choices button:is(:hover, :focus-visible) { background: var(--vscode-menu-selectionBackground, var(--recessed)); color: var(--vscode-menu-selectionForeground, var(--ink)); }
+.appearance-choices button:focus-visible { outline: 1px solid var(--vscode-menu-selectionBorder, var(--focus)); outline-offset: -1px; }
+.appearance-choices [aria-checked="false"] > .chrome-icon { visibility: hidden; }
+.appearance-message { padding: 8px; color: var(--vscode-errorForeground, var(--ink)); font-size: 12px; }
 #checkout-form { display: grid; gap: 8px; }
 #checkout-help, #checkout-location { color: var(--vscode-descriptionForeground, var(--muted)); font-size: 12px; }
 .checkout-error { color: var(--vscode-errorForeground, var(--ink)); overflow-wrap: anywhere; }
@@ -66,13 +78,19 @@ input.chrome-input:is([type="search"], [type="text"]) { border-color: var(--vsco
 #checkout-form button { justify-self: end; }
 #checkout-form [hidden] { display: none; }
 @media (forced-colors: active) {
-	.checkout-popup { box-shadow: none; border-color: CanvasText; }
+	.chrome-icon { color: CanvasText; }
+	button:disabled .chrome-icon { color: GrayText; }
+	.chrome-popup { box-shadow: none; border-color: CanvasText; }
 	.chrome-button { border-color: ButtonText; }
-	.chrome-icon-button:not(:disabled):hover { outline: 1px dashed Highlight; }
+	.chrome-icon-button:not(:disabled, :focus-visible, [aria-expanded="true"]):hover { outline: 1px dashed Highlight; }
+	.chrome-icon-button[aria-expanded="true"]:not(:disabled, :focus-visible) { outline: 1px solid Highlight; outline-offset: -1px; }
 	:is(.chrome-button, .chrome-icon-button):focus-visible { outline-color: Highlight; outline-style: solid; }
 	details:not([open]) > .chrome-disclosure:hover:not(:focus-visible) { outline: 1px dashed Highlight; outline-offset: -1px; }
 	details[open] > .chrome-disclosure:not(:focus-visible) { outline: 1px solid Highlight; outline-offset: -1px; }
 	.chrome-disclosure:focus-visible { outline-color: Highlight; outline-style: solid; }
+	.appearance-choices button:is(:hover, :focus-visible) { background: Highlight; color: HighlightText; forced-color-adjust: none; }
+	.appearance-choices button:is(:hover, :focus-visible) > .chrome-icon { color: HighlightText; }
+	.appearance-choices button:focus-visible { outline-color: HighlightText; }
 }
 #checkout-mode { margin-top: 8px; max-width: 75ch; }
 #checkout-mode:empty { display: none; }

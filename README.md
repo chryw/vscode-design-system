@@ -2,7 +2,38 @@
 
 Browse design guidance from your current VS Code checkout, or choose another local clone or worktree. The viewer is an independent Copilot plugin. The [`chryw/design-system-exploration` branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration) provides the full curated book, token references, and live examples; other branches provide a source library without requiring exploration metadata.
 
-The viewer and the content update separately: plugin updates change the browsing UI; your selected checkout supplies the guidance, tokens, styles, and examples. This is a local viewer, not a hosted website.
+The viewer and the content update separately: plugin updates change the browsing UI; your selected checkout supplies the guidance, tokens, styles, and examples. The live viewer runs locally. [Published snapshots](https://chryw.github.io/vscode-design-system/) freeze a selected revision into a browser-only book, with no installation or checkout required.
+
+## Architecture
+
+The design system has three kinds of guidance, owned by the product repository rather than this plugin:
+
+| Kind | Where it lives in the VS Code checkout | What it describes |
+| --- | --- | --- |
+| Foundations | `.github/design-system/{topic}.design.md` | Shared decisions such as typography, spacing, colors, motion, and accessibility. |
+| Components | Beside the implementation, such as `src/vs/base/browser/ui/button/button.design.md` | A reusable control's usage, behavior, pitfalls, and accessibility. |
+| Patterns | `.github/design-system/{topic}.design.md` | How components work together for a recurring task, such as a management modal or an AI-assisted experience. |
+
+Components stay beside their code so an implementation change brings its guidance into view. Foundations and patterns stay in one shared, flat folder because they span features rather than having one code owner. The [topic map](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/topics.json) connects those sources to the book. Agents can find and apply the same guidance through the product's [instructions, skills, and source-validation workflow](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/README.md), without installing the viewer.
+
+```text
+VS Code checkout                         This repository
+.github/design-system/
+  topics.json          topic map         adapters/vscode/  source readers
+  {topic}.design.md    shared specs  -->  model/            validated projections
+  content/             source curation   runtime/          serving and lifecycle
+src/vs/.../ui/{control}/                  view/             navigation and rendering
+  {control}.design.md  component spec     scripts/          CLI, export, and releases
+  {control}.ts         implementation     tests/            viewer checks
+```
+
+The plugin reads saved Markdown, token registrations, APIs, styles, and selected examples from the **selected checkout**. It derives a shared projection for the canvas, local browser, portable snapshot, and headless agent commands; it does not keep another copy of the guidance or infer design rules from a screenshot.
+
+Product code remains authoritative for values and behavior. Specifications explain design intent and link to that code. Existing UI fixtures can illustrate a topic, but they are not the component inventory: one topic may use several fixtures, a fixture may serve several topics, and guidance does not require a matching fixture.
+
+The current checkout uses `content/` metadata for component curation, explicit section bindings, and specimen relationships. This is source composition, not executable page layout or a second set of specifications.
+
+See [architecture and runtime contracts](docs/architecture.md) for the module boundaries, topic/document protocols, source refresh, and state lifecycle. The product checkout owns [guidance authoring and validation](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/README.md); this repository owns the viewer.
 
 ## Quick setup with an agent
 
@@ -46,6 +77,7 @@ If opening reports that `design-book` is already owned by a different canvas, th
 - **Another branch:** select a worktree already on that branch. The canvas never pulls, switches branches, or creates worktrees. If you change branches externally, it reloads the checkout's catalog.
 - **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; the main **Refresh** button rereads saved content, the topic catalog, and live examples from the selected checkout while preserving the current view. It does not open the checkout picker, update the viewer, or fetch Git changes.
 - **Reading:** one compact global bar contains the site name, **Back**/**Forward**, and **Refresh**. Wide windows show a topic sidebar; smaller windows use the left menu button to open the same navigation on the left. The article title and section links form a separate local header; the overview scrolls with the content. On the smallest panes, the brand shortens and Refresh uses its labeled icon.
+- **Appearance:** use the half-light/half-dark icon in the global bar to choose **System**, **Light**, or **Dark** in both the canvas and portable snapshots. Light and Dark override the host/browser preference for this reader only; examples keep their own theme choices. System follows automatic appearance again.
 - **Contributor resources:** at the end of a topic, expand this optional section when changing its guidance or implementation. Links have readable names with repository paths underneath and open files in a separate tab. A topic can use several files, and one file can serve several topics. This is separate from selecting a checkout.
 
 A checkout with `.github/design-system/topics.json` provides curated topics; the exploration branch contains the full book. A checkout without it provides **Source library** for local product Markdown, instructions, skills, and available design guidance. It does not borrow missing content from another branch. Malformed or incompatible sources report errors.

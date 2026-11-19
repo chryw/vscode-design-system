@@ -4,9 +4,10 @@
 	font-display: block;
 	src: url("/codicon.ttf") format("truetype");
 }
+html { color-scheme: light dark; }
 @scope (.design-reference) {
 :scope {
-	color-scheme: light dark;
+	color-scheme: inherit;
 	--page: light-dark(#ffffff, #1f1f1f);
 	--recessed: light-dark(#f8f8f8, #181818);
 	--ink: light-dark(#242424, #cccccc);
@@ -279,8 +280,8 @@ pre { white-space: pre-wrap; tab-size: 4; }
 .prose pre { max-height: 65vh; overflow: auto; background: var(--recessed); padding: 16px; border-radius: var(--inner-radius); }
 .prose blockquote { margin-left: 0; padding-left: 16px; border-left: 2px solid var(--line); color: var(--muted); }
 .table-scroll { overflow: auto; }
-.prose table { border-collapse: collapse; width: 100%; }
-.prose th, .prose td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 8px 12px; min-width: 100px; }
+.markdown-table { border-collapse: collapse; width: 100%; }
+.markdown-table th, .markdown-table td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 8px 12px; min-width: 100px; overflow-wrap: normal; }
 .source { padding: 24px; }
 .source h1 { font-size: 18px; overflow-wrap: anywhere; }
 .source pre { overflow: auto; white-space: pre; }

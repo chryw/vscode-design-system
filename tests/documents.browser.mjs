@@ -186,6 +186,23 @@ test('portable navigation retains document links and page history without live A
 		await expect(browse).toBeFocused();
 		await page.getByRole('button', { name: 'Back', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Source library');
+		const appearance = page.getByRole('button', { name: /^Appearance:/ });
+		await appearance.focus();
+		await page.keyboard.press('Enter');
+		const menu = page.getByRole('menu', { name: 'Appearance', exact: true });
+		assert.deepEqual(await menu.getByRole('menuitemradio').allTextContents(), ['System', 'Light', 'Dark']);
+		await expect(page.locator('.appearance-popup h2, .appearance-popup p:visible')).toHaveCount(0);
+		await page.keyboard.press('d');
+		await expect(menu.getByRole('menuitemradio', { name: 'Dark', exact: true })).toBeFocused();
+		await page.keyboard.press('Space');
+		await expect(menu).toBeHidden();
+		await expect(appearance).toBeFocused();
+		await page.reload();
+		await expect(page.locator('h1')).toHaveText('Source library');
+		await expect(appearance).toHaveAttribute('aria-label', 'Appearance: Dark');
+		await appearance.click();
+		await expect(menu.getByRole('menuitemradio', { name: 'Dark', exact: true })).toBeChecked();
+		await page.keyboard.press('Escape');
 		assert.deepEqual({ errors, apiRequests }, { errors: [], apiRequests: [] });
 	} finally { await browser.close(); await panel.close(); }
 });

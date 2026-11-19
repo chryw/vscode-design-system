@@ -16,6 +16,7 @@ The viewer is a documentation reader. Keep its controls consistent with VS Code 
 | Compact toolbar action | `chrome-icon-button` with an accessible name and `codicon(...)` |
 | Search or enter text | Labeled native input with `chrome-input` |
 | Choose one value | Native `select` inside `chrome-select`, with the shared decorative chevron |
+| Show anchored options | Native popover with `chrome-popup` and `anchorPopup(...)` for positioning and dismissal |
 | Choose a fixture variant | `variantChoices(...)`; preserve its native radio semantics |
 | Copy a token | `tokenButton(...)`, including its local copy feedback |
 | Open a repository file | `sourceLink(...)`; preserve its allowlisted target and new-tab announcement |
@@ -32,6 +33,7 @@ Native `details` owns the expanded state and Enter/Space behavior; do not add re
 - Use the existing Codicon helper and icon set. Do not use Unicode lookalikes, browser markers, or a second icon library for viewer chrome.
 - Product specimens, theme illustrations, embedded fixtures, and intentional motion studies keep their source-defined styling. Do not apply a blanket viewer-control reset to them.
 - Existing Motion playback uses larger icon targets for operating a demonstration, and token-copy/grid controls retain their content-specific layouts. Preserve those deliberate roles rather than making every button the same size.
+- Markdown guidance tables use the renderer's `markdown-table` class and shared table rules in `view/canvas.css`: left-aligned headers, top-aligned cells, consistent cell padding, and row separators inside the horizontal scroll wrapper. Keep this styling on the table itself, not only a `.prose` ancestor: compositions such as Motion can move rendered Markdown children out of that wrapper. Specialized token, color, API, and fixture tables retain their purpose-specific layouts.
 
 ## Preserve the reader hierarchy
 

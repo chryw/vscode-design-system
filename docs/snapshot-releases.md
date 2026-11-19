@@ -2,6 +2,8 @@
 
 A snapshot is a frozen, self-contained book with interactive examples. Readers need only a modern browser, not VS Code, Node.js, or a repository checkout. GitHub Releases provides the download; GitHub Pages provides the browsable link.
 
+The exported book includes the same **Appearance** picker as the live canvas: **System**, **Light**, or **Dark**. It defaults to the browser's preference rather than forcing dark mode. Explicit choices are remembered for that browser origin when storage is available; product examples retain their own theme choices. Existing published snapshots are frozen and need a new build/deployment to gain this control.
+
 The prepared product checkout builds the snapshot locally using the existing exporter. GitHub Actions only verifies and deploys the finished release assets, so deployment needs no product build, npm credentials, or extra repository secrets.
 
 For the complete software-and-snapshot workflow, use the repository's [release skill](../.github/skills/release/SKILL.md). Use `snapshot-v<software-version>` for a release companion. After successful deployment, the Action adds its browser link to the matching software release without replacing existing notes; the snapshot's viewer commit must match that release exactly.

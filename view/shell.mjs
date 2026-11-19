@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { mountReference } from './reference.mjs';
-import { node, request, problemDetails, showProblem, createPageHistory } from './ui.mjs';
+import { node, request, problemDetails, showProblem, createPageHistory, createAppearancePicker, anchorPopup } from './ui.mjs';
 import { bookTitle, topicId, visibleTopicIds } from './topics/catalog.mjs';
 import { createBookNavigation } from './book-navigation.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
@@ -21,6 +21,7 @@ const checkoutPath = document.querySelector('#checkout-path');
 const checkoutForm = document.querySelector('#checkout-form');
 const checkoutPicker = document.querySelector('#checkout-picker');
 const checkoutToggle = document.querySelector('#checkout-toggle');
+createAppearancePicker(document.querySelector('.page-history'), lifetime.signal);
 const pageHistory = createPageHistory(() => applyURL().then(() => focusArticle(state.scope.active)).catch(problem), lifetime.signal);
 const contents = createBookNavigation(navigation, id => {
 	void navigate(id).then(() => focusArticle(id)).catch(error => {
@@ -47,31 +48,7 @@ const problem = error => {
 	if (!message) { message = problemDetails('shell-problem'); document.querySelector('.explorer-heading').after(message); }
 	showProblem(message, 'Canvas update failed — details', error.message);
 };
-function positionCheckout({ opening = false } = {}) {
-	if (!opening && !checkoutPicker.matches(':popover-open')) { return; }
-	const trigger = checkoutToggle.getBoundingClientRect();
-	const popup = opening ? { width: Number.parseFloat(getComputedStyle(checkoutPicker).width), height: 0 } : checkoutPicker.getBoundingClientRect();
-	const below = innerHeight - trigger.bottom - 8;
-	const above = trigger.top - 8;
-	const height = Math.min(popup.height, Math.max(below, above));
-	checkoutPicker.style.maxHeight = `${Math.max(below, above)}px`;
-	checkoutPicker.style.top = `${below >= popup.height || below >= above ? trigger.bottom + 4 : trigger.top - height - 4}px`;
-	checkoutPicker.style.left = `${Math.max(8, Math.min(trigger.right - popup.width, innerWidth - popup.width - 8))}px`;
-}
-const popupObserver = new ResizeObserver(positionCheckout);
-popupObserver.observe(checkoutPicker);
-lifetime.signal.addEventListener('abort', () => popupObserver.disconnect(), { once: true });
-window.addEventListener('resize', positionCheckout, { signal: lifetime.signal });
-window.addEventListener('scroll', positionCheckout, { passive: true, signal: lifetime.signal });
-checkoutPicker.addEventListener('beforetoggle', event => {
-	const open = event.newState === 'open';
-	checkoutToggle.setAttribute('aria-expanded', String(open));
-	if (open) { positionCheckout({ opening: true }); }
-}, { signal: lifetime.signal });
-checkoutPicker.addEventListener('toggle', event => {
-	if (event.target !== checkoutPicker) { return; }
-	if (event.newState === 'open') { positionCheckout(); }
-}, { signal: lifetime.signal });
+anchorPopup(checkoutPicker, checkoutToggle, lifetime.signal);
 document.querySelector('.checkout-split').addEventListener('keydown', event => {
 	if (event.key === 'ArrowDown') {
 		event.preventDefault();
@@ -126,13 +103,6 @@ checkoutChoice.addEventListener('change', () => {
 	checkoutPath.previousElementSibling.hidden = !other;
 	checkoutPath.required = other;
 	if (other) { checkoutPath.focus(); }
-}, { signal: lifetime.signal });
-checkoutPicker.addEventListener('keydown', event => {
-	if (event.key === 'Escape' && checkoutPicker.matches(':popover-open')) {
-		event.preventDefault();
-		checkoutPicker.hidePopover();
-		checkoutToggle.focus();
-	}
 }, { signal: lifetime.signal });
 let checkoutRefresh;
 function reloadCheckout() {

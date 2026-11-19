@@ -145,7 +145,7 @@ test('plugin packaging declares a native canvas entry without copying product co
 		name: manifest.name, extensions: manifest.extensions, version: manifest.version,
 		entry: readFileSync(new URL('extensions/vscode-design-system/extension.mjs', root), 'utf8').includes("import '../../extension.mjs'"),
 		release: marketplace.plugins[0].version,
-	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.4.1', entry: true, release: manifest.version });
+	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.4.2', entry: true, release: manifest.version });
 });
 
 test('same-checkout catalog refresh preserves navigation, adopts additions and moves, and rejects broken candidates transactionally', async t => {

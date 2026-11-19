@@ -138,6 +138,7 @@ export function markdown(text, headingLevel = 3, options = {}) {
 				const wrapper = document.createElement('div');
 				wrapper.className = 'table-scroll';
 				table = document.createElement('table');
+				table.className = 'markdown-table';
 				wrapper.append(table); content.append(wrapper);
 			}
 			const row = document.createElement('tr');

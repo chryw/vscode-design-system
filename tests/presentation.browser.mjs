@@ -217,6 +217,69 @@ test('viewer search fields and command controls share dimensions and honor seman
 	} finally { await browser.close(); await panel.close(); }
 });
 
+test('Markdown tables retain shared alignment and spacing outside the prose wrapper', { timeout: 60000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'motion' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await mockFixtureRenderer(page, root, motionControls.map(control => control.id));
+		await page.goto(panel.url);
+		const style = table => table.evaluate(table => {
+			const text = table.rows[1].cells[0].firstChild;
+			const word = text.textContent.trim().split(/\s+/).reduce((first, second) => first.length >= second.length ? first : second);
+			const offset = text.textContent.indexOf(word);
+			const range = document.createRange();
+			range.setStart(text, offset);
+			range.setEnd(text, offset + word.length);
+			return {
+				cells: [...table.querySelectorAll('th, td')].every(cell => {
+					const style = getComputedStyle(cell);
+					return style.textAlign === 'left' && style.verticalAlign === 'top'
+						&& style.padding === '8px 12px' && style.borderBottomStyle === 'solid' && style.borderBottomWidth === '1px';
+				}),
+				columns: [...table.rows[0].cells].every((header, index) =>
+					Math.abs(header.getBoundingClientRect().left - table.rows[1].cells[index].getBoundingClientRect().left) < 1),
+				borderCollapse: getComputedStyle(table).borderCollapse,
+				fontSize: getComputedStyle(table).fontSize,
+				lineHeight: getComputedStyle(table).lineHeight,
+				padding: getComputedStyle(table.rows[1].cells[0]).padding,
+				wordsIntact: range.getClientRects().length === 1,
+			};
+		});
+		for (const colorScheme of ['light', 'dark']) {
+			for (const forcedColors of ['none', 'active']) {
+				await page.emulateMedia({ colorScheme, forcedColors });
+				for (const width of [320, 800, 1440]) {
+					await page.setViewportSize({ width, height: 900 });
+					const styles = [];
+					for (const id of ['motion', 'elevation']) {
+						panel.setScope({ operation: 'all', active: id });
+						const article = page.locator(`[data-topic="${id}"]`);
+						await expect(article).toBeVisible();
+						await expect(article).toHaveAttribute('aria-busy', 'false');
+						await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+						const table = article.locator('.table-scroll table').first();
+						await expect(table.locator('th').first()).toHaveText(id === 'motion' ? 'Intent' : 'Relationship');
+						styles.push(await style(table));
+						assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${id}, ${width}px`);
+						assert.equal(await table.evaluate(table => {
+							const scroll = table.parentElement;
+							scroll.scrollLeft = scroll.scrollWidth;
+							return table.getBoundingClientRect().right <= scroll.getBoundingClientRect().right + 1;
+						}), true, `${id}: last column is reachable at ${width}px`);
+					}
+					assert.deepEqual(styles[0], styles[1], `${colorScheme}, ${forcedColors}, ${width}px`);
+					assert.deepEqual({ cells: styles[0].cells, columns: styles[0].columns, collapse: styles[0].borderCollapse, wordsIntact: styles[0].wordsIntact },
+						{ cells: true, columns: true, collapse: 'collapse', wordsIntact: true });
+				}
+			}
+		}
+		assert.deepEqual(errors, []);
+	} finally { await browser.close(); await panel.close(); }
+});
+
 test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
 	const read = file => readFileSync(path.join(root, file), 'utf8');
 	const authored = readPage(read, 'typography').authored;
