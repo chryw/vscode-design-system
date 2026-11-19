@@ -217,9 +217,8 @@ test('duration studies isolate source timing, compare together, and keep product
 		await expect(page.locator('#motion-foundations')).toContainText('Choose the least change that explains the relationship.');
 		assert.equal(await page.locator('.motion-doc [data-motion-preset], #motion-authoring, #motion-presets').count(), 0);
 		assert.doesNotMatch(await page.locator('.motion-doc').textContent(), /Preset contract|Default tokens|interpolation-error|Source ownership|Analytic peak speed|travel\/s|Analysis unavailable/);
-		await page.locator('.topic-files > summary').click();
-		assert.equal(new URL(await page.locator('.topic-files a').filter({ hasText: motionGuidanceFile }).first().getAttribute('href'), panel.url).searchParams.get('file'), motionGuidanceFile);
-		await page.keyboard.press('Escape');
+		await page.locator('.contributor-resources > summary').click();
+		assert.equal(new URL(await page.locator('.contributor-resources li').filter({ hasText: motionGuidanceFile }).getByRole('link').getAttribute('href'), panel.url).searchParams.get('file'), motionGuidanceFile);
 		await study.getByRole('link', { name: 'base scale', exact: true }).click();
 		const reference = page.locator('[data-topic="tokens"] #tokens-motion');
 		await expect(reference).toBeFocused();

@@ -77,7 +77,7 @@ test('canvas Back and Forward restore cross-topic anchors and reading position w
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('compact sticky navigation excludes overview, exposes topic files, and reloads the checkout catalog', { timeout: 30000 }, async t => {
+test('compact reading headers exclude overview and repository controls while retaining contributor resources', { timeout: 30000 }, async t => {
 	const fixture = navigationCheckout(t);
 	const panel = await createExplorer(fixture.root, { watchCheckout: false });
 	const browser = await chromium.launch({ headless: true });
@@ -110,14 +110,15 @@ test('compact sticky navigation excludes overview, exposes topic files, and relo
 						searchClear: innerWidth < 760 || search.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(search).paddingLeft) >= searchIcon.getBoundingClientRect().right + 4,
 					};
 				}), { siteStuck: true, pageStuck: true, introGone: true, oneRow: true, sectionClear: true, noOverflow: true, compactToolbar: true, searchClear: true }, `${colorScheme} ${width}px`);
-				const files = article.locator('.topic-files > summary');
+				const files = article.locator('.contributor-resources > summary');
 				await files.focus();
 				await page.keyboard.press('Enter');
 				await page.keyboard.press('Tab');
-				await expect(article.locator('.topic-files a').first()).toBeFocused();
-				await expect(article.locator('.topic-files a').first()).toHaveAttribute('href', /\/source\?file=src%2Fvs%2Ffeature%2Ffirst.md/);
-				assert.deepEqual(await article.locator('.topic-files a').allTextContents(), ['src/vs/feature/first.md', 'src/vs/feature/shared.md']);
-				await page.keyboard.press('Escape');
+				await expect(article.locator('.contributor-resources a').first()).toBeFocused();
+				await expect(article.locator('.contributor-resources a').first()).toHaveAttribute('href', /\/source\?file=src%2Fvs%2Ffeature%2Ffirst.md/);
+				assert.deepEqual(await article.locator('.contributor-resources .repository-path').allTextContents(), ['src/vs/feature/first.md', 'src/vs/feature/shared.md']);
+				await files.focus();
+				await page.keyboard.press('Space');
 				await expect(files).toBeFocused();
 			}
 		}

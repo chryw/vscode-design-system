@@ -20,7 +20,7 @@ import { createDocumentCheckout } from './document-helpers.mjs';
 const root = workspaceRoot;
 const widths = [320, 390, 500, 800, 1440];
 
-test('topic files are distinct from explicitly curated further reading', { timeout: 60000 }, async t => {
+test('repository references are collapsed contributor resources after the article and further reading', { timeout: 60000 }, async t => {
 	const fixture = createDocumentCheckout(t);
 	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'topics.json'), 'utf8'));
 	const references = [
@@ -35,22 +35,30 @@ test('topic files are distinct from explicitly curated further reading', { timeo
 		const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 		const errors = [];
 		page.on('pageerror', error => errors.push(error.message));
+		await mockFixtureRenderer(page, root, ['icon-label', 'button', 'input', 'radio']);
 		await page.goto(panel.url);
 		const article = page.locator('[data-topic="typography"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const footer = article.locator('.topic-actions');
-		const sources = article.locator('.topic-files');
+		const sources = article.locator('.contributor-resources');
 		const reading = footer.locator('.topic-references');
+		await expect(article.locator('.topic-context details')).toHaveCount(0);
+		await expect(sources).not.toHaveAttribute('open', '');
+		await expect(sources.locator('summary')).toHaveText('Contributor resources');
+		await expect(sources.locator('p')).toContainText('updating this topic');
+		assert.equal(await sources.evaluate(sources => sources.parentElement.classList.contains('topic-actions')
+			&& Boolean(sources.previousElementSibling.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
 		await sources.locator('summary').focus();
 		await page.keyboard.press('Enter');
 		await page.keyboard.press('Tab');
 		await expect(sources.locator('a').first()).toBeFocused();
-		await page.keyboard.press('Escape');
+		await sources.locator('summary').focus();
+		await page.keyboard.press('Space');
 		await reading.locator('summary').focus();
 		await page.keyboard.press('Enter');
 		await page.keyboard.press('Tab');
 		await expect(reading.getByRole('link', { name: /^Text spacing/ })).toBeFocused();
-		assert.ok((await sources.locator('a').allTextContents()).includes('.github/design-system/typography.design.md'));
+		assert.ok((await sources.locator('.repository-path').allTextContents()).includes('.github/design-system/typography.design.md'));
 		assert.deepEqual(await reading.locator('li').evaluateAll(items => items.map(item => ({
 			title: item.querySelector('a').textContent, url: item.querySelector('a').href, description: item.querySelector('p').textContent,
 			target: item.querySelector('a').target, rel: item.querySelector('a').rel,
@@ -62,7 +70,7 @@ test('topic files are distinct from explicitly curated further reading', { timeo
 					await page.setViewportSize({ width, height: 900 });
 					assert.deepEqual(await footer.evaluate(footer => {
 						const bounds = element => element.getBoundingClientRect();
-						const items = [...footer.querySelectorAll('li')];
+						const items = [...footer.querySelectorAll('li')].filter(item => item.getClientRects().length);
 						const focused = document.activeElement;
 						return {
 							disclosuresAligned: [...footer.children].every(child => Math.abs(bounds(child).left - bounds(footer).left) < 1),
@@ -77,12 +85,41 @@ test('topic files are distinct from explicitly curated further reading', { timeo
 		}
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await expect(article.locator('.topic-files')).toBeVisible();
+		await expect(article.locator('.contributor-resources')).toBeVisible();
 		panel.setScope({ operation: 'all', active: 'illustration' });
 		await expect(page.locator('[data-topic="illustration"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('[data-topic="illustration"] .topic-references')).toBeHidden();
-		await page.locator('[data-topic="illustration"] .topic-files > summary').click();
-		await expect(page.locator('[data-topic="illustration"] .topic-files a')).toHaveCount(1);
+		await page.locator('[data-topic="illustration"] .contributor-resources > summary').click();
+		await expect(page.locator('[data-topic="illustration"] .contributor-resources a')).toHaveCount(1);
+		panel.setScope({ operation: 'all', active: 'colors' });
+		const colors = page.locator('[data-topic="colors"]');
+		await expect(colors.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		const contributors = colors.locator('.contributor-resources');
+		const colorScroll = colors.getByRole('region', { name: 'Color tokens across four themes; scroll for more rows and columns', exact: true });
+		await colorScroll.evaluate(element => { element.scrollTop = 100; });
+		await expect(contributors).not.toHaveAttribute('open', '');
+		await contributors.locator('summary').focus();
+		await page.keyboard.press('Enter');
+		for (const width of [320, 800, 1440]) {
+			await page.setViewportSize({ width, height: 900 });
+			await contributors.locator('a').last().focus();
+			assert.deepEqual(await colors.evaluate(article => {
+				const resources = article.querySelector('.contributor-resources');
+				const content = article.querySelector('.topic-content');
+				const header = article.querySelector('.color-matrix thead');
+				const link = resources.querySelector('li:last-child a');
+				const bounds = link.getBoundingClientRect();
+				const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+				return {
+					afterContent: resources.getBoundingClientRect().top >= content.getBoundingClientRect().bottom,
+					linksInFlow: bounds.top >= content.getBoundingClientRect().bottom && bounds.bottom <= resources.getBoundingClientRect().bottom,
+					clearOfTable: resources.getBoundingClientRect().top >= header.getBoundingClientRect().bottom,
+					clickable: hit === link || link.contains(hit),
+					noHeaderControl: !article.querySelector('.topic-context details'),
+					noOverflow: document.documentElement.scrollWidth <= innerWidth,
+				};
+			}), { afterContent: true, linksInFlow: true, clearOfTable: true, clickable: true, noHeaderControl: true, noOverflow: true }, `Colors ${width}px`);
+		}
 		panel.setScope({ operation: 'all', active: 'documentation' });
 		await expect(page.locator('[data-topic="documentation"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('[data-topic="documentation"] .topic-actions')).toBeHidden();
@@ -818,9 +855,9 @@ test('component articles keep behavior and APIs without authoring commentary', {
 			await expect(article.locator('.component-doc-section h2')).toHaveText(['Usage', 'Accessibility', 'API']);
 			assert.ok(await article.locator('.component-api-table tbody tr').count() > 0);
 			await expect(article).not.toContainText(/not React props|new React|newly invented|This documents|primitive tag|proposed motion standard|existing fixture/);
-			await article.locator('.topic-files > summary').click();
-			await expect(article.locator('.topic-files a').first()).toBeVisible();
-			await expect(article.locator('.topic-files a').first()).not.toHaveAttribute('aria-description', /deployed product/);
+			await article.locator('.contributor-resources > summary').click();
+			await expect(article.locator('.contributor-resources a').first()).toBeVisible();
+			await expect(article.locator('.contributor-resources a').first()).not.toHaveAttribute('aria-description', /deployed product/);
 		}
 	} finally {
 		await browser?.close();

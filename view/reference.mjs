@@ -68,15 +68,15 @@ export function mountReference(root, props, host) {
 	const guidance = node('div', undefined, 'topic-intro');
 	let metadata;
 	const actions = node('footer', undefined, 'topic-actions');
-	const sourceDocuments = node('details', undefined, 'topic-files');
+	const sourceDocuments = node('details', undefined, 'contributor-resources');
 	const references = node('details', undefined, 'topic-references');
 	actions.hidden = true;
-	actions.append(references);
+	actions.append(references, sourceDocuments);
 	const outline = node('nav', undefined, 'article-outline');
 	outline.setAttribute('aria-label', 'On this page');
 	outline.hidden = true;
 	const header = node('div', undefined, 'topic-heading');
-	header.append(heading, sourceDocuments);
+	header.append(heading);
 	const context = node('div', undefined, 'topic-context');
 	context.append(header, outline);
 	root.replaceChildren(context, guidance, problem, content, actions, status);
@@ -88,17 +88,6 @@ export function mountReference(root, props, host) {
 	const contextObserver = new ResizeObserver(measureContext);
 	contextObserver.observe(context);
 	root.ownerDocument.defaultView.addEventListener('resize', measureContext);
-	const dismissFiles = event => {
-		if (!sourceDocuments.contains(event.target)) { sourceDocuments.open = false; }
-	};
-	root.ownerDocument.addEventListener('click', dismissFiles);
-	sourceDocuments.addEventListener('keydown', event => {
-		if (event.key === 'Escape' && sourceDocuments.open) {
-			event.preventDefault();
-			sourceDocuments.open = false;
-			sourceDocuments.querySelector('summary').focus();
-		}
-	});
 	const revealSection = target => {
 		for (let element = target; element && element !== content; element = element.parentElement) {
 			if (element instanceof HTMLDetailsElement) { element.open = true; }
@@ -264,24 +253,23 @@ export function mountReference(root, props, host) {
 			guidance.hidden = unavailable || !guidance.hasChildNodes();
 			sourceDocuments.replaceChildren();
 			const sourceList = node('ul');
-			for (const document of system.sourceDocuments ?? []) {
+			const addSource = (source, label) => {
 				const item = node('li');
-				item.append(sourceLink(document.source, document.id));
+				item.append(sourceLink(source, label), node('code', source.file, 'repository-path'));
 				sourceList.append(item);
+			};
+			for (const document of system.sourceDocuments ?? []) {
+				addSource(document.source, document.title);
 			}
 			if (!unavailable && policy.source && !system.sourceDocuments?.some(document => document.id === policy.source.file)
 				&& system.sourceFiles.includes(policy.source.file)) {
-				const item = node('li');
-				item.append(sourceLink(policy.source, policy.source.file));
-				sourceList.append(item);
+				addSource(policy.source, policy.source.file.split('/').at(-1));
 			}
 			sourceDocuments.hidden = !sourceList.hasChildNodes();
 			if (!sourceDocuments.hidden) {
-				const panel = node('div', undefined, 'topic-files-panel');
-				panel.append(node('p', 'Guidance and implementation files used by this topic. Files may contribute to more than one topic.', 'muted'), sourceList);
 				const summary = node('summary');
-				summary.append(codicon('chevron-right'), node('span', 'Topic files'));
-				sourceDocuments.append(summary, panel);
+				summary.append(codicon('chevron-right'), node('span', 'Contributor resources'));
+				sourceDocuments.append(summary, node('p', 'Open these repository files when updating this topic\'s guidance or implementation. Files open in a new tab.', 'muted'), sourceList);
 			}
 			references.replaceChildren();
 			references.hidden = !system.topicReferences?.length;
@@ -299,7 +287,7 @@ export function mountReference(root, props, host) {
 				}
 				references.append(node('summary', 'Further reading'), list);
 			}
-			actions.hidden = references.hidden;
+			actions.hidden = references.hidden && sourceDocuments.hidden;
 			measureContext();
 			showAnchor();
 			host.onSnapshot(system);
@@ -323,7 +311,6 @@ export function mountReference(root, props, host) {
 		dispose: () => {
 			loader.dispose();
 			contextObserver.disconnect();
-			root.ownerDocument.removeEventListener('click', dismissFiles);
 			root.ownerDocument.defaultView.removeEventListener('resize', measureContext);
 			root.replaceChildren();
 		},
