@@ -16,16 +16,21 @@ export function createRepository(input) {
 		throw new Error('Invalid design-system repository projection');
 	}
 	const { controls, aliases } = createControls(input.curation, input.toolkit.specifications);
-	if (input.book?.components !== undefined) {
-		validateBook(input.book);
+	validateBook(input.book);
+	if (input.book.components !== undefined) {
 		const { components, ...book } = input.book;
 		const topics = controls.map(control => ({
 			id: `component-${control.id}`, title: control.name, group: 'Components', section: 'components', controlId: control.id,
 			aliases: [control.id, ...(control.aliases ?? [])], compare: true, fixture: Boolean(control.groups.length),
 			content: control.content, hidden: control.hidden, renderer: 'components', page: components.page,
+			kind: 'component', ...(control.design ? { design: control.design } : {}),
 		}));
 		input = { ...input, book: { ...book, topics: book.topics.flatMap(topic => topic.id === components.after ? [topic, ...topics] : [topic]) } };
 	}
+	const isVisibleComponent = topic => topic.group === 'Components' && !topic.hidden && topic.navigation !== 'utility';
+	const orderedComponents = input.book.topics.filter(isVisibleComponent).sort((a, b) => a.title.localeCompare(b.title, 'en'));
+	let componentIndex = 0;
+	input = { ...input, book: { ...input.book, topics: input.book.topics.map(topic => isVisibleComponent(topic) ? orderedComponents[componentIndex++] : topic) } };
 	return {
 		...createCatalog(input.book, aliases), projection: input, controls, componentAliases: aliases,
 		motionControls: input.bindings.motion, spacingControl: input.bindings.spacing,

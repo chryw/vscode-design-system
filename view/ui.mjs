@@ -50,7 +50,7 @@ export function sourceLink(source, label = 'View source') {
 	link.href = `/source?file=${encodeURIComponent(source.file)}#L${source.line ?? 1}`;
 	link.target = '_blank';
 	link.rel = 'noopener noreferrer';
-	link.setAttribute('aria-label', `${label}: ${source.file}, line ${source.line ?? 1} (opens in a new tab)`);
+	link.setAttribute('aria-label', `${label === source.file ? 'Open' : label}: ${source.file}, line ${source.line ?? 1} (opens in a new tab)`);
 	return link;
 }
 
@@ -108,7 +108,7 @@ export function showProblem(target, title, message) {
 
 export function problem(error, context = document.activeElement) {
 	const target = context?.closest?.('.topic-pane')?.querySelector('#problem') ?? document.querySelector('#problem');
-	showProblem(target, 'Action failed — details', `${error.message}. Use Refresh topic to retry.`);
+	showProblem(target, 'Action failed — details', `${error.message}. Use Reload checkout to retry.`);
 }
 
 export async function request(url, options) {

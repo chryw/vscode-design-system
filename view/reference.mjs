@@ -8,7 +8,7 @@ import { node, sourceLink, problemDetails, showProblem } from './ui.mjs';
 import {getTopic,topicId} from './topics/catalog.mjs';
 import { pageJumps, topicPresentation } from './navigation-model.mjs';
 import { createTopicLoader } from './topic-lifecycle.mjs';
-import { documentMarkup, documentURL, renderSourceSections } from './documents.mjs';
+import { documentMarkup, renderSourceSections } from './documents.mjs';
 
 function composeChapter(stage, system, resolveResource) {
 	if (!system.page?.source) { return; }
@@ -68,18 +68,18 @@ export function mountReference(root, props, host) {
 	const guidance = node('div', undefined, 'topic-intro');
 	let metadata;
 	const actions = node('footer', undefined, 'topic-actions');
-	const sourceDocuments = node('details', undefined, 'source-documents');
+	const sourceDocuments = node('details', undefined, 'topic-files');
 	const references = node('details', undefined, 'topic-references');
 	actions.hidden = true;
-	actions.append(sourceDocuments, references);
+	actions.append(references);
 	const outline = node('nav', undefined, 'article-outline');
 	outline.setAttribute('aria-label', 'On this page');
 	outline.hidden = true;
 	const header = node('div', undefined, 'topic-heading');
-	header.append(heading);
+	header.append(heading, sourceDocuments);
 	const context = node('div', undefined, 'topic-context');
-	context.append(header, outline, guidance);
-	root.replaceChildren(context, problem, content, actions, status);
+	context.append(header, outline);
+	root.replaceChildren(context, guidance, problem, content, actions, status);
 	const measureContext = () => {
 		const height = context.getBoundingClientRect().height;
 		const top = Number.parseFloat(getComputedStyle(context).top) || 0;
@@ -88,6 +88,17 @@ export function mountReference(root, props, host) {
 	const contextObserver = new ResizeObserver(measureContext);
 	contextObserver.observe(context);
 	root.ownerDocument.defaultView.addEventListener('resize', measureContext);
+	const dismissFiles = event => {
+		if (!sourceDocuments.contains(event.target)) { sourceDocuments.open = false; }
+	};
+	root.ownerDocument.addEventListener('click', dismissFiles);
+	sourceDocuments.addEventListener('keydown', event => {
+		if (event.key === 'Escape' && sourceDocuments.open) {
+			event.preventDefault();
+			sourceDocuments.open = false;
+			sourceDocuments.querySelector('summary').focus();
+		}
+	});
 	const revealSection = target => {
 		for (let element = target; element && element !== content; element = element.parentElement) {
 			if (element instanceof HTMLDetailsElement) { element.open = true; }
@@ -150,6 +161,8 @@ export function mountReference(root, props, host) {
 			return { stage, ...presentation, sections, signal };
 		},
 		commit: ({ stage, count, context: documentContext, introduction, sections, signal }, system, input) => {
+			const focused = document.activeElement;
+			const focusedAnchor = content.contains(focused) && focused.tabIndex === -1 ? focused.id : '';
 			const focusedSearch = root.querySelector('input[type="search"]');
 			const restoreSearch = focusedSearch && document.activeElement === focusedSearch
 				? { start: focusedSearch.selectionStart, end: focusedSearch.selectionEnd, value: focusedSearch.value } : undefined;
@@ -159,7 +172,7 @@ export function mountReference(root, props, host) {
 			outline.hidden = sections.length < 2;
 			if (!outline.hidden) {
 				const list = node('ol');
-				outline.append(node('p', 'On this page'), list);
+				outline.append(list);
 				const locations = [];
 				let current;
 				const selectLocation = link => {
@@ -193,6 +206,12 @@ export function mountReference(root, props, host) {
 					if (!root.getClientRects().length) { return; }
 					const location = locations.findLast(({ target }) => target.getBoundingClientRect().top <= Math.max(24, Number.parseFloat(getComputedStyle(target).scrollMarginTop)) + 1) ?? locations[0];
 					selectLocation(location.link);
+					if (current && !outline.matches(':hover, :focus-within')) {
+						const bounds = current.getBoundingClientRect();
+						const viewport = outline.getBoundingClientRect();
+						if (bounds.left < viewport.left) { outline.scrollLeft -= viewport.left - bounds.left; }
+						else if (bounds.right > viewport.right) { outline.scrollLeft += bounds.right - viewport.right; }
+					}
 				};
 				const window = root.ownerDocument.defaultView;
 				window.addEventListener('scroll', trackLocation, { passive: true, signal });
@@ -208,6 +227,13 @@ export function mountReference(root, props, host) {
 					search.value = restoreSearch.value;
 					search.focus({ preventScroll: true });
 					search.setSelectionRange(restoreSearch.start, restoreSearch.end);
+				}
+				if (focusedAnchor) {
+					const destination = content.querySelector(`#${CSS.escape(focusedAnchor)}`);
+					if (destination) {
+						destination.tabIndex = -1;
+						destination.focus({ preventScroll: true });
+					}
 				}
 			}
 			if (input?.contentOnly) {
@@ -238,22 +264,23 @@ export function mountReference(root, props, host) {
 			guidance.hidden = unavailable || !guidance.hasChildNodes();
 			sourceDocuments.replaceChildren();
 			const sourceList = node('ul');
-			const primary = system.primarySourceDocument;
-			if (primary) {
+			for (const document of system.sourceDocuments ?? []) {
 				const item = node('li');
-				const link = node('a', primary.title);
-				link.href = documentURL(primary.id);
-				item.append(link);
+				item.append(sourceLink(document.source, document.id));
 				sourceList.append(item);
 			}
-			if (!unavailable && !['colors', 'spacing'].includes(props.section) && policy.source
-				&& policy.source.file !== primary?.source.file && system.sourceFiles.includes(policy.source.file)) {
+			if (!unavailable && policy.source && !system.sourceDocuments?.some(document => document.id === policy.source.file)
+				&& system.sourceFiles.includes(policy.source.file)) {
 				const item = node('li');
-				item.append(sourceLink(policy.source, 'View source'));
+				item.append(sourceLink(policy.source, policy.source.file));
 				sourceList.append(item);
 			}
 			sourceDocuments.hidden = !sourceList.hasChildNodes();
-			if (!sourceDocuments.hidden) { sourceDocuments.append(node('summary', 'Sources'), sourceList); }
+			if (!sourceDocuments.hidden) {
+				const panel = node('div', undefined, 'topic-files-panel');
+				panel.append(node('p', 'Guidance and implementation files used by this topic. Files may contribute to more than one topic.', 'muted'), sourceList);
+				sourceDocuments.append(node('summary', 'Topic files'), panel);
+			}
 			references.replaceChildren();
 			references.hidden = !system.topicReferences?.length;
 			if (!references.hidden) {
@@ -270,19 +297,14 @@ export function mountReference(root, props, host) {
 				}
 				references.append(node('summary', 'Further reading'), list);
 			}
-			actions.hidden = sourceDocuments.hidden && references.hidden;
+			actions.hidden = references.hidden;
 			measureContext();
 			showAnchor();
 			host.onSnapshot(system);
 		},
 		report: error => {
 			const message = error.message.replace(/^Couldn't load the design system: /, '').replace(/[.!?]$/, '');
-			showProblem(problem, snapshot ? "Couldn't refresh this topic — showing last loaded content" : "Couldn't load this topic — details", `${message}. Use Refresh topic to retry.`);
-			if (props.section === 'documentation') {
-				const back = node('a', 'Back to sources');
-				back.href = documentURL('', props);
-				problem.querySelector('p').append(' ', back);
-			}
+			showProblem(problem, snapshot ? 'Couldn\'t refresh this topic — showing last loaded content' : 'Couldn\'t load this topic — details', `${message}. Use Reload checkout to retry.`);
 			content.dataset.topicState = 'error';
 		},
 		busy: value => {
@@ -292,12 +314,14 @@ export function mountReference(root, props, host) {
 			root.setAttribute('aria-busy', String(value));
 		},
 	});
-	void loader.refresh();
+	const ready = loader.refresh();
 	return {
+		ready,
 		refresh: force => loader.refresh({ force }),
 		dispose: () => {
 			loader.dispose();
 			contextObserver.disconnect();
+			root.ownerDocument.removeEventListener('click', dismissFiles);
 			root.ownerDocument.defaultView.removeEventListener('resize', measureContext);
 			root.replaceChildren();
 		},

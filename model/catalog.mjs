@@ -54,7 +54,7 @@ export function validateBook(book) {
 		|| !book.topics.some(topic => topic.id === book.defaultTopic && !topic.hidden)
 		|| components !== undefined && (!components || typeof components !== 'object' || Array.isArray(components)
 			|| Object.keys(components).some(key => !['after', 'page'].includes(key))
-			|| !/^pages\/[a-z][a-z0-9-]*\.json$/.test(components.page)
+			|| !/^(?:pages|content\/topics)\/[a-z][a-z0-9-]*\.json$/.test(components.page)
 			|| !book.topics.some(topic => topic.id === components.after)
 			|| book.topics.some(topic => topic.section === 'components'))) {
 		throw new Error('Invalid design-system book manifest');
@@ -63,13 +63,17 @@ export function validateBook(book) {
 	return book.topics.map(topic => {
 		if (!topic || typeof topic.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(topic.id)
 			|| typeof topic.title !== 'string' || !topic.title || typeof topic.section !== 'string'
-			|| !['Foundations', 'Components', 'Guidance'].includes(topic.group) || !Object.hasOwn(renderers, topic.renderer)
+			|| !['Foundations', 'Patterns', 'Components', 'Guidance'].includes(topic.group) || !Object.hasOwn(renderers, topic.renderer)
 			|| !Array.isArray(topic.aliases) || topic.aliases.some(alias => typeof alias !== 'string' || !alias)
 			|| new Set(topic.aliases).size !== topic.aliases.length
 			|| typeof topic.compare !== 'boolean' || typeof topic.fixture !== 'boolean'
 			|| topic.hidden !== undefined && typeof topic.hidden !== 'boolean'
 			|| topic.navigation !== undefined && !['topic', 'utility'].includes(topic.navigation)
-			|| topic.page !== undefined && !/^pages\/[a-z][a-z0-9-]*\.json$/.test(topic.page)
+			|| topic.page !== undefined && !/^(?:pages|content\/topics)\/[a-z][a-z0-9-]*\.json$/.test(topic.page)
+			|| topic.kind !== undefined && !['foundation', 'component', 'pattern'].includes(topic.kind)
+			|| topic.design !== undefined && (typeof topic.design !== 'string'
+				|| !/^(?:\.github\/design-system|src\/vs)\/[\w/.-]+\.design\.md$/.test(topic.design)
+				|| topic.design.split('/').includes('..'))
 			|| topic.section !== 'components' && topic.section !== topic.id
 			|| topic.renderer !== 'guidance' && !sectionRenderers[topic.renderer]?.includes(topic.section)
 			|| topic.renderer === 'guidance' && Object.values(sectionRenderers).some(sections => sections.includes(topic.section))
@@ -82,7 +86,7 @@ export function validateBook(book) {
 }
 
 export function bookNavigation(catalog) {
-	const visible = catalog.filter(item => !item.hidden);
+	const visible = catalog.filter(item => !item.hidden && (item.id !== 'documentation' || catalog.length === 1));
 	return {
 		topics: visible.filter(item => item.navigation !== 'utility'),
 		utilities: visible.filter(item => item.navigation === 'utility'),

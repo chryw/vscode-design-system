@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { documentSection, isRepositoryPath, parseDocument } from '../../../model/documents.mjs';
+import { readBookSource } from '../../../runtime/book.mjs';
 
 export const bookRoot = '.github/design-system/';
 
@@ -79,7 +80,7 @@ export function readContent(read, file) {
 	return resolveContent(content, read, { source: textSource });
 }
 
-function validateChapter(authored, topic) {
+function validateChapter(authored, topic, hasGuidance) {
 	const text = value => typeof value === 'string' && value.trim().length > 0;
 	const rows = (value, columns) => Array.isArray(value) && value.length > 0
 		&& value.every(row => Array.isArray(row) && row.length === columns && row.every(text));
@@ -113,13 +114,13 @@ function validateChapter(authored, topic) {
 		|| topic === 'theming' && !text(authored.specimen)
 		|| topic === 'colors' && (!rows(authored.roles, 2) || !rows(authored.statusRoles, 2)
 			|| !['surfaces', 'accent', 'feedback', 'states'].every(id => rows([authored.previews?.[id]], 2)))
-		|| ['accessibility', 'content'].includes(topic) && (!Array.isArray(authored.headingOrder) || !authored.headingOrder.length || !authored.headingOrder.every(text))) {
+		|| (topic === 'content' || topic === 'accessibility' && !hasGuidance) && (!Array.isArray(authored.headingOrder) || !authored.headingOrder.length || !authored.headingOrder.every(text))) {
 		throw new Error(`Invalid authored chapter: ${topic}`);
 	}
 }
 
 export function readPage(read, topic) {
-	const manifest = JSON.parse(read(`${bookRoot}book.json`));
+	const manifest = readBookSource(file => read(`${bookRoot}${file}`))?.book;
 	if (manifest?.version !== 1 || !Array.isArray(manifest.topics) || manifest.topics.some(item => !item || typeof item !== 'object' || Array.isArray(item))) {
 		throw new Error('Invalid book manifest');
 	}
@@ -189,7 +190,6 @@ export function readPage(read, topic) {
 	} else {
 		authored = readContent(read, page.content);
 	}
-	validateChapter(authored, topic);
 	if (topic === 'elevation' && page.source !== authored.markdownSource && !page.sources.some(reference => reference.file === authored.markdownSource)) {
 		throw new Error(`Elevation Markdown source must be listed in page sources: ${authored.markdownSource}`);
 	}
@@ -210,5 +210,6 @@ export function readPage(read, topic) {
 		const document = documentSection(parseDocument(read(file), { id: file }), binding);
 		return { ...document, sectionId: binding.id, title: binding.title ?? document.title, before: binding.before };
 	});
+	validateChapter(authored, topic, sourceSections.length > 0);
 	return { page, authored, sourceSections };
 }

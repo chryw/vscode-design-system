@@ -8,9 +8,10 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { motionTokenCategory } from '../../../view/motion-reference.mjs';
-import { resolveContent, sourcePath } from './authored.mjs';
+import { bookRoot, contentPath, resolveContent, sourcePath } from './authored.mjs';
+import { readBookSource } from '../../../runtime/book.mjs';
 
-export const motionPageFile = '.github/design-system/pages/motion.json';
+export const motionPageFile = '.github/design-system/content/topics/motion.json';
 
 export const motionDefinitionFiles = [
 	'src/vs/platform/theme/common/motionRegistry.ts',
@@ -287,12 +288,16 @@ export function readMotionDefinitions({ root, read, source }) {
 
 /** Resolve the Motion page's heading references without executing authored content. */
 export function readMotionPage(context, definitions, presetBindingIds) {
-	const descriptor = JSON.parse(context.read(motionPageFile));
+	const manifest = readBookSource(file => context.read(`${bookRoot}${file}`))?.book;
+	const binding = manifest?.topics.find(topic => topic.id === 'motion')?.page;
+	if (!binding) { throw new Error('Missing Motion source composition'); }
+	const pageFile = contentPath(binding);
+	const descriptor = JSON.parse(context.read(pageFile));
 	const page = resolveContent(descriptor, context.read, { source: descriptor.textSource });
 	if (page.version !== 1 || page.id !== 'motion' || page.renderer !== 'motion' || typeof page.source !== 'string'
 		|| page.sources !== undefined && (!Array.isArray(page.sources) || page.sources.length > 12
 			|| page.sources.some(entry => !entry || typeof entry.file !== 'string' || Object.keys(entry).some(key => key !== 'file')))) {
-		throw new Error(`Unsupported Motion page descriptor: ${motionPageFile}`);
+		throw new Error(`Unsupported Motion page descriptor: ${pageFile}`);
 	}
 	const files = [page.source, ...(page.sources ?? []).map(entry => entry.file)].map(sourcePath);
 	if (new Set(files).size !== files.length) { throw new Error('Duplicate Motion source'); }
@@ -439,5 +444,5 @@ export function readMotionPage(context, definitions, presetBindingIds) {
 		}
 	}
 	requireHeading('motion');
-	return { page, sections, intro: page.intro ?? sections.motion.markdown };
+	return { page, pageFile, sections, intro: page.intro ?? sections.motion.markdown };
 }

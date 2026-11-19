@@ -16,13 +16,13 @@ export function createDocumentCheckout(t) {
 	const directory = mkdtempSync(path.join(checkoutRoot, '.build/design-documents-'));
 	const bookRoot = path.join(directory, '.github/design-system');
 	cpSync(repositoryRoot, bookRoot, { recursive: true });
-	const book = JSON.parse(readFileSync(path.join(repositoryRoot, 'book.json'), 'utf8'));
+	const book = JSON.parse(readFileSync(path.join(repositoryRoot, 'topics.json'), 'utf8'));
 	delete book.documentAliases;
 	book.documentSources = [
 		{ id: 'product', title: 'Product documentation', root: 'src/vs', origin: 'product' },
 		{ id: 'instructions', title: 'Instructions', root: '.github/instructions', origin: 'instruction' },
 	];
-	writeFileSync(path.join(bookRoot, 'book.json'), JSON.stringify(book));
+	writeFileSync(path.join(bookRoot, 'topics.json'), JSON.stringify(book));
 	const write = (file, text) => {
 		const target = path.join(directory, file);
 		mkdirSync(path.dirname(target), { recursive: true });

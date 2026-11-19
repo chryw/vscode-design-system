@@ -8,9 +8,9 @@ import { node, request, problemDetails, showProblem } from './ui.mjs';
 import { bookTitle, topicId, visibleTopicIds } from './topics/catalog.mjs';
 import { createBookNavigation } from './book-navigation.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
-import { documentURL } from './documents.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation, UnknownTopicError } from '../model/catalog.mjs';
+import { createPageHistory } from './page-history.mjs';
 
 const lifetime = new AbortController();
 const panes = new Map();
@@ -20,6 +20,9 @@ const refresh = document.querySelector('#refresh');
 const checkoutChoice = document.querySelector('#checkout-choice');
 const checkoutPath = document.querySelector('#checkout-path');
 const checkoutForm = document.querySelector('#checkout-form');
+const checkoutPicker = document.querySelector('#checkout-picker');
+const checkoutSummary = checkoutPicker.querySelector('summary');
+const pageHistory = createPageHistory(() => applyURL().then(() => focusArticle(state.scope.active)).catch(problem), lifetime.signal);
 const contents = createBookNavigation(navigation, id => {
 	void navigate(id).then(() => focusArticle(id)).catch(error => {
 		problem(error);
@@ -32,6 +35,7 @@ let events;
 let pendingNavigations = 0;
 let refreshing = false;
 let reconnecting = false;
+let selectedCheckout;
 const connectionStatus = node('p', undefined, 'meta');
 connectionStatus.setAttribute('role', 'status');
 connectionStatus.hidden = true;
@@ -43,17 +47,14 @@ const problem = error => {
 	let message = document.querySelector('#shell-problem');
 	if (!message) { message = problemDetails('shell-problem'); document.querySelector('.explorer-heading').after(message); }
 	showProblem(message, 'Canvas update failed — details', error.message);
-	if (new URL(location.href).searchParams.get('section') === 'documentation') {
-		const back = node('a', 'Browse sources');
-		back.href = documentURL();
-		message.querySelector('p').append(' ', back);
-	}
 };
-async function updateCheckoutChoices() {
-	const result = await request('/api/checkouts', { signal: lifetime.signal });
+async function updateCheckoutChoices(result) {
+	result ??= await request('/api/checkouts', { signal: lifetime.signal });
+	selectedCheckout = result.checkout;
 	checkoutChoice.replaceChildren(...result.checkouts.map(checkout => {
-		const option = node('option', `${checkout.branch} — ${checkout.root}`);
+		const option = node('option', `${checkout.branch} — ${checkout.root.split(/[\\/]/).at(-1)}`);
 		option.value = checkout.root;
+		option.title = checkout.root;
 		option.selected = checkout.root === result.checkout;
 		return option;
 	}));
@@ -61,6 +62,10 @@ async function updateCheckoutChoices() {
 	other.value = '';
 	checkoutChoice.append(other);
 	checkoutPath.value = result.checkout;
+	checkoutChoice.title = result.checkout;
+	checkoutSummary.title = `Choose a checkout. Current checkout: ${result.checkout}`;
+	document.querySelector('#checkout').textContent = result.checkout.split(/[\\/]/).at(-1);
+	document.querySelector('#checkout-location').textContent = result.checkout;
 	checkoutPath.hidden = true;
 	checkoutPath.required = false;
 	checkoutPath.previousElementSibling.hidden = true;
@@ -70,21 +75,38 @@ async function updateCheckoutChoices() {
 }
 checkoutChoice.addEventListener('change', () => {
 	const other = !checkoutChoice.value;
+	checkoutChoice.title = checkoutChoice.value;
+	document.querySelector('#checkout-location').textContent = checkoutChoice.value;
 	checkoutPath.hidden = !other;
 	checkoutPath.previousElementSibling.hidden = !other;
 	checkoutPath.required = other;
 	if (other) { checkoutPath.focus(); }
 }, { signal: lifetime.signal });
+checkoutPicker.addEventListener('keydown', event => {
+	if (event.key === 'Escape' && checkoutPicker.open) {
+		event.preventDefault();
+		checkoutPicker.open = false;
+		checkoutSummary.focus();
+	}
+}, { signal: lifetime.signal });
+document.addEventListener('click', event => {
+	if (!checkoutPicker.contains(event.target)) { checkoutPicker.open = false; }
+}, { signal: lifetime.signal });
 let checkoutRefresh;
 function reloadCheckout() {
 	checkoutRefresh ??= (async () => {
-		for (const pane of panes.values()) { pane.reference.dispose(); pane.element.remove(); }
-		panes.clear();
+		const checkouts = await request('/api/checkouts', { signal: lifetime.signal });
+		const sameCheckout = selectedCheckout === checkouts.checkout;
+		if (!sameCheckout) {
+			for (const pane of panes.values()) { pane.reference.dispose(); pane.element.remove(); }
+			panes.clear();
+		}
 		setRepository(await request('/api/repository', { signal: lifetime.signal }));
 		catalog = (await request('/api/catalog', { signal: lifetime.signal })).topics;
 		reconcile(await request('/api/state', { signal: lifetime.signal }));
-		history.replaceState(null, '', urlFor(state.scope.active));
-		await updateCheckoutChoices();
+		pageHistory.replace(urlFor(state.scope.active));
+		await updateCheckoutChoices(checkouts);
+		if (sameCheckout) { await refreshVisible(); }
 		document.querySelector('#shell-problem')?.remove();
 	})().finally(() => { checkoutRefresh = undefined; });
 	return checkoutRefresh;
@@ -96,8 +118,8 @@ checkoutForm.addEventListener('submit', async event => {
 	try {
 		await post('/api/checkout', { root: checkoutChoice.value || checkoutPath.value });
 		await reloadCheckout();
-		document.querySelector('#checkout-picker').open = false;
-		document.querySelector('#checkout-picker summary').focus();
+		checkoutPicker.open = false;
+		checkoutSummary.focus();
 	} catch (error) { problem(error); }
 	finally { button.disabled = false; }
 }, { signal: lifetime.signal });
@@ -113,11 +135,12 @@ const urlFor = id => {
 function focusArticle(id) {
 	const element = panes.get(id)?.element;
 	if (!element || element.hidden || state.scope.active !== id) { return; }
+	if (state.views[id]?.anchor && element.contains(document.activeElement)) { return; }
 	const heading = element.querySelector('h1');
 	const destination = heading?.textContent ? heading : element;
 	destination.tabIndex = -1;
 	destination.focus({ preventScroll: true });
-	destination.scrollIntoView({ block: 'start' });
+	if (!state.views[id]?.anchor) { destination.scrollIntoView({ block: 'start' }); }
 }
 function syncArticleLinks(element) {
 	for (const link of element.querySelectorAll('a[href]')) {
@@ -140,6 +163,7 @@ function syncArticleLinks(element) {
 	}
 }
 async function navigate(id) {
+	pageHistory.push(urlFor(id));
 	const layout = state.scope.layout === 'compare' && !state.scope.topics.includes(id) ? 'single' : state.scope.layout;
 	await changeScope({ operation: state.scope.mode === 'all' ? 'all' : 'add', topics: [id], active: id, layout });
 }
@@ -148,14 +172,15 @@ async function changeScope(input) {
 	try {
 		const next = await post('/api/scope', input);
 		reconcile(next);
-		history.pushState(null, '', urlFor(next.scope.active));
+		pageHistory.replace(urlFor(next.scope.active));
+		await ready();
 	} finally { pendingNavigations--; }
 }
 function reconcile(next) {
 	state = next;
 	refresh.disabled = refreshing;
-	refresh.textContent = refreshing ? 'Refreshing…' : visibleTopicIds(state.scope).length > 1 ? 'Refresh topics' : 'Refresh topic';
-	refresh.title = `Reload ${visibleTopicIds(state.scope).map(id => catalog.find(topic => topic.id === id).title).join(' and ')}, including live examples`;
+	refresh.textContent = refreshing ? 'Reloading…' : 'Reload checkout';
+	refresh.title = 'Reread saved content, the topic list, and live examples from the selected checkout';
 	const all = state.scope.mode === 'all';
 	document.body.classList.toggle('book-layout', all);
 	const restoreFocus = navigation.contains(document.activeElement);
@@ -166,7 +191,7 @@ function reconcile(next) {
 	const visible = visibleTopicIds(state.scope);
 	if (!panes.size) { target.replaceChildren(); }
 	for (const [id, pane] of panes) {
-		if (!state.scope.topics.includes(id) && !all) { pane.reference.dispose(); pane.element.remove(); panes.delete(id); continue; }
+		if (!catalog.some(topic => topic.id === id) || !state.scope.topics.includes(id) && !all) { pane.reference.dispose(); pane.element.remove(); panes.delete(id); continue; }
 		pane.wasHidden = pane.element.hidden;
 		pane.element.hidden = !visible.includes(id);
 	}
@@ -201,15 +226,13 @@ function reconcile(next) {
 				onQuery: query => {
 					state.views[id] = { ...state.views[id], query };
 					pane.signature = JSON.stringify(state.views[id]);
-					history.replaceState(null, '', urlFor(state.scope.active));
+					pageHistory.replace(urlFor(state.scope.active));
 					void post('/api/view', { topic: id, patch: { query } }).catch(problem);
 				},
 				onSnapshot: system => {
 					syncArticleLinks(element);
 					if (document.activeElement === element) { focusArticle(id); }
 					document.title = `${system.library?.document?.title ?? catalog.find(item => item.id === state.scope.active).title} — ${bookTitle}`;
-					const { kind, branch, worktree, modified } = system.provenance;
-					document.querySelector('#checkout').textContent = `${kind} · ${worktree} · ${branch} · ${modified ? 'Modified' : 'Clean'}`;
 				},
 			});
 		} else if (pane.wasHidden) {
@@ -228,57 +251,85 @@ function reconcile(next) {
 	if (restoreFocus && !all) { focusArticle(state.scope.active); }
 }
 const refreshVisible = () => Promise.all([...panes.values()].filter(pane => !pane.element.hidden).map(pane => pane.reference.refresh()));
+const ready = () => Promise.all([...panes.values()].filter(pane => !pane.element.hidden).map(pane => pane.reference.ready));
 refresh.addEventListener('click', async () => {
 	if (refreshing) { return; }
 	refreshing = true;
 	refresh.disabled = true;
-	refresh.textContent = 'Refreshing…';
+	refresh.textContent = 'Reloading…';
 	document.querySelector('#shell-problem')?.remove();
 	try {
-		const topics = [...panes.entries()].filter(([, pane]) => !pane.element.hidden).map(([id]) => id);
-		await post('/api/refresh', { topics });
-		await refreshVisible();
+		await post('/api/checkout', { root: selectedCheckout });
+		await reloadCheckout();
+		await ready();
+		document.querySelector('#checkout-status').textContent = 'Checkout reloaded';
 	} catch (error) {
 		problem(error);
 	} finally {
 		refreshing = false;
 		refresh.disabled = false;
-		refresh.textContent = visibleTopicIds(state.scope).length > 1 ? 'Refresh topics' : 'Refresh topic';
+		refresh.textContent = 'Reload checkout';
 	}
 }, { signal: lifetime.signal });
 async function applyURL() {
-	const url = new URL(location.href);
-	const current = await request('/api/state', { signal: lifetime.signal });
-	state = current;
-	if (url.searchParams.has('section')) {
-		const patch = readViewURL(url);
-		if (patch.section === 'components') { patch.controlId ??= ''; }
-		if (patch.section === 'documentation') {
-			patch.documentId ??= ''; patch.documentScope ??= ''; patch.documentOffset = Number(patch.documentOffset ?? 0);
-		}
-		patch.query ??= '';
-		if (patch.anchor === 'reference') { patch.anchor = ''; }
-		await post('/api/view', patch);
-		const active = topicId(patch);
-		const ids = [...new Set((url.searchParams.get('topics')?.split(',') ?? [active]).map(id => id === 'components' ? 'component-button' : id))];
-		if (!ids.includes(active)) { ids.push(active); }
-		const next = await post('/api/scope', { operation: url.searchParams.get('mode') === 'all' || patch.section === 'components' && !patch.controlId ? 'all' : 'replace', topics: ids, active, layout: url.searchParams.get('layout') ?? 'single' });
-		reconcile(next);
-	} else { reconcile(current); }
-	history.replaceState(null, '', urlFor(state.scope.active));
+	pendingNavigations++;
+	try {
+		const url = new URL(location.href);
+		const current = await request('/api/state', { signal: lifetime.signal });
+		state = current;
+		reconcile(current);
+		if (url.searchParams.has('section')) {
+			const patch = readViewURL(url);
+			if (patch.section === 'components') { patch.controlId ??= ''; }
+			if (patch.section === 'documentation') {
+				patch.documentId ??= ''; patch.documentScope ??= ''; patch.documentOffset = Number(patch.documentOffset ?? 0);
+			}
+			patch.query ??= '';
+			if (patch.anchor === 'reference') { patch.anchor = ''; }
+			await post('/api/view', patch);
+			const active = topicId(patch);
+			const ids = [...new Set((url.searchParams.get('topics')?.split(',') ?? [active]).map(id => id === 'components' ? 'component-button' : id))];
+			if (!ids.includes(active)) { ids.push(active); }
+			const next = await post('/api/scope', { operation: url.searchParams.get('mode') === 'all' || patch.section === 'components' && !patch.controlId ? 'all' : 'replace', topics: ids, active, layout: url.searchParams.get('layout') ?? 'single' });
+			reconcile(next);
+		} else { reconcile(current); }
+		pageHistory.replace(urlFor(state.scope.active));
+		await ready();
+	} finally { pendingNavigations--; }
 }
+document.addEventListener('click', event => {
+	const link = event.target.closest('a[href]');
+	if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) { return; }
+	const url = new URL(link.href);
+	if (url.origin !== location.origin || url.pathname !== '/' || !url.searchParams.has('section')) { return; }
+	event.preventDefault();
+	const patch = readViewURL(url);
+	const id = topicId(patch);
+	if (url.hash && id === state.scope.active && (patch.documentId ?? '') === (state.views[id].documentId ?? '')) {
+		pageHistory.replace(url);
+	} else { pageHistory.push(url); }
+	void applyURL().then(() => focusArticle(state.scope.active)).catch(problem);
+}, { signal: lifetime.signal });
+document.addEventListener('submit', event => {
+	if (!event.target.matches('.document-search')) { return; }
+	event.preventDefault();
+	const url = new URL('/', location.href);
+	url.search = new URLSearchParams(new FormData(event.target)).toString();
+	pageHistory.push(url);
+	void applyURL().then(() => focusArticle(state.scope.active)).catch(problem);
+}, { signal: lifetime.signal });
 async function start() {
 	setRepository(await request('/api/repository', { signal: lifetime.signal }));
 	catalog = (await request('/api/catalog', { signal: lifetime.signal })).topics;
-	await applyURL();
 	await updateCheckoutChoices();
+	await applyURL();
 	events = new EventSource('/api/events');
 	events.onmessage = event => {
 		const update = JSON.parse(event.data);
 		if (update.kind === 'checkout') { void reloadCheckout().catch(problem); return; }
 		if (update.kind === 'scope' || update.kind === 'view') {
 			reconcile(update.state);
-			if (!pendingNavigations) { history.replaceState(null, '', urlFor(state.scope.active)); }
+			if (!pendingNavigations) { pageHistory.replace(urlFor(state.scope.active)); }
 			if (reconnecting) {
 				reconnecting = false;
 				connectionStatus.hidden = true;
@@ -296,7 +347,6 @@ async function start() {
 		connectionStatus.hidden = false;
 	};
 }
-window.addEventListener('popstate', () => { void applyURL().catch(problem); }, { signal: lifetime.signal });
 window.addEventListener('pageshow', event => {
 	if (event.persisted) {
 		void request('/api/state', { signal: lifetime.signal }).then(next => { reconcile(next); return refreshVisible(); }).catch(problem);

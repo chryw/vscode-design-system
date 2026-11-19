@@ -28,6 +28,22 @@ test('the full canvas browses canonical component families and preserves grouped
 		const names = await navigation.locator('a[href]').evaluateAll(links => links
 			.filter(link => new URL(link.href).searchParams.get('section') === 'components').map(link => link.textContent));
 		assert.deepEqual(names, controls.filter(control => !control.hidden).map(control => control.name));
+		const group = navigation.locator(':scope > details').filter({ has: page.getByText('Components', { exact: true }) });
+		const componentNames = await group.locator('a[href]').allTextContents();
+		assert.deepEqual(componentNames, [...componentNames].sort((a, b) => a.localeCompare(b, 'en')));
+		await group.getByRole('link', { name: 'Menu', exact: true }).focus();
+		await page.keyboard.press('Tab');
+		await expect(group.getByRole('link', { name: 'Multi-select', exact: true })).toBeFocused();
+		const patterns = navigation.locator(':scope > details').filter({ has: page.getByText('Patterns', { exact: true }) });
+		await patterns.locator('summary').click();
+		assert.deepEqual(await patterns.locator('a[href]').allTextContents(), ['Modal']);
+		await patterns.getByRole('link', { name: 'Modal', exact: true }).focus();
+		await page.keyboard.press('Enter');
+		await expect(page.locator('[data-topic="modal"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(page.locator('[data-topic="modal"] h1')).toBeFocused();
+		await page.goto(new URL('/?section=modal&anchor=modal-composition&mode=all', panel.url).href);
+		await expect(page.locator('[data-topic="modal"] #modal-composition')).toBeVisible();
+		await expect(page.locator('[data-topic="modal"] #modal-scenarios')).toContainText('Remote environments');
 		const button = navigation.getByRole('link', { name: 'Button', exact: true });
 		if (!await button.isVisible()) { await navigation.getByText('Components', { exact: true }).click(); }
 		await button.focus();

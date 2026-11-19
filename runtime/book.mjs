@@ -27,18 +27,25 @@ export function validateBook(book) {
 	return book;
 }
 
-export function readBook(root = path.join(workspaceRoot, '.github/design-system')) {
-	const file = path.join(root, 'book.json');
-	let stat;
-	try { stat = statSync(file); }
-	catch (error) {
-		if (error.code !== 'ENOENT') { throw error; }
-		return basicBook();
+export function readBookSource(read) {
+	for (const file of ['topics.json', 'book.json']) {
+		let text;
+		try { text = read(file); }
+		catch (error) {
+			if (error.code === 'ENOENT') { continue; }
+			throw error;
+		}
+		try { return { file, book: validateBook(JSON.parse(text)) }; }
+		catch (error) { throw new Error(`Couldn't read ${file}: ${error.message}`); }
 	}
-	if (stat.size > 1024 * 1024) { throw new Error('Book manifest is too large'); }
-	contained(root, 'book.json');
-	try { return validateBook(JSON.parse(readFileSync(file, 'utf8'))); }
-	catch (error) { throw new Error(`Couldn't read book.json: ${error.message}`); }
+}
+
+export function readBook(root = path.join(workspaceRoot, '.github/design-system')) {
+	return readBookSource(file => {
+		const target = contained(root, file);
+		if (statSync(target).size > 1024 * 1024) { throw new Error('Topic map is too large'); }
+		return readFileSync(target, 'utf8');
+	})?.book ?? basicBook();
 }
 
 export function contentAssets(root = path.join(workspaceRoot, '.github/design-system')) {

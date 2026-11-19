@@ -32,6 +32,8 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await page.evaluate(() => document.fonts.ready);
 		const picker = page.locator('#checkout-picker summary');
+		await expect(picker).toContainText('Checkout:');
+		await expect(page.locator('.checkout-details > #checkout')).toHaveCount(0);
 		const geometry = () => page.evaluate(() => {
 			const bounds = selector => {
 				const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
@@ -47,14 +49,22 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 			await page.keyboard.press('Enter');
 			await expect(page.locator('#checkout-form')).toBeVisible();
 			assert.deepEqual(await geometry(), before, `Opening the checkout switcher at ${width}px`);
+			assert.equal(await page.locator('#checkout-form').evaluate(form => {
+				const trigger = document.querySelector('#checkout-picker summary').getBoundingClientRect();
+				const popup = form.getBoundingClientRect();
+				return popup.left >= 0 && popup.top > trigger.bottom && popup.right <= innerWidth;
+			}), true, `Picker anchored to its source at ${width}px`);
 			await page.getByLabel('Local worktree').selectOption('');
 			assert.deepEqual(await geometry(), before, `Showing a checkout path at ${width}px`);
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-			await picker.focus();
-			await page.keyboard.press('Enter');
+			await page.keyboard.press('Escape');
 			await expect(page.locator('#checkout-form')).toBeHidden();
+			await expect(picker).toBeFocused();
 			assert.deepEqual(await geometry(), before, `Closing the checkout switcher at ${width}px`);
 		}
+		await picker.click();
+		await page.locator('.book-title').click();
+		await expect(page.locator('#checkout-form')).toBeHidden();
 		await page.setViewportSize({ width: 1100, height: 900 });
 		await picker.focus();
 		await page.keyboard.press('Enter');
@@ -85,17 +95,17 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 
 test('new authored guidance renders through aliases, tracks saved edits and survives same-checkout catalog refresh', { timeout: 60000 }, async t => {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/book.json';
+	const manifest = '.github/design-system/topics.json';
 	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
 	const entry = { id: 'routing-study', section: 'routing-study', group: 'Guidance', title: 'Routing study',
-		renderer: 'guidance', aliases: ['previous-study'], page: 'pages/routing-study.json', fixture: false, compare: true };
+		renderer: 'guidance', aliases: ['previous-study'], page: 'content/topics/routing-study.json', fixture: false, compare: true };
 	const writeBook = (topics, includeLibrary = true) => fixture.write(manifest, JSON.stringify({
 		...book, components: undefined, references: {}, defaultTopic: entry.id,
 		topics: [...topics, ...(includeLibrary ? [book.topics.find(topic => topic.id === 'documentation')] : [])],
 	}));
 	const source = 'src/vs/feature/routing.md';
 	fixture.write(source, '# Routing study\n\n## Introduction\n\nLocal authored introduction.\n\n## Usage\n\nFirst saved guidance with a [related document](./feature-notes.md).\n');
-	fixture.write('.github/design-system/pages/routing-study.json', JSON.stringify({
+	fixture.write('.github/design-system/content/topics/routing-study.json', JSON.stringify({
 		version: 1, id: entry.id, renderer: 'guidance', source, content: {},
 		sections: [{ id: 'routing-usage', key: 'usage', heading: 'Usage' }],
 	}));
@@ -115,10 +125,10 @@ test('new authored guidance renders through aliases, tracks saved edits and surv
 		await expect(content.locator('#routing-usage')).toBeFocused();
 		const before = panel.state;
 		fixture.write(source, readFileSync(path.join(fixture.root, source), 'utf8').replace('First saved guidance', 'Updated saved guidance'));
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect(content).toContainText('Updated saved guidance');
-		const second = { ...entry, id: 'second-study', section: 'second-study', title: 'Second study', aliases: [], page: 'pages/second-study.json' };
-		fixture.write('.github/design-system/pages/second-study.json', JSON.stringify({
+		const second = { ...entry, id: 'second-study', section: 'second-study', title: 'Second study', aliases: [], page: 'content/topics/second-study.json' };
+		fixture.write('.github/design-system/content/topics/second-study.json', JSON.stringify({
 			version: 1, id: second.id, renderer: 'guidance', source, content: {},
 			guidance: [{ id: 'second-usage', heading: 'Usage' }],
 		}));

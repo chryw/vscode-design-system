@@ -47,5 +47,6 @@ module.exports = function (source) {
 		replace('module.createRequire(import.meta.url)', `module.createRequire('file:///snapshot/amdX.js')`);
 	}
 	source = source.replaceAll('Use Refresh to retry.', 'Reload the page to retry.');
+	source = source.replaceAll('Use Reload checkout to retry.', 'Reload the page to retry.');
 	return source;
 };

@@ -13,12 +13,12 @@ export function basicBook() {
 			{ id: 'product', title: 'Product documentation', root: 'src/vs', origin: 'product' },
 			{ id: 'instructions', title: 'Instructions', root: '.github/instructions', origin: 'instruction' },
 			{ id: 'skills', title: 'Skills', root: '.github/skills', origin: 'skill' },
-			{ id: 'guidance', title: 'Design guidance', root: '.github/design-system/guidance', origin: 'book' },
+			{ id: 'guidance', title: 'Design guidance', root: '.github/design-system', origin: 'book' },
 		],
 	};
 }
 
-export function basicProjection(book) {
+export function basicProjection(book = basicBook()) {
 	return {
 		format: 'vscode-design-repository', version: 1, mode: 'basic', book,
 		capabilities: { curatedTopics: false, liveExamples: false, documents: true },

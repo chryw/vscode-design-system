@@ -17,7 +17,7 @@ For the complete software-and-snapshot workflow, use the repository's [release s
 
 ## Build and inspect without publishing
 
-Use the Node.js version and prepared dependencies from the selected VS Code checkout. Releases require the full exploration book at `.github/design-system/book.json`; the viewer's basic source-browsing mode is not a portable book. The viewer can be newer than that checkout; incompatible content fails explicitly rather than falling back to another branch.
+Use the Node.js version and prepared dependencies from the selected VS Code checkout. Releases require the full exploration book at `.github/design-system/topics.json`; the viewer's basic source-browsing mode is not a portable book. The viewer can be newer than that checkout; incompatible content fails explicitly rather than falling back to another branch.
 
 From the viewer clone:
 

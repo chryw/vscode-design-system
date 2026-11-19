@@ -93,7 +93,7 @@ export async function renderFixturePreview(content, control, fixtureId, signal, 
 	const unavailable = error => {
 		clearTimeout(timeout);
 		clearTimeout(healthTimer);
-		message('unavailable', `${error.message}. Use Refresh to retry.`, true);
+		message('unavailable', `${error.message}. Use Reload checkout to retry.`, true);
 	};
 	const recover = async error => {
 		if (signal.aborted) { return; }

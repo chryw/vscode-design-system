@@ -77,7 +77,7 @@ export function createTopicResources(data) {
 		const binding = data.motionDocumentation.bindings.find(binding => binding.id === example.presetBindingId);
 		if (example.presetBindingId && !binding) { throw new Error(`Missing Motion example binding: ${example.presetBindingId}`); }
 		examples.push({ kind: 'motion-example', id: example.id, presetBindingId: example.presetBindingId,
-			source: { file: '.github/design-system/pages/motion.json', line: 1 }, ...(binding ? { bindingSource: binding.source } : {}) });
+			source: { file: data.motionDocumentation.pageFile, line: 1 }, ...(binding ? { bindingSource: binding.source } : {}) });
 	}
 	return { version: 1, guidance, definitions: definitions(data), examples };
 }

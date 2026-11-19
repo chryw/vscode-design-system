@@ -66,9 +66,7 @@ test('documents share the chapter title, introduction and outline order without 
 			}
 			await article.getByText('Document metadata', { exact: true }).click();
 			await expect(article.locator('.topic-metadata pre')).toHaveText('description: Reader hierarchy');
-			await article.getByRole('link', { name: 'Back to sources', exact: true }).click();
-			await expect(article.locator('h1')).toHaveText('Source library');
-			await expect(article.locator('.topic-metadata')).toHaveCount(0);
+			await expect(article.getByRole('link', { name: 'Back to sources', exact: true })).toHaveCount(0);
 		}
 	} finally { await browser.close(); await panel.close(); }
 });
@@ -86,7 +84,7 @@ test('Illustration has the same opening hierarchy in the chapter and the source 
 			introduction: await chapter.locator('.topic-intro').innerText(),
 			sections: await chapter.locator('.article-outline a').allTextContents(),
 		};
-		panel.setView({ section: 'documentation', documentId: '.github/design-system/guidance/illustration.design.md' });
+		panel.setView({ section: 'documentation', documentId: '.github/design-system/illustration.design.md' });
 		const reader = page.locator('[data-topic="documentation"]');
 		await expect(reader.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		assert.deepEqual({
@@ -99,44 +97,39 @@ test('Illustration has the same opening hierarchy in the chapter and the source 
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('book tools remain keyboard-accessible outside Foundations and topic filtering', { timeout: 30000 }, async () => {
+test('curated book navigation offers topics rather than a raw source library', { timeout: 30000 }, async () => {
 	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'accessibility' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 		await page.goto(panel.url);
 		const topics = page.getByRole('navigation', { name: 'Topics', exact: true });
-		await expect(topics.locator(':scope > details > summary')).toHaveText(['Foundations', 'Components']);
+		await expect(topics.locator(':scope > details > summary')).toHaveText(['Foundations', 'Patterns', 'Components']);
 		const foundations = topics.locator(':scope > details').filter({ has: page.getByText('Foundations', { exact: true }) });
 		await expect(foundations.getByRole('link', { name: 'Accessibility', exact: true })).toBeVisible();
 		await expect(foundations.getByRole('link', { name: 'Content', exact: true })).toBeVisible();
-		const sources = page.getByRole('navigation', { name: 'Book tools', exact: true }).getByRole('link', { name: 'Source library', exact: true });
-		await expect(topics.getByRole('link', { name: /Documentation|Source library/ })).toHaveCount(0);
-		assert.equal(await sources.evaluate(element => element.getBoundingClientRect().bottom <= innerHeight - 24), true);
-		await page.evaluate(() => scrollTo(0, 100));
-		await expect.poll(() => sources.evaluate(element => element.getBoundingClientRect().bottom <= innerHeight - 24)).toBe(true);
+		await expect(page.locator('#book-navigation').getByRole('link', { name: /Documentation|Source library/ })).toHaveCount(0);
 		const filter = page.getByRole('searchbox', { name: 'Search topics', exact: true });
 		for (const width of [1100, 390]) {
 			await page.setViewportSize({ width, height: 900 });
 			if (width < 760) { await page.getByRole('button', { name: 'Browse topics', exact: true }).click(); }
 			await filter.fill('no-topic-match');
 			await expect(page.getByText('No matching topics', { exact: true })).toBeVisible();
-			await expect(sources).toBeVisible();
-			await page.keyboard.press('Tab');
-			await expect(sources).toBeFocused();
+			await expect(page.getByRole('navigation', { name: 'Book tools', exact: true })).toBeHidden();
+			await filter.fill('Content');
+			await page.keyboard.press('ArrowDown');
+			await expect(topics.getByRole('link', { name: 'Content', exact: true })).toBeFocused();
 			await page.keyboard.press('Enter');
-			await expect(page.locator('[data-topic="documentation"] h1')).toBeFocused();
-			await expect(page.locator('[data-topic="documentation"] h1')).toHaveText('Source library');
-			assert.equal(panel.state.scope.active, 'documentation');
+			await expect(page.locator('[data-topic="content"] h1')).toBeFocused();
 			if (width < 760) {
 				await expect(topics).not.toBeVisible();
-				await expect(page.locator('.book-current')).toHaveText('Source library');
+				await expect(page.locator('.book-current')).toHaveText('Content');
 			}
 		}
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('portable navigation retains Source library, source search and document links without live APIs', { timeout: 30000 }, async () => {
+test('portable navigation retains document links and page history without live APIs', { timeout: 30000 }, async () => {
 	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'documentation' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -161,7 +154,8 @@ test('portable navigation retains Source library, source search and document lin
 			<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 			<link rel="stylesheet" href="/canvas.css"><link rel="stylesheet" href="/shell.css"><link rel="stylesheet" href="/book-navigation.css">
 			<script type="module" src="/portable.mjs"></script></head><body class="design-reference explorer book-layout">
-			<header class="explorer-heading"><time id="snapshot-date"></time></header>
+			<header class="explorer-heading"><time id="snapshot-date"></time>
+			<nav aria-label="Page history"><button id="history-back" disabled>Back</button><button id="history-forward" disabled>Forward</button></nav></header>
 			<div class="explorer-layout"><div id="book-navigation"></div><main id="reference" tabindex="-1"></main></div>
 			</body></html>` }));
 		await page.goto(new URL('/snapshot.html?topic=documentation', panel.url).href);
@@ -169,18 +163,18 @@ test('portable navigation retains Source library, source search and document lin
 		const topics = page.getByRole('navigation', { name: 'Topics', exact: true });
 		const tools = page.getByRole('navigation', { name: 'Book tools', exact: true });
 		await expect(topics.getByRole('link', { name: 'Source library', exact: true })).toHaveCount(0);
-		await expect(tools.getByRole('link', { name: 'Source library', exact: true })).toHaveAttribute('aria-current', 'page');
+		await expect(tools).toBeHidden();
 		const search = page.getByRole('searchbox', { name: 'Search sources', exact: true });
 		await search.fill('Design-token usage in CSS');
 		await search.press('Enter');
 		await page.getByRole('link', { name: 'Design-token usage in CSS', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Design-token usage in CSS');
-		await page.getByRole('link', { name: 'Back to sources', exact: true }).click();
+		await page.getByRole('button', { name: 'Back', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Source library');
 		await topics.locator('summary').click();
 		await topics.getByRole('link', { name: 'Accessibility', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Accessibility');
-		await tools.getByRole('link', { name: 'Source library', exact: true }).click();
+		await page.getByRole('button', { name: 'Back', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Source library');
 		assert.deepEqual({ errors, apiRequests }, { errors: [], apiRequests: [] });
 	} finally { await browser.close(); await panel.close(); }
@@ -199,7 +193,7 @@ test('new authored documents appear live, retain search drafts, render safely, a
 		const topics = page.getByRole('searchbox', { name: 'Search topics' });
 		await topics.fill('specifications');
 		await expect(page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'Source library', exact: true })).toHaveCount(0);
-		await expect(page.getByRole('navigation', { name: 'Book tools', exact: true }).getByRole('link', { name: 'Source library', exact: true })).toBeVisible();
+		await expect(page.getByRole('navigation', { name: 'Book tools', exact: true })).toBeHidden();
 		await expect(page.getByText('No matching topics', { exact: true })).toBeVisible();
 		await topics.fill('');
 		const search = page.getByRole('searchbox', { name: 'Search sources' });
@@ -236,7 +230,7 @@ test('new authored documents appear live, retain search drafts, render safely, a
 		await expect(page.getByRole('heading', { name: 'New design', level: 1, exact: true })).toBeVisible();
 		rmSync(path.join(fixture.root, id));
 		await expect(page.locator('#problem')).toContainText('not available', { timeout: 15000 });
-		await page.getByRole('link', { name: 'Back to sources', exact: true }).first().click();
+		await page.getByRole('button', { name: 'Back', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Source library', level: 1, exact: true })).toBeVisible();
 		assert.deepEqual(errors, []);
 		assert.equal((await (await page.request.get(new URL('/api/metrics', panel.url).href)).json()).fixtureRequests, 0);
@@ -253,11 +247,7 @@ test('canonical token guidance is self-contained with optional source access mat
 		await expect(guidance.getByRole('heading', { name: 'Using tokens', exact: true })).toBeVisible();
 		await expect(guidance).toContainText('Structural measurements are not automatically design tokens.');
 		await expect(guidance.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(0);
-		await page.getByRole('navigation', { name: 'Book tools', exact: true }).getByRole('link', { name: 'Source library', exact: true }).focus();
-		await page.keyboard.press('Enter');
-		await page.getByRole('searchbox', { name: 'Search sources', exact: true }).fill('Design-token usage in CSS');
-		await page.getByRole('searchbox', { name: 'Search sources', exact: true }).press('Enter');
-		await page.getByRole('link', { name: 'Design-token usage in CSS', exact: true }).click();
+		panel.setView({ section: 'documentation', documentId: '.github/instructions/design-tokens.instructions.md' });
 		await expect(page.getByRole('heading', { name: 'Design-token usage in CSS', level: 1, exact: true })).toBeVisible();
 		await page.getByRole('navigation', { name: 'On this page', exact: true }).getByRole('link', { name: 'Choose by role', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Choose by role', exact: true })).toBeFocused();
@@ -273,7 +263,7 @@ test('canonical token guidance is self-contained with optional source access mat
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('an unavailable document deep link leaves an actionable route back to the library', { timeout: 30000 }, async t => {
+test('an unavailable document deep link leaves topic navigation usable', { timeout: 30000 }, async t => {
 	const fixture = createDocumentCheckout(t);
 	const panel = await createExplorer(fixture.root, { bookRoot: fixture.bookRoot });
 	const browser = await chromium.launch({ headless: true });
@@ -284,15 +274,14 @@ test('an unavailable document deep link leaves an actionable route back to the l
 		await page.goto(url.href);
 		await page.locator('#shell-problem > summary').click();
 		await expect(page.locator('#shell-problem')).toContainText('not available');
-		await page.getByRole('link', { name: 'Browse sources', exact: true }).click();
-		await expect(page.getByRole('heading', { name: 'Source library', level: 1, exact: true })).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Feature notes', exact: true })).toBeVisible();
+		await expect(page.getByRole('searchbox', { name: 'Search topics', exact: true })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 	} finally { await browser.close(); await panel.close(); }
 });
 
 test('renamed design guidance renders from canonical sources and restores an old document bookmark', { timeout: 60000 }, async () => {
 	const old = 'src/vs/platform/theme/common/sizes/typography.md';
-	const canonical = 'src/vs/platform/theme/common/sizes/typography.design.md';
+	const canonical = '.github/design-system/typography.design.md';
 	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'documentation' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -316,7 +305,7 @@ test('renamed design guidance renders from canonical sources and restores an old
 			fixtures: (await (await page.request.get(new URL('/api/metrics', panel.url).href)).json()).fixtureRequests,
 			errors,
 		}, { id: canonical, source: canonical, canonicalListed: true, oldListed: false, fixtures: 0, errors: [] });
-		panel.setView({ section: 'documentation', documentId: 'src/vs/platform/theme/common/motion/motion.design.md', anchor: 'accessibility' });
+		panel.setView({ section: 'documentation', documentId: '.github/design-system/motion.design.md', anchor: 'accessibility' });
 		await expect(page.getByRole('heading', { name: 'Motion', level: 1, exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Accessibility', exact: true })).toBeFocused();
 		await expect(page.locator('.documentation')).toContainText('workbench.reduceMotion');

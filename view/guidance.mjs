@@ -14,7 +14,7 @@ export function renderSimplePage(content, system, host) {
 		for (const document of system.documents[page]) { content.append(markdown(document.text, 2)); }
 		return system.documents[page].length;
 	}
-	if (page === 'accessibility' || page === 'content') {
+	if ((page === 'accessibility' || page === 'content') && !system.sourceSections?.length) {
 		const order = chapterContent(system).headingOrder.map(title => title.toLowerCase());
 		const sections = [];
 		for (const document of system.documents[page]) {

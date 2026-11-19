@@ -275,7 +275,7 @@ test('elevation reads live tier guidance, registered radii, and actual shadow so
 		id, contrast: id.startsWith('Default High Contrast'),
 		editor: themes.themeGallery.find(theme => theme.id === id).palette.editor,
 	})));
-	assert.ok(system.sourceFiles.includes('.github/design-system/guidance/elevation.design.md'));
+	assert.ok(system.sourceFiles.includes('.github/design-system/elevation.design.md'));
 	assert.ok(system.sizes.some(token => token.id === 'cornerRadius.xLarge'));
 });
 

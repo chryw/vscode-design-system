@@ -35,7 +35,7 @@ test('ordinary VS Code checkouts expose saved documentation without exploration 
 	}, { mode: 'basic', topics: ['documentation'], feature: true, rendered: true, fixtures: false, text: true });
 	fixture.write('src/vs/feature/feature-notes.md', '# Saved edit\n\nRead the current checkout.\n');
 	assert.equal(readDocument(fixture.root, 'src/vs/feature/feature-notes.md').title, 'Saved edit');
-	fixture.write('.github/design-system/book.json', '{"version":99}');
+	fixture.write('.github/design-system/topics.json', '{"version":99}');
 	assert.throws(() => readRepository(fixture.root), /unsupported version/);
 });
 
@@ -122,11 +122,11 @@ test('a curated branch can remove saved topics without preventing the same panel
 	const panel = runtime.required('book');
 	panel.setScope({ topics: ['motion', 'typography'], active: 'motion', layout: 'compare' });
 	panel.setView({ theme: 'Light 2026' }, 'motion');
-	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'book.json'), 'utf8'));
+	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'topics.json'), 'utf8'));
 	book.topics = book.topics.filter(topic => topic.id !== 'motion');
 	if (book.components?.after === 'motion') { book.components.after = 'tokens'; }
 	if (book.references) { delete book.references.motion; }
-	fixture.write('.github/design-system/book.json', JSON.stringify(book));
+	fixture.write('.github/design-system/topics.json', JSON.stringify(book));
 	panel.selectCheckout({ root: fixture.root });
 	const checkouts = await (await fetch(new URL('/api/checkouts', panel.url))).json();
 	assert.deepEqual({
@@ -150,15 +150,15 @@ test('plugin packaging declares a native canvas entry without copying product co
 
 test('same-checkout catalog refresh preserves navigation, adopts additions and moves, and rejects broken candidates transactionally', async t => {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/book.json';
+	const manifest = '.github/design-system/topics.json';
 	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
 	const topic = id => ({
 		id, title: id, section: id, group: 'Guidance', aliases: [`old-${id}`],
-		renderer: 'guidance', page: `pages/${id}.json`, compare: true, fixture: false,
+		renderer: 'guidance', page: `content/topics/${id}.json`, compare: true, fixture: false,
 	});
 	const writeTopic = (id, source, copy) => {
 		fixture.write(source, `# ${id}\n\n## Introduction\n\n${copy}\n\n## Usage\n\n${copy}\n`);
-		fixture.write(`.github/design-system/pages/${id}.json`, JSON.stringify({
+		fixture.write(`.github/design-system/content/topics/${id}.json`, JSON.stringify({
 			version: 1, id, renderer: 'guidance', source, content: {},
 			sections: [{ id: `${id}-usage`, key: 'usage', heading: 'Usage' }],
 		}));
@@ -207,10 +207,10 @@ test('same-checkout catalog refresh preserves navigation, adopts additions and m
 
 test('catalog rejects ambiguous topic routes and renderer contracts before serving content', t => {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/book.json';
+	const manifest = '.github/design-system/topics.json';
 	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
 	const topic = { id: 'routing-study', section: 'routing-study', group: 'Guidance', title: 'Routing study',
-		renderer: 'guidance', aliases: ['previous-study'], page: 'pages/routing-study.json', fixture: false, compare: true };
+		renderer: 'guidance', aliases: ['previous-study'], page: 'content/topics/routing-study.json', fixture: false, compare: true };
 	const writeTopics = topics => fixture.write(manifest, JSON.stringify({
 		...book, components: undefined, references: {}, defaultTopic: 'routing-study', topics,
 	}));

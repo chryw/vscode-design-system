@@ -157,7 +157,7 @@ test('Motion composition and guidance are tracked source dependencies, not rende
 });
 
 test('chapter copy is curated while specifications and timing remain source-backed', () => {
-	const file = 'src/vs/platform/theme/common/motion/motion-examples.md';
+	const file = '.github/design-system/motion/examples.md';
 	const original = context();
 	const reads = new Set();
 	const { motionDocumentation: before } = load(context({}, reads));
@@ -268,7 +268,7 @@ test('Motion binds relocated design and technical sources while retaining single
 
 test('Motion scoped chapter copy preserves explicit composition and source-derived definitions', () => {
 	const original = context();
-	const file = 'src/vs/platform/theme/common/motion/motion-examples.md';
+	const file = '.github/design-system/motion/examples.md';
 	const descriptor = JSON.parse(original.read(motionPageFile));
 	const references = (value, compact) => {
 		if (Array.isArray(value)) { return value.map(item => references(item, compact)); }
@@ -286,7 +286,7 @@ test('Motion scoped chapter copy preserves explicit composition and source-deriv
 	const before = readMotionPage(context({ [motionPageFile]: JSON.stringify(explicit) }), definitions);
 	const after = readMotionPage(context({ [motionPageFile]: JSON.stringify(scoped) }), definitions);
 	const { textSource, ...page } = after.page;
-	assert.deepEqual({ page, sections: after.sections, intro: after.intro }, before);
+	assert.deepEqual({ page, pageFile: after.pageFile, sections: after.sections, intro: after.intro }, before);
 	const edited = readMotionPage(context({
 		[motionPageFile]: JSON.stringify(scoped),
 		[file]: original.read(file).replace('Duration is how long the visual change takes,', 'Changed authored pacing guidance,'),

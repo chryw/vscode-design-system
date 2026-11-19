@@ -42,11 +42,13 @@ If opening reports that `design-book` is already owned by a different canvas, th
 ## Browse content from a checkout
 
 - **Current checkout:** the canvas starts from the session's workspace. A previously selected checkout is restored when you reopen the same panel; check the header to confirm what you are browsing.
-- **Another checkout:** choose **Change checkout**, select a local worktree, or choose **Other checkout…** and enter an absolute clone/worktree path. Select **Browse checkout** to switch content in the same panel.
+- **Another checkout:** open **Checkout: [worktree]**, select a local worktree, or choose **Other checkout…** and enter an absolute clone/worktree path. Select **Browse checkout** to switch content in the same panel.
 - **Another branch:** select a worktree already on that branch. The canvas never pulls, switches branches, or creates worktrees. If you change branches externally, it reloads the checkout's catalog.
-- **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; use **Refresh topic** to reread the active topic. Uncommitted catalog or fixture-binding changes require a provider reload.
+- **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; **Reload checkout** rereads saved content, the topic catalog, and live examples from the selected checkout while preserving the current view. It does not update the viewer or fetch Git changes.
+- **Reading:** **Back** and **Forward** retrace visited topics and document references, restoring reading position. The compact section navigation stays with the page title; the overview scrolls with the content.
+- **Topic files:** open this page-header disclosure for the guidance and implementation files used by a topic. It can list several files, and the same file can serve several topics. Files open directly in a separate tab; this is not the checkout selector.
 
-A checkout with `.github/design-system/book.json` provides curated topics; the exploration branch contains the full book. A checkout without it provides **Source library** for local product Markdown, instructions, skills, and available design guidance. It does not borrow missing content from another branch. Malformed or incompatible sources report errors.
+A checkout with `.github/design-system/topics.json` provides curated topics; the exploration branch contains the full book. A checkout without it provides **Source library** for local product Markdown, instructions, skills, and available design guidance. It does not borrow missing content from another branch. Malformed or incompatible sources report errors.
 
 Basic source browsing needs no product build or dependency installation. Some curated readers need checkout dependencies; live examples also need prepared client output. Follow the selected checkout's setup instructions, restoring dependencies only if needed, then run `pnpm run build-fast --client-only` there for live examples. See [requirements](docs/setup.md#requirements) for Node.js and pnpm versions.
 
@@ -76,7 +78,7 @@ cd vscode-design-system
 node scripts/book.mjs serve --root /absolute/path/to/vscode-checkout
 ```
 
-Keep the viewer clone separate from the product checkout. Open the URL printed in the terminal; keep the server running while you browse and press **Ctrl+C** to stop. The same **Change checkout** control works in the browser. Preparing live examples is optional; see [browsing requirements](#browse-content-from-a-checkout).
+Keep the viewer clone separate from the product checkout. Open the URL printed in the terminal; keep the server running while you browse and press **Ctrl+C** to stop. The same **Checkout** control works in the browser. Preparing live examples is optional; see [browsing requirements](#browse-content-from-a-checkout).
 
 ## Legacy workspace installation
 

@@ -12,11 +12,11 @@ Selecting a result reads the actual Markdown, including code blocks, tables, lin
 
 Source readers use the same opening hierarchy as curated chapters: document navigation and provenance, one page title, section navigation, introductory prose, then the body. Descriptions follow the page navigation; the wide layout keeps section navigation in its right rail. A leading, prose-only **Introduction** section supplies that introduction without repeating its heading; its original anchor and aliases remain usable. Substantive headings, nested introductory sections, lists, tables, and code retain their source structure. This is a presentation rule, not a rewrite of the document or the agent-facing source.
 
-The document ID is its repository-relative path. When renaming a specification, the selected checkout can retain a direct old-path → canonical-path mapping in `book.json`'s optional `documentAliases`. Reads, saved document selections, and portable snapshots resolve that mapping to the same canonical document; searches do not list duplicate copies. Aliases cannot chain or shadow an existing document, and missing targets are explicit diagnostics. An unknown bookmark still reports that the document is unavailable and offers a route back to the library. IDs are interpreted within the canvas's canonical checkout, never as arbitrary absolute paths.
+The document ID is its repository-relative path. When renaming a specification, the selected checkout can retain a direct old-path → canonical-path mapping in `topics.json`'s optional `documentAliases`. Reads, saved document selections, and portable snapshots resolve that mapping to the same canonical document; searches do not list duplicate copies. Aliases cannot chain or shadow an existing document, and missing targets are explicit diagnostics. An unknown bookmark still reports that the document is unavailable and offers a route back to the library. IDs are interpreted within the canvas's canonical checkout, never as arbitrary absolute paths.
 
 ## Discovery scopes
 
-`documentSources` in the selected checkout's [book.json](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/book.json) defines the source locations. The defaults include product documentation, built-in extension documentation, repository instructions, authoring workflows and their references, and repository-owned design-system guidance. Viewer implementation docs are not part of the design-guidance corpus.
+`documentSources` in the selected checkout's [topics.json](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/topics.json) defines the source locations. The defaults include product documentation, built-in extension documentation, repository instructions, authoring workflows and their references, and repository-owned design-system guidance. Viewer implementation docs are not part of the design-guidance corpus.
 
 Each scope has:
 
@@ -40,7 +40,7 @@ After changing discovery-scope configuration or the curated topic catalog, use *
 
 ## Route a new chapter
 
-A chapter's `book.json` entry selects a trusted renderer kind, not a module path from the checkout. For a non-component chapter, `id` and `section` must match its page definition's ID. Use stable IDs and retain former topic names in `aliases` when renaming a route. Aliases cannot shadow another topic, conflict with an existing alias, or take the reserved `components` route. Document-path renames use the separate `documentAliases` map described above.
+A chapter's `topics.json` entry selects a trusted renderer kind, not a module path from the checkout. For a non-component chapter, `id` and `section` must match its page definition's ID. Use stable IDs and retain former topic names in `aliases` when renaming a route. Aliases cannot shadow another topic, conflict with an existing alias, or take the reserved `components` route. Document-path renames use the separate `documentAliases` map described above.
 
 Use `renderer: "guidance"` for a new authored chapter. Both composed `sections` and source-bound `guidance` render without adding the topic to a fixed viewer assessment table; a new authored chapter is not thereby assessed as adopted in the product. Specialized renderer kinds support their corresponding product sections only. A new interactive visualization or source-reader capability requires a viewer-code change and, for installed plugins, an updated release.
 
@@ -65,13 +65,13 @@ Use `guidance` in a page definition to display source text after the chapter's p
 
 Select either an `anchor` or an exact `heading`; omit both to use the document body. `title` is an optional presentation label, not a second copy of the guidance. `id` is a stable, unique article-section ID. The source must be readable within the selected checkout and covered by a discovery scope. Chapter bindings reject extension-owned documents. Add a directory to `documentSources` when introducing a new source location; do not register each file separately.
 
-The shared article frame renders these sections inline without appending **Read full specification** links that reopen the same guidance in the Source library. Purposeful authored cross-references and external references remain usable. The article's **Sources** menu provides optional access to its primary authored document and distinct implementation source, not a list of every imported instruction or skill. The full dependency inventory remains available to machine readers; other documents remain discoverable in the Source library. Definitions, values, and actual component previews remain separate projections of product code.
+The shared article frame renders these sections inline without appending **Read full specification** links that reopen the same guidance in the Source library. Purposeful authored cross-references and external references remain usable, with **Back** and **Forward** restoring earlier pages and reading positions. **Topic files** in the page header lists the guidance files used by the projection and its distinct implementation entry point as direct file links. Topics and source documents need not map one-to-one. The full dependency inventory and document search remain available to machine readers; the Source library is no longer a curated-book navigation destination. Definitions, values, and actual component previews remain separate projections of product code.
 
 Missing or ambiguous sections fail validation explicitly. Do not repair them by copying the old prose into the renderer. Update the binding when a deliberate source reorganization changes its anchor.
 
 ## Curate further reading
 
-The selected checkout registers external references once in `book.json`'s optional `references` map. Keys are exact topic IDs, including generated `component-<controlId>` IDs:
+The selected checkout registers external references once in `topics.json`'s optional `references` map. Keys are exact topic IDs, including generated `component-<controlId>` IDs:
 
 ```json
 {

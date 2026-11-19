@@ -13,7 +13,7 @@ import { createDocumentCheckout } from './document-helpers.mjs';
 test('workspace installation contains only the viewer, stays locally ignored, and updates safely', t => {
 	const { root } = createDocumentCheckout(t);
 	execFileSync('git', ['init', '-q'], { cwd: root });
-	const before = readFileSync(path.join(root, '.github/design-system/book.json'), 'utf8');
+	const before = readFileSync(path.join(root, '.github/design-system/topics.json'), 'utf8');
 	const first = install(root);
 	const target = first.installed;
 	assert.deepEqual({
@@ -22,7 +22,7 @@ test('workspace installation contains only the viewer, stays locally ignored, an
 		guidance: existsSync(path.join(target, '.github/design-system')),
 		product: existsSync(path.join(target, 'src')),
 		dependencies: existsSync(path.join(target, 'node_modules')),
-		bookUnchanged: readFileSync(path.join(root, '.github/design-system/book.json'), 'utf8') === before,
+		bookUnchanged: readFileSync(path.join(root, '.github/design-system/topics.json'), 'utf8') === before,
 		ignored: execFileSync('git', ['check-ignore', '.github/extensions/vscode-design-system'], { cwd: root, encoding: 'utf8' }).trim(),
 		input: first.input,
 	}, {

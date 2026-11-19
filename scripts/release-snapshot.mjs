@@ -90,7 +90,7 @@ export async function buildSnapshot({ root, output, tag }) {
 	assert.ok(root && output, 'Select --root <prepared VS Code checkout> and --output <new directory>');
 	root = path.resolve(root);
 	output = path.resolve(output);
-	await readFile(path.join(root, '.github/design-system/book.json'), 'utf8');
+	await readFile(path.join(root, '.github/design-system/topics.json'), 'utf8');
 	await mkdir(output);
 	const before = await Promise.all([sourceFingerprint(root, output), sourceFingerprint(packageRoot, output)]);
 	const run = (script, args) => execFileSync(process.execPath, [path.join(packageRoot, 'scripts', script), ...args], {

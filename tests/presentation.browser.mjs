@@ -20,14 +20,14 @@ import { createDocumentCheckout } from './document-helpers.mjs';
 const root = workspaceRoot;
 const widths = [320, 390, 500, 800, 1440];
 
-test('topic footers align source links and show only explicitly curated further reading', { timeout: 60000 }, async t => {
+test('topic files are distinct from explicitly curated further reading', { timeout: 60000 }, async t => {
 	const fixture = createDocumentCheckout(t);
-	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'book.json'), 'utf8'));
+	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'topics.json'), 'utf8'));
 	const references = [
 		{ title: 'Text spacing', url: 'https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html', description: 'Check the required user text-spacing overrides.' },
 		{ title: `Variable font axes: ${'LongUnbrokenReferenceTitle'.repeat(4)}`, url: 'https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview', description: 'Understand font-axis interpolation and how it relates to the weight specimen.' },
 	];
-	fixture.write('.github/design-system/book.json', JSON.stringify({ ...book, references: { typography: references } }));
+	fixture.write('.github/design-system/topics.json', JSON.stringify({ ...book, references: { typography: references } }));
 	const panel = await createExplorer(root, { bookRoot: fixture.bookRoot, scope: { operation: 'all', active: 'typography' } });
 	let browser;
 	try {
@@ -39,20 +39,18 @@ test('topic footers align source links and show only explicitly curated further 
 		const article = page.locator('[data-topic="typography"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const footer = article.locator('.topic-actions');
-		const sources = footer.locator('.source-documents');
+		const sources = article.locator('.topic-files');
 		const reading = footer.locator('.topic-references');
 		await sources.locator('summary').focus();
 		await page.keyboard.press('Enter');
 		await page.keyboard.press('Tab');
-		await expect(sources.getByRole('link', { name: 'Typography', exact: true })).toBeFocused();
-		await page.keyboard.press('Tab');
-		await expect(sources.getByRole('link', { name: /^View source:/ })).toBeFocused();
-		await page.keyboard.press('Tab');
-		await expect(reading.locator('summary')).toBeFocused();
+		await expect(sources.locator('a').first()).toBeFocused();
+		await page.keyboard.press('Escape');
+		await reading.locator('summary').focus();
 		await page.keyboard.press('Enter');
 		await page.keyboard.press('Tab');
 		await expect(reading.getByRole('link', { name: /^Text spacing/ })).toBeFocused();
-		assert.deepEqual(await sources.locator('a').evaluateAll(links => links.map(link => link.textContent)), ['Typography', 'View source']);
+		assert.ok((await sources.locator('a').allTextContents()).includes('.github/design-system/typography.design.md'));
 		assert.deepEqual(await reading.locator('li').evaluateAll(items => items.map(item => ({
 			title: item.querySelector('a').textContent, url: item.querySelector('a').href, description: item.querySelector('p').textContent,
 			target: item.querySelector('a').target, rel: item.querySelector('a').rel,
@@ -65,29 +63,26 @@ test('topic footers align source links and show only explicitly curated further 
 					assert.deepEqual(await footer.evaluate(footer => {
 						const bounds = element => element.getBoundingClientRect();
 						const items = [...footer.querySelectorAll('li')];
-						const sourceLinks = [...footer.querySelectorAll('.source-documents a')];
 						const focused = document.activeElement;
 						return {
 							disclosuresAligned: [...footer.children].every(child => Math.abs(bounds(child).left - bounds(footer).left) < 1),
 							linksAligned: items.every(item => Math.abs(bounds(item).left - bounds(items[0]).left) < 1),
-							sourceStacked: bounds(sourceLinks[1]).top >= bounds(sourceLinks[0]).bottom,
 							noOverflow: document.documentElement.scrollWidth <= innerWidth,
 							focusVisible: focused.matches(':focus-visible') && getComputedStyle(focused).outlineStyle !== 'none',
 						};
-					}), { disclosuresAligned: true, linksAligned: true, sourceStacked: true, noOverflow: true, focusVisible: true },
+					}), { disclosuresAligned: true, linksAligned: true, noOverflow: true, focusVisible: true },
 					`${colorScheme}, ${forcedColors}, ${width}px`);
 				}
 			}
 		}
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await expect(sources).toHaveAttribute('open', '');
-		await expect(reading).toHaveAttribute('open', '');
+		await expect(article.locator('.topic-files')).toBeVisible();
 		panel.setScope({ operation: 'all', active: 'illustration' });
 		await expect(page.locator('[data-topic="illustration"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('[data-topic="illustration"] .topic-references')).toBeHidden();
-		await page.locator('[data-topic="illustration"] .source-documents > summary').click();
-		await expect(page.locator('[data-topic="illustration"] .source-documents a')).toHaveCount(1);
+		await page.locator('[data-topic="illustration"] .topic-files > summary').click();
+		await expect(page.locator('[data-topic="illustration"] .topic-files a')).toHaveCount(1);
 		panel.setScope({ operation: 'all', active: 'documentation' });
 		await expect(page.locator('[data-topic="documentation"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('[data-topic="documentation"] .topic-actions')).toBeHidden();
@@ -101,8 +96,8 @@ test('topic footers align source links and show only explicitly curated further 
 test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
 	const read = file => readFileSync(path.join(root, file), 'utf8');
 	const authored = readPage(read, 'typography').authored;
-	const source = 'src/vs/platform/theme/common/sizes/typography.design.md';
-	const pageFile = '.github/design-system/pages/typography.json';
+	const source = '.github/design-system/typography.design.md';
+	const pageFile = '.github/design-system/content/topics/typography.json';
 	mkdirSync(path.join(root, '.build'), { recursive: true });
 	const scratch = mkdtempSync(path.join(root, '.build/chapter-composition-'));
 	const sourceFile = path.join(scratch, 'source.md');
@@ -179,7 +174,7 @@ test('Illustration uses the shared book frame, source sections, and keyboard out
 	}
 });
 
-test('docs-style navigation separates chapters, reading, and a sticky section outline', { timeout: 30000 }, async () => {
+test('section navigation stays compact beneath the sticky page title at every width', { timeout: 30000 }, async () => {
 	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'typography' } });
 	let browser;
 	try {
@@ -197,18 +192,18 @@ test('docs-style navigation separates chapters, reading, and a sticky section ou
 			const content = bounds('.topic-content');
 			const outline = bounds('.article-outline');
 			return {
-				rail: outline.left > content.right,
-				aligned: Math.abs(outline.top - bounds('.topic-heading').top) < 1,
+				aligned: Math.abs(outline.left - content.left) < 1,
+				oneRow: outline.height < 48 && outline.top >= bounds('.topic-heading').bottom,
 				overflow: document.documentElement.scrollWidth > innerWidth,
 			};
 		});
-		assert.deepEqual(await geometry(), { rail: true, aligned: true, overflow: false });
+		assert.deepEqual(await geometry(), { aligned: true, oneRow: true, overflow: false });
 		const specimen = await article.locator('.typography-style-list').elementHandle();
 		await outline.getByRole('link', { name: 'Emphasis', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(article.locator('#typography-emphasis')).toBeFocused();
 		await expect(outline.getByRole('link', { name: 'Emphasis', exact: true })).toHaveAttribute('aria-current', 'location');
-		assert.equal(await outline.evaluate(element => Math.round(element.getBoundingClientRect().top)), 24);
+		assert.equal(await outline.evaluate(element => element.getBoundingClientRect().top >= document.querySelector('.explorer-heading').getBoundingClientRect().bottom), true);
 		await article.locator('#typography-styles').evaluate(element => element.scrollIntoView({ block: 'start' }));
 		await expect(outline.getByRole('link', { name: 'Type roles', exact: true })).toHaveAttribute('aria-current', 'location');
 		assert.equal(await specimen.evaluate(element => element.isConnected), true);
@@ -218,15 +213,15 @@ test('docs-style navigation separates chapters, reading, and a sticky section ou
 				await page.setViewportSize({ width, height: 900 });
 				await page.evaluate(() => scrollTo(0, 0));
 				const layout = await geometry();
-				assert.deepEqual(layout, { rail: width >= 1200, aligned: width >= 1200, overflow: false }, `${colorScheme}, ${width}px`);
+				assert.deepEqual(layout, { aligned: true, oneRow: true, overflow: false }, `${colorScheme}, ${width}px`);
 			}
 		}
 		panel.setScope({ operation: 'replace', topics: ['typography', 'layout'], active: 'typography', layout: 'compare' });
 		await expect(page.locator('#reference')).toHaveClass('comparison-layout');
-		assert.deepEqual(await geometry(), { rail: false, aligned: false, overflow: false });
+		assert.deepEqual(await geometry(), { aligned: true, oneRow: true, overflow: false });
 		panel.setScope({ operation: 'replace', topics: ['typography'], layout: 'single' });
 		await expect(page.locator('#book-navigation')).toBeHidden();
-		assert.deepEqual(await geometry(), { rail: false, aligned: false, overflow: false });
+		assert.deepEqual(await geometry(), { aligned: true, oneRow: true, overflow: false });
 	} finally {
 		await browser?.close();
 		await panel.close();
@@ -244,7 +239,7 @@ test('compact topic context stays visible and recoverable errors do not displace
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('.checkout-details')).not.toHaveJSProperty('tagName', 'DETAILS');
 		await expect(page.locator('#checkout')).toBeVisible();
-		await expect(page.locator('.checkout-details').getByRole('button', { name: 'Refresh topic', exact: true })).toBeVisible();
+		await expect(page.locator('.checkout-details').getByRole('button', { name: 'Reload checkout', exact: true })).toBeVisible();
 		for (const width of [390, 800, 1199]) {
 			await page.setViewportSize({ width, height: 900 });
 			await page.evaluate(() => scrollTo(0, 0));
@@ -267,7 +262,7 @@ test('compact topic context stays visible and recoverable errors do not displace
 		}
 		const original = await content.locator('.typography-style-list').elementHandle();
 		await page.route('**/api/topic?*', route => route.fulfill({ status: 503, body: 'Source unavailable. Keep reading the last loaded topic.' }));
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		const problem = article.locator('#problem');
 		await expect(problem).toBeVisible();
 		await expect(problem.locator('summary')).toContainText('showing last loaded content');
@@ -279,11 +274,11 @@ test('compact topic context stays visible and recoverable errors do not displace
 		await expect(problem).toContainText('Source unavailable');
 		assert.equal(await original.evaluate(element => element.isConnected), true);
 		await page.unroute('**/api/topic?*');
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect(problem).toBeHidden();
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
-		await page.route('**/api/refresh', route => route.fulfill({ status: 503, body: 'Checkout read failed' }));
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.route('**/api/checkout', route => route.fulfill({ status: 503, body: 'Checkout read failed' }));
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect(page.locator('#shell-problem > summary')).toBeVisible();
 		assert.equal(await page.locator('#shell-problem').evaluate(element => element.open), false);
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
@@ -386,6 +381,49 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 	}
 });
 
+test('accessibility renders composed decisions, keyboard outline links and source references', { timeout: 60000 }, async () => {
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'accessibility' } });
+	let browser;
+	try {
+		browser = await chromium.launch({ headless: true });
+		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="accessibility"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		assert.deepEqual(await article.locator('.topic-content h2').allTextContents(), [
+			'Keyboard and focus', 'Names and states', 'Help and readable content',
+			'Feedback and announcements', 'Visual alternatives', 'Build and review',
+		]);
+		await expect(article.getByRole('table')).toHaveCount(3);
+		await expect(article.locator('#accessibility-help')).toContainText('a separate Accessible View is not needed');
+		await expect(article.locator('#announcement-patterns')).toContainText('no duplicate speech');
+		await expect(article.locator('#accessibility-review')).toContainText('With a screen reader');
+		const outline = article.getByRole('navigation', { name: 'On this page', exact: true });
+		const help = outline.getByRole('link', { name: 'Help and readable content', exact: true });
+		await help.focus();
+		await page.keyboard.press('Enter');
+		await expect(page).toHaveURL(/#accessibility-help$/);
+		await page.reload();
+		await expect(article.locator('#accessibility-help')).toBeInViewport();
+		const workflow = article.getByRole('link', { name: 'implementation workflow', exact: true });
+		await expect(workflow).toHaveAttribute('href', /documentId=.*accessibility.*SKILL.md/);
+		for (const theme of ['Light 2026', 'Dark 2026', 'High Contrast Dark', 'High Contrast Light']) {
+			panel.setView({ theme });
+			for (const width of [390, 1100]) {
+				await page.setViewportSize({ width, height: 900 });
+				await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${theme} at ${width}px`);
+			}
+		}
+		assert.deepEqual(errors, []);
+	} finally {
+		await browser?.close();
+		await panel.close();
+	}
+});
+
 test('reader-facing articles share useful navigation and omit audit scaffolding', { timeout: 120000 }, async () => {
 	const panel = await createExplorer(root, { scope: { topics: ['typography'] } });
 	let browser;
@@ -418,7 +456,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			await expect(article.locator('.scope, .system-gap, .slot-placeholder')).toHaveCount(0);
 			await expect(article.locator('.topic-content')).not.toContainText(/Why this topic is reserved|Curation notes and audit gaps|Content slot:|To curate:|not a complete migration audit/);
 			await expect(article.locator('.topic-content a.source-action')).toHaveCount(0);
-			assert.ok(await article.locator('.topic-heading a.source-action').count() <= 1, id);
+			await expect(article.locator('.topic-heading a.source-action:visible')).toHaveCount(0);
 			const headingEntries = await article.locator('.topic-content h2').evaluateAll(headings => headings
 				.filter(heading => !heading.closest('.control-stage') || heading.closest('[data-topic]').dataset.topic.startsWith('component-'))
 				.map(heading => ({ title: heading.textContent, sourceGuidance: Boolean(heading.closest('.source-guidance')) })));
@@ -524,10 +562,8 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 				assert.deepEqual(await article.locator('.motion-doc > section').evaluateAll(sections => sections.map(section => section.id)),
 					data.motionDocumentation.page.sections.map(section => `motion-${section.id}`));
 			}
-			if (id === 'accessibility' || id === 'content') {
-				const priorities = id === 'accessibility'
-					? [/Keyboard Navigation/i, /ARIA Labels/i, /Announcement Patterns/i, /Multi-Modal/i, /Keybinding Scoping/i]
-					: [/UI labels/i, /Strings/i, /Localization/i];
+			if (id === 'content') {
+				const priorities = [/UI labels/i, /Strings/i, /Localization/i];
 				const ranks = majorHeadings.map(title => priorities.findIndex(pattern => pattern.test(title)));
 				assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b), id);
 			}
@@ -627,7 +663,8 @@ test('elevation studies preserve overlay separation, keyboard choices, and sourc
 		await copy.focus();
 		await page.keyboard.press('Enter');
 		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'var(--vscode-shadow-lg)');
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 		await expect(partShadows).toBeChecked();
 		await expect(article.getByRole('radio', { name: 'High contrast light', exact: true })).toBeChecked();
 		const outline = article.getByRole('navigation', { name: 'On this page', exact: true });
@@ -666,7 +703,7 @@ test('live stream reconnection rereads visible data and clears only its connecti
 		assert.ok(streams >= 2 && reads >= 2);
 		await expect(page.getByText('Live updates disconnected; reconnecting automatically…', { exact: true })).not.toBeVisible();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toHaveCount(1);
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toHaveCount(1);
 	} finally {
 		await browser?.close();
 		await panel.close();
@@ -695,7 +732,7 @@ test('Spacing keeps concise guidance, one token ramp, and an automatic product p
 		await expect(page.locator('.spacing-rationale')).toHaveCount(0);
 		await expect(page.locator('.spacing-guide')).not.toContainText(/Why this works|real Button|universal component-spacing recipe/);
 		await expect(page.locator('[data-topic="spacing"] .topic-content details, .spacing-sample, .spacing-grouping-scene')).toHaveCount(0);
-		assert.equal(await page.locator('[data-topic="spacing"] a.source-action').evaluateAll(links => links.filter(link => !link.closest('.source-guidance')).length), 0);
+		await expect(page.locator('[data-topic="spacing"] .topic-content a.source-action')).toHaveCount(0);
 		const navigation = page.getByRole('navigation', { name: 'On this page' });
 		await navigation.getByRole('link', { name: 'Spacing tokens', exact: true }).focus();
 		await page.keyboard.press('Enter');
@@ -753,8 +790,8 @@ test('Spacing keeps concise guidance, one token ramp, and an automatic product p
 		await copy.focus();
 		assert.equal(await copy.evaluate(element => getComputedStyle(element).outlineStyle), 'solid');
 		assert.notEqual(await page.locator('.spacing-bar').last().evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 		await expect(page.locator('.spacing-token-table tbody tr')).toHaveCount(tokens.length);
 		await expect(page.locator('#spacing-example')).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
@@ -781,9 +818,9 @@ test('component articles keep behavior and APIs without authoring commentary', {
 			await expect(article.locator('.component-doc-section h2')).toHaveText(['Usage', 'Accessibility', 'API']);
 			assert.ok(await article.locator('.component-api-table tbody tr').count() > 0);
 			await expect(article).not.toContainText(/not React props|new React|newly invented|This documents|primitive tag|proposed motion standard|existing fixture/);
-			await article.locator('.source-documents > summary').click();
-			await expect(article.getByRole('link', { name: /^View source:/ })).toBeVisible();
-			await expect(article.getByRole('link', { name: /^View source:/ })).not.toHaveAttribute('aria-description', /deployed product/);
+			await article.locator('.topic-files > summary').click();
+			await expect(article.locator('.topic-files a').first()).toBeVisible();
+			await expect(article.locator('.topic-files a').first()).not.toHaveAttribute('aria-description', /deployed product/);
 		}
 	} finally {
 		await browser?.close();
@@ -835,32 +872,33 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeFocused();
 		await expect.poll(() => panel.view.fixtureId).toBe('button/Dark');
 		assert.equal(await frame.evaluate(element => element === document.querySelector('.component-preview')), true);
-		const reads = panel.store.metrics.reads['src/vs/base/browser/ui/button/button.ts'];
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		const store = panel.store;
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect.poll(() => discoveries).toBe(2);
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
-		assert.ok(panel.store.metrics.reads['src/vs/base/browser/ui/button/button.ts'] > reads);
+		assert.notEqual(panel.store, store);
+		assert.ok(panel.store.metrics.reads['src/vs/base/browser/ui/button/button.ts'] > 0);
 		assert.equal(await frame.evaluate(element => element.isConnected), false);
 		for (const width of widths) {
 			await page.setViewportSize({ width, height: 900 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		}
-		await page.route('**/api/refresh', route => route.fulfill({ status: 503, body: 'Source temporarily unavailable' }));
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.route('**/api/checkout', route => route.fulfill({ status: 503, body: 'Source temporarily unavailable' }));
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect(page.locator('#shell-problem')).toContainText('Source temporarily unavailable');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
-		await page.unroute('**/api/refresh');
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
+		await page.unroute('**/api/checkout');
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		unavailable = true;
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
-		await expect(page.locator('.preview-status')).toContainText('Use Refresh to retry');
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await expect(page.locator('.preview-status')).toContainText('Use Reload checkout to retry');
 		await expect(page.getByRole('button', { name: /Refresh|Reload|Reconnect|Select default/ })).toHaveCount(1);
 		unavailable = false;
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await expect(preview).toHaveAttribute('data-preview-state', 'ready');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
 		panel.setView({ fixtureId: 'removed-variant' });
@@ -873,7 +911,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		await expect(page.locator('[data-topic="motion"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const motionCount = await page.locator('[data-motion-example]').count();
 		const allMotionReady = async () => {
-			await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 			for (const summary of await page.locator('.motion-doc-reference:not([open]) > summary').all()) {
 				await summary.click();
 			}
@@ -886,13 +924,13 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		const reducedCount = await page.getByRole('checkbox', { name: 'Reduced motion', exact: true }).count();
 		await page.locator('[data-motion-example="delayed-content"]').getByRole('radio', { name: 'Fast', exact: true }).check();
 		const beforeMotion = discoveries;
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 		await allMotionReady();
 		await expect(page.locator('[data-motion-example="delayed-content"]').getByRole('radio', { name: 'Fast', exact: true })).toBeChecked();
 		await expect.poll(() => discoveries).toBe(beforeMotion + motionCount);
 		await page.locator('[data-motion-example="selection"]').getByRole('checkbox', { name: 'Reduced motion', exact: true }).check();
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
 		await allMotionReady();
 		await expect.poll(() => discoveries).toBe(beforeMotion + 2 * motionCount);
 		await expect(page.locator('[data-motion-example="selection"]').getByRole('checkbox', { name: 'Reduced motion', exact: true })).toBeChecked();
@@ -1042,7 +1080,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.locator('#book-navigation nav, #scope-controls, #topic, .breadcrumbs, .page-jumps')).toHaveCount(0);
 			await expect(page.getByRole('navigation', { name: 'On this page', exact: true })).toBeVisible();
 			await expect(page.getByRole('heading', { name: 'Motion', exact: true })).toBeVisible();
-			await expect(page.locator('#checkout')).toContainText('Local worktree');
+			await expect(page.locator('#checkout')).toHaveText(root.split(/[\\/]/).at(-1));
 			assert.deepEqual(Object.keys(panel.store.metrics.parses).sort(), ['guidance', 'icons', 'motion', 'motionAppearance', 'sizes', 'sourceDocuments', 'themes', 'typography']);
 			assert.equal(Object.keys(panel.store.metrics.reads).includes('extensions/theme-abyss/themes/abyss-color-theme.json'), false);
 			for (const width of widths) {
@@ -1075,9 +1113,9 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.getByRole('navigation', { name: 'On this page' })).toHaveCount(2);
 			panel.setScope({ operation: 'replace', topics: ['spacing', 'typography'], active: 'spacing', layout: 'compare' });
 			await expect(page.locator('#reference')).toHaveClass('comparison-layout');
-			await expect(page.getByRole('button', { name: 'Refresh topics', exact: true })).toHaveCount(1);
-			await page.getByRole('button', { name: 'Refresh topics', exact: true }).click();
-			await expect(page.getByRole('button', { name: 'Refresh topics', exact: true })).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toHaveCount(1);
+			await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 			await ready('spacing');
 			await ready('typography');
 			await expect(page.locator('#shell-problem')).toHaveCount(0);
@@ -1102,7 +1140,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			const filter = page.getByRole('searchbox', { name: 'Search topics', exact: true });
 			await expect(navigation).toBeVisible();
 			await expect(browse).not.toBeVisible();
-			await expect(page.locator('#book-navigation nav a')).toHaveCount(catalog.filter(item => !item.hidden).length);
+			await expect(page.locator('#book-navigation nav a')).toHaveCount(catalog.filter(item => !item.hidden && item.id !== 'documentation').length);
 			await expect(page.locator('#book-pagination, .book-neighbor')).toHaveCount(0);
 			await expect(page.locator('.book-panel-heading strong')).toHaveCount(0);
 			assert.deepEqual(panel.store.metrics.reads, reads);
@@ -1178,8 +1216,8 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await search.fill('spacing.size160');
 			await expect(search).toBeFocused();
 			await expect(page.locator('[data-topic="tokens"] #status')).toContainText('matching entries');
-			await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
-			await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
+			await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 			await expect(search).toHaveValue('spacing.size160');
 			await ready('tokens');
 			await expect(page.locator('.book-panel a[aria-current="page"]')).toHaveText('Design tokens');

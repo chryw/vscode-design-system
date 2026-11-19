@@ -62,9 +62,9 @@ test('exact SDK adapter opens idempotently, scopes, stops and reopens without a 
 			topic: topic.topic,
 			source: topic.guidance[0].file,
 		})), [
-			{ topic: 'motion', source: 'src/vs/platform/theme/common/motion/motion.design.md' },
-			{ topic: 'typography', source: 'src/vs/platform/theme/common/sizes/typography.design.md' },
-			{ topic: 'spacing', source: 'src/vs/platform/theme/common/sizes/spacing.design.md' },
+			{ topic: 'motion', source: '.github/design-system/motion.design.md' },
+			{ topic: 'typography', source: '.github/design-system/typography.design.md' },
+			{ topic: 'spacing', source: '.github/design-system/spacing.design.md' },
 			{ topic: 'component-button', source: 'src/vs/base/browser/ui/button/button.design.md' },
 		]);
 		await declaration.actions.find(item => item.name === 'set_scope').handler({ instanceId: 'complete-system-default', input: { topics: ['typography'] } });

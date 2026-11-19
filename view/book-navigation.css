@@ -1,7 +1,7 @@
 /* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
 #book-navigation {
 	position: sticky;
-	top: 0;
+	top: var(--site-header-height, 0px);
 	z-index: 2;
 	margin-bottom: 20px;
 }
@@ -108,7 +108,7 @@
 	.book-panel a[aria-current="page"] { text-decoration: underline; }
 }
 @media (min-width: 760px) {
-	#book-navigation { top: 24px; margin-bottom: 0; }
+	#book-navigation { top: calc(var(--site-header-height, 0px) + 16px); margin-bottom: 0; }
 	.book-toolbar, .book-panel-heading { display: none; }
 	.book-panel {
 		position: static;

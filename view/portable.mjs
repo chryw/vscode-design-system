@@ -10,6 +10,7 @@ import { documentView, resolveDocumentReference } from '../model/documents.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
+import { createPageHistory } from './page-history.mjs';
 
 const snapshot = globalThis.designSnapshot;
 setRepository(snapshot.repository);
@@ -18,6 +19,8 @@ const navigation = document.querySelector('#book-navigation');
 let reference;
 let active;
 let view;
+const lifetime = new AbortController();
+const pageHistory = createPageHistory(restore, lifetime.signal);
 const contents = createBookNavigation(navigation, id => show(id, true));
 const topicURL = id => {
 	const url = new URL(location.href);
@@ -35,16 +38,16 @@ const problem = error => {
 };
 function updateURL() {
 	const url = writeViewURL(topicURL(active), view, { topic: false });
-	history.replaceState(null, '', url);
+	pageHistory.replace(url);
 }
 function show(id, push = false, settings = {}) {
 	try {
 		const topic = snapshot.topics[id];
 		if (!topic) { throw new Error(`Unknown topic: ${id}`); }
+		if (push) { pageHistory.push(writeViewURL(topicURL(id), { ...topic.view, ...settings }, { topic: false })); }
 		reference?.dispose();
 		active = id;
 		view = { ...topic.view, ...settings };
-		if (push) { history.pushState(null, '', writeViewURL(topicURL(id), view, { topic: false })); }
 		const { topics, utilities } = bookNavigation(snapshot.catalog);
 		const link = item => ({ ...item, href: topicURL(item.id).href });
 		contents.update(topics.map(link), id, utilities.map(link));
@@ -89,17 +92,18 @@ function show(id, push = false, settings = {}) {
 					const heading = article.querySelector('h1');
 					heading.tabIndex = -1;
 					heading.focus({ preventScroll: true });
-					heading.scrollIntoView({ block: 'start' });
+					if (!view.anchor) { heading.scrollIntoView({ block: 'start' }); }
 					push = false;
 				}
 			},
 		});
+		return reference.ready;
 	} catch (error) { problem(error); }
 }
 function restore() {
 	const url = new URL(location.href);
 	const settings = readViewURL(url);
-	show(url.searchParams.get('topic') ?? 'principles', false, settings);
+	return show(url.searchParams.get('topic') ?? 'principles', false, settings);
 }
 document.addEventListener('click', event => {
 	const link = event.target.closest('a[href]');
@@ -107,7 +111,11 @@ document.addEventListener('click', event => {
 	const url = new URL(link.href);
 	if (url.origin !== location.origin || url.pathname !== location.pathname || !url.searchParams.has('topic')) { return; }
 	event.preventDefault();
-	show(url.searchParams.get('topic'), true, readViewURL(url));
+	const id = url.searchParams.get('topic');
+	const settings = readViewURL(url);
+	const samePageAnchor = url.hash && id === active && (settings.documentId ?? '') === (view.documentId ?? '');
+	if (samePageAnchor) { pageHistory.replace(url); }
+	show(id, !samePageAnchor, settings);
 });
 document.addEventListener('submit', event => {
 	if (!event.target.matches('.document-search')) { return; }
@@ -116,9 +124,8 @@ document.addEventListener('submit', event => {
 	show('documentation', true, { query: form.get('query'), documentScope: form.get('documentScope'), documentId: '', documentOffset: 0, anchor: '' });
 	updateURL();
 });
-window.addEventListener('popstate', restore);
 window.addEventListener('pagehide', event => {
-	if (!event.persisted) { reference?.dispose(); contents.dispose(); }
+	if (!event.persisted) { lifetime.abort(); reference?.dispose(); contents.dispose(); }
 });
 document.querySelector('#snapshot-date').textContent = new Date(snapshot.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 restore();

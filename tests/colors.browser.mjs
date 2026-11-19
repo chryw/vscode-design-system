@@ -85,8 +85,8 @@ test('Colors keeps guidance visible and compares usage colors in one simple tabl
 		await search.focus();
 		assert.equal(await search.evaluate(element => getComputedStyle(element).outlineStyle), 'solid');
 		await page.emulateMedia({ forcedColors: 'none' });
-		await page.getByRole('button', { name: 'Refresh topic', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Refresh topic', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: 'Reload checkout', exact: true }).click();
+		await expect(page.getByRole('button', { name: 'Reload checkout', exact: true })).toBeEnabled();
 		await expect(page.getByRole('searchbox', { name: 'Search colors' })).toHaveValue('var(--vscode-color-background-accent)');
 		await expect(page.getByRole('checkbox', { name: 'Include component aliases' })).toBeChecked();
 		await expect(page.locator('.color-matrix tbody tr')).toHaveCount(1);

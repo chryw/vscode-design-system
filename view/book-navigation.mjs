@@ -187,6 +187,7 @@ export function createBookNavigation(container, onNavigate) {
 			const nextSignature = JSON.stringify([items.map(identity), tools.map(identity)]);
 			if (nextSignature !== signature) {
 				signature = nextSignature;
+				activeId = undefined;
 				navigation.replaceChildren();
 				utilities.replaceChildren();
 				links.clear();

@@ -82,10 +82,8 @@ export function renderDocumentation(target, system, host = {}) {
 	const page = node('div', undefined, 'documentation');
 	if (document) {
 		const context = node('div', undefined, 'topic-metadata');
-		const back = node('a', 'Back to sources');
-		back.href = documentURL('', view);
 		const metadata = node('p', `${listing.scopes.find(scope => scope.id === document.scope)?.title ?? document.origin} · ${document.id}`, 'meta document-path');
-		context.append(back, metadata);
+		context.append(metadata);
 		if (document.metadata) {
 			const details = node('details');
 			details.append(node('summary', 'Document metadata'), node('pre', document.metadata));

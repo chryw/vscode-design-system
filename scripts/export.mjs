@@ -195,6 +195,7 @@ try {
 <body class="design-reference explorer book-layout">
 <a class="skip" href="#reference">Skip to content</a>
 <header class="explorer-heading"><div><p class="book-title">Visual Studio Code Design System</p>
+<nav class="page-history" aria-label="Page history"><button id="history-back" type="button" disabled>Back</button><button id="history-forward" type="button" disabled>Forward</button></nav>
 <p class="meta">Review snapshot · <time id="snapshot-date"></time> · Not a published specification</p>
 <details><summary>About this snapshot</summary><p>A shared starting point for reviewing the topic breakdown and deciding what to document and centralize. Topic data and interactive fixtures are frozen; topics without documentation remain open work.</p><p>Share a topic using its address. This static page doesn't save shared comments or edits.</p><p>Source links open the base commit on GitHub; local working changes in this snapshot may differ.</p></details></div></header>
 <div class="explorer-layout"><div id="book-navigation"></div><div class="explorer-article">

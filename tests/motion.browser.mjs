@@ -90,7 +90,7 @@ test('Motion renders source guidance and composition without implementation clut
 	const spec = read(motionGuidanceFile)
 		.replace('Motion helps people acknowledge a change', 'Motion explains a meaningful change');
 	const implementation = read(motionImplementationFile).replace('.surface {', '.surface.updated-reference {');
-	const exampleFile = 'src/vs/platform/theme/common/motion/motion-examples.md';
+	const exampleFile = '.github/design-system/motion/examples.md';
 	const examples = read(exampleFile).replace('The change is easier to understand than its immediate, still alternative', 'Clarify meaningful change.');
 	const composition = JSON.parse(read(motionPageFile));
 	composition.sections[0].blocks.reverse();
@@ -216,8 +216,9 @@ test('duration studies isolate source timing, compare together, and keep product
 		await expect(page.locator('#motion-foundations')).toContainText('Choose the least change that explains the relationship.');
 		assert.equal(await page.locator('.motion-doc [data-motion-preset], #motion-authoring, #motion-presets').count(), 0);
 		assert.doesNotMatch(await page.locator('.motion-doc').textContent(), /Preset contract|Default tokens|interpolation-error|Source ownership|Analytic peak speed|travel\/s|Analysis unavailable/);
-		await page.locator('.source-documents > summary').click();
-		assert.equal(new URL(await page.locator('.source-documents').getByRole('link', { name: 'Motion', exact: true }).getAttribute('href')).searchParams.get('documentId'), motionGuidanceFile);
+		await page.locator('.topic-files > summary').click();
+		assert.equal(new URL(await page.locator('.topic-files a').filter({ hasText: motionGuidanceFile }).first().getAttribute('href'), panel.url).searchParams.get('file'), motionGuidanceFile);
+		await page.keyboard.press('Escape');
 		await study.getByRole('link', { name: 'Design tokens', exact: true }).click();
 		const reference = page.locator('[data-topic="tokens"] #tokens-motion');
 		await expect(reference).toBeFocused();

@@ -80,7 +80,7 @@ test('discovery watches additions and closes its bounded source watchers when in
 		const old = 'src/vs/feature/old-design.md';
 		const canonical = 'src/vs/feature/feature.design.md';
 		fixture.write(canonical, '# Feature design\n\n## Usage\n\nKeep the original intent.\n');
-		const file = path.join(fixture.bookRoot, 'book.json');
+		const file = path.join(fixture.bookRoot, 'topics.json');
 		const book = JSON.parse(readFileSync(file, 'utf8'));
 		book.documentAliases = { [old]: canonical };
 		writeFileSync(file, JSON.stringify(book));

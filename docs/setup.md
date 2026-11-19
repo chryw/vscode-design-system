@@ -15,7 +15,7 @@ For dependency setup problems, see VS Code's [contribution guidance](https://git
 
 ## Use an existing checkout
 
-Choose any local VS Code checkout. The [exploration branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration), containing `.github/design-system/book.json`, enables the curated book. Without that manifest, the viewer exposes a source library of product Markdown, repository instructions, skills, and any local design guidance. It does not substitute content from another checkout. Malformed manifests and unreadable sources remain explicit errors. Keep the viewer source clone separate when using the browser/development route. [compatibility.json](../compatibility.json) records a tested curated product revision.
+Choose any local VS Code checkout. The [exploration branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration), containing `.github/design-system/topics.json`, enables the curated book. Without that manifest, the viewer exposes a source library of product Markdown, repository instructions, skills, and any local design guidance. It does not substitute content from another checkout. Malformed manifests and unreadable sources remain explicit errors. Keep the viewer source clone separate when using the browser/development route. [compatibility.json](../compatibility.json) records a tested curated product revision.
 
 From the viewer clone, pass the checkout explicitly:
 
@@ -23,17 +23,21 @@ From the viewer clone, pass the checkout explicitly:
 node scripts/book.mjs serve --root /absolute/path/to/vscode-checkout
 ```
 
+The topic map is `.github/design-system/topics.json`. Shared foundation and pattern specifications live directly in that directory; component specifications stay beside their implementation. Topic source compositions live in `content/topics/`, while the plugin owns layout and navigation. Readers accept legacy `book.json` and `pages/` bindings only when the new map is absent. A malformed, unsupported, or unreadable `topics.json` is an error, never a reason to fall back to stale data. `/book.json` remains an HTTP compatibility alias for `/topics.json`.
+
 Reuse that checkout's existing dependencies and client output when they are already prepared. Basic source browsing needs no product build or dependency installation. Some curated source readers need dependencies; live examples also need `pnpm run build-fast --client-only`.
 
 ## Native plugin
 
 The repository's `.plugin/plugin.json` declares the independent viewer, and `.plugin/marketplace.json` supplies its marketplace entry. The plugin extension imports the shared viewer implementation; it packages no product guidance or book data. Install through the client's native manager as described in the README. For CLI source development, `copilot --plugin-dir /absolute/path/to/vscode-design-system` loads the source package without installing a copy.
 
-Use **Change checkout** in the canvas header, or the `select_checkout` canvas action with an absolute `root`, to browse another clone or worktree in the same panel and on the same server. Selection is saved privately per originating workspace and panel, with topic views separately keyed by checkout and book mode. Reopening after a provider restart restores that selection. Another checkout is never modified as a side effect of browsing.
+Use **Checkout: [worktree]** in the canvas header, or the `select_checkout` canvas action with an absolute `root`, to browse another clone or worktree in the same panel and on the same server. The picker shows branch/worktree names and the selected checkout's full path separately. Choose a worktree and select **Browse checkout** to apply it; Escape dismisses the picker. Selection is saved privately per originating workspace and panel, with topic views separately keyed by checkout and book mode. Reopening after a provider restart restores that selection. Another checkout is never modified as a side effect of browsing.
 
 The canvas checks the local Git branch and commit periodically. An external branch change recreates its source readers and watches, rereads the checkout-owned catalog, and refreshes the same panel. A topic absent from the new branch returns to that branch's default topic. Source-library mode explicitly explains why curated topics and live examples are unavailable. Invalid checkout selection preserves the current book and reports the error.
 
-After adding, removing, or moving topics, changing document discovery scopes, or editing fixture bindings without a Git branch change, use **Change checkout**, select the current checkout again, and choose **Browse checkout**. This rereads the catalog and bindings on the same server, retaining available topics, focused/comparison scope, themes, anchors, and document selections. Removed topics are reconciled to the available catalog; an invalid candidate leaves the current book open with an error. Agents can use `select_checkout` with the current absolute `root` for the same operation.
+After adding, removing, or moving topics, changing document discovery scopes, or editing fixture bindings without a Git branch change, choose **Reload checkout**. This rereads saved content, the catalog, and bindings on the same server, retaining available topics, focused/comparison scope, themes, anchors, document selections, and local example controls. Removed topics are reconciled to the available catalog; an invalid candidate leaves the current book open with an error. Agents can use `select_checkout` with the current absolute `root` for the same operation. Reload does not fetch Git changes or load updated viewer modules.
+
+**Back** and **Forward** work inside the canvas without browser chrome, including links between chapters and authored documents. They restore reading position and do not leave the book. Same-page section links do not add redundant page visits. **Topic files** in the page header lists that topic's guidance documents and its implementation entry point as direct file links, rather than routing through the old raw-document library. There may be multiple guidance files per topic and multiple topics per file. The Source library is no longer a curated-book navigation destination; document search and old document URLs remain available to headless tools and checkouts without a curated book.
 
 Native plugin auto-updates depend on the client's version, marketplace configuration, permissions, and automatic-update policy. Updates are not instant; activation may require a provider reload. Keep the existing panel and its checkout selection rather than opening a replacement.
 
@@ -66,7 +70,7 @@ Panels are chat-scoped, not worktree-global. A session in the same worktree can 
 
 Where a worktree has a coordination record, use it for the intended content root, shared edits, and any active reload operation, not as a requirement to route every open through another chat. Record a useful working panel reference when that record's ownership permits it. The selected checkout, book, and panel ID identify private saved view state; check the header and restored view after opening.
 
-Refresh the current chat's instance with the combined saved worktree, including uncommitted changes, rather than a contributor's isolated snapshot. Use topic refresh for guidance and product-source edits. External Git branch or commit changes refresh the catalog automatically; saved topics absent from that catalog are dropped with an explanation. For uncommitted catalog or fixture-binding changes, reselect the current checkout as described above. Viewer changes arrive through native plugin updates, or an updated managed installation for the legacy route, followed by a provider reload when required. Serialize shared edits and reloads with active contributors, validate a coherent candidate, and preserve the current topic and view. Do not install partially written changes or postpone every refresh indefinitely behind new work.
+Refresh the current chat's instance with the combined saved worktree, including uncommitted changes, rather than a contributor's isolated snapshot. Use **Reload checkout** for guidance, product sources, catalog, and fixture bindings. External Git branch or commit changes refresh the catalog automatically; saved topics absent from that catalog are dropped with an explanation. Viewer changes arrive through native plugin updates, or an updated managed installation for the legacy route, followed by a provider reload when required. Serialize shared edits and reloads with active contributors, validate a coherent candidate, and preserve the current topic and view. Do not install partially written changes or postpone every refresh indefinitely behind new work.
 
 Retire obsolete instances with the host's **Close Canvas** action. Closing an editor tab or stopping a viewer server alone does not remove a canvas from the picker. Do not edit host storage or create a suffixed instance to bypass an old provider binding. Preserve unrelated canvases.
 
@@ -117,7 +121,7 @@ To uninstall a canvas, remove the installed `.github/extensions/vscode-design-sy
 
 ## Development
 
-The installed plugin and local source viewer read saved, uncommitted content from the selected checkout, but execute their own viewer code. **Refresh topic** rereads content; reselecting the current checkout rereads the catalog and bindings. Neither operation updates viewer code or adds a renderer capability.
+The installed plugin and local source viewer read saved, uncommitted content from the selected checkout, but execute their own viewer code. **Reload checkout** rereads content, the catalog, and bindings. It does not update viewer code or add a renderer capability.
 
 For unpublished viewer changes in regular canvas sessions, the native CLI manager supports a live local marketplace:
 
@@ -134,8 +138,8 @@ Once the live source is discovered, use the appropriate refresh:
 
 | Changed source | Refresh |
 | --- | --- |
-| Guidance or product source | **Refresh topic**. |
-| Added, removed, or moved topics; catalog or binding changes | Reselect the current checkout with **Browse checkout**. |
+| Guidance or product source | **Reload checkout**. |
+| Added, removed, or moved topics; catalog or binding changes | **Reload checkout**. |
 | Viewer modules or client assets | Reload extension providers and reopen the same canvas. Content refresh does not reload running viewer modules. |
 | Installed plugin source or membership | Full customization refresh in affected existing sessions; verify the loaded source path. |
 
