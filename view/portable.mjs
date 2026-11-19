@@ -6,7 +6,7 @@
 import { mountReference } from './reference.mjs';
 import { createBookNavigation } from './book-navigation.mjs';
 import { bookTitle, topicId } from './topics/catalog.mjs';
-import { documentView, resolveDocumentReference } from '../model/documents.mjs';
+import { documentView, findDocument, resolveDocumentReference } from '../model/documents.mjs';
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
@@ -30,6 +30,7 @@ const topicURL = id => {
 	url.searchParams.set('topic', id);
 	return url;
 };
+const sourceURL = (id, anchor = '') => `https://github.com/microsoft/vscode/blob/${snapshot.commit}/${id.split('/').map(encodeURIComponent).join('/')}#${encodeURIComponent(anchor)}`;
 const problem = error => {
 	target.replaceChildren();
 	const message = document.createElement('p');
@@ -71,7 +72,7 @@ function show(id, push = false, settings = {}) {
 						: { problem: snapshot.documentImageProblems[key] ?? 'Image is not available in this snapshot' };
 				}
 				const reference = resolveDocumentReference(id, target);
-				return { href: `https://github.com/microsoft/vscode/blob/${snapshot.commit}/${reference.id.split('/').map(encodeURIComponent).join('/')}#${encodeURIComponent(reference.anchor ?? '')}`, external: true };
+				return { href: sourceURL(reference.id, reference.anchor), external: true };
 			},
 			onView: patch => {
 				Object.assign(view, patch);
@@ -84,6 +85,14 @@ function show(id, push = false, settings = {}) {
 				for (const link of article.querySelectorAll('a[href]')) {
 					const url = new URL(link.href);
 					if (url.origin === location.origin && url.searchParams.has('section')) {
+						const documentId = url.searchParams.get('documentId');
+						if (url.searchParams.get('section') === 'documentation' && documentId && !findDocument(snapshot.documents, documentId)) {
+							link.href = sourceURL(documentId, decodeURIComponent(url.hash.slice(1)));
+							link.target = '_blank';
+							link.rel = 'noopener noreferrer';
+							link.setAttribute('aria-label', `${link.textContent} (opens in a new tab)`);
+							continue;
+						}
 						const next = topicURL(topicId(Object.fromEntries(url.searchParams)));
 						writeViewURL(next, readViewURL(url), { topic: false });
 						link.href = next.href;

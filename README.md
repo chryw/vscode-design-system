@@ -139,4 +139,4 @@ See the [setup reference](docs/setup.md) for updates, troubleshooting, and devel
 
 ## Share a browser-only snapshot
 
-Use [snapshot releases](docs/snapshot-releases.md) to export a selected checkout, validate its rendered chapters, and publish an offline download plus a versioned GitHub Pages link. Readers need only a browser. Building locally does not publish anything; public publication is explicit.
+Use [snapshot releases](docs/snapshot-releases.md) to export a selected checkout, validate its rendered chapters, and publish an offline download plus a versioned GitHub Pages link. Release snapshots embed the guidance used by those chapters, not the checkout's unrelated repository instructions or source-document library. Other document references open their source revision on GitHub. Readers need only a browser. Building locally does not publish anything; public publication is explicit.

@@ -8,7 +8,7 @@ import test from 'node:test';
 import { EventEmitter } from 'node:events';
 import { readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { documentExcerpt, documentSection, documentView, parseDocument, resolveDocumentReference } from '../model/documents.mjs';
+import { documentExcerpt, documentSection, documentView, parseDocument, resolveDocumentReference, selectDocuments } from '../model/documents.mjs';
 import { initialView, readViewURL, validateViewFields, viewProperties, writeViewURL } from '../model/view-state.mjs';
 import { DocumentLibrary } from '../runtime/documents.mjs';
 import { createExplorer } from '../runtime/server.mjs';
@@ -56,6 +56,26 @@ test('discovery and search locate ordinary Markdown by content, path, and metada
 		assert.throws(() => library.read('src/vs/new-feature/DESIGN.md'), error => error.code === 'DOCUMENT_NOT_FOUND');
 		assert.throws(() => library.list({ scope: 'unconfigured' }), /Unknown documentation scope/);
 		assert.throws(() => library.list({ limit: 101 }), /page bounds/);
+	} finally { library.close(); }
+});
+
+test('portable guidance selection excludes unrelated documents, scopes, diagnostics, and aliases', t => {
+	const fixture = checkout(t);
+	const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
+	try {
+		const id = 'src/vs/feature/feature-notes.md';
+		const index = {
+			...library.snapshot(),
+			aliases: { 'old-guide.md': id, 'unrelated.md': '.github/instructions/special.instructions.md' },
+			diagnostics: [{ file: '.github/instructions/unrelated.md', reason: 'missing-document' }],
+		};
+		const selected = selectDocuments(index, ['old-guide.md']);
+		assert.deepEqual({
+			documents: selected.documents.map(document => document.id),
+			scopes: selected.scopes.map(scope => scope.id), aliases: selected.aliases, diagnostics: selected.diagnostics,
+			originalRetained: index.documents.length > selected.documents.length,
+		}, { documents: [id], scopes: ['product'], aliases: { 'old-guide.md': id }, diagnostics: [], originalRetained: true });
+		assert.throws(() => selectDocuments(index, ['missing.md']), /not available in the configured library/);
 	} finally { library.close(); }
 });
 

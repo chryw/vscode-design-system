@@ -10,6 +10,7 @@ import path from 'node:path';
 import { chromium, expect } from './playwright.mjs';
 import { createExplorer } from '../runtime/server.mjs';
 import { readDocument } from '../runtime/headless.mjs';
+import { parseDocument, selectDocuments } from '../model/documents.mjs';
 import { createDocumentCheckout, checkoutRoot } from './document-helpers.mjs';
 
 test('documents share the chapter title, introduction and outline order without losing source structure', { timeout: 60000 }, async t => {
@@ -135,12 +136,20 @@ test('portable navigation retains document links and page history without live A
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const ids = ['accessibility', 'documentation'];
+		const guideId = '.github/design-system/portable-links.md';
+		const index = panel.store.documents.snapshot();
+		const guide = {
+			...parseDocument('# Portable links\n\n[Read authoring](authoring.md).\n', { id: guideId }),
+			scope: 'design-system', revision: 'portable-links',
+		};
 		const snapshot = {
-			createdAt: new Date().toISOString(),
+			createdAt: new Date().toISOString(), commit: 'a'.repeat(40),
 			repository: panel.store.repository.projection,
 			catalog: panel.store.repository.catalog.filter(item => ids.includes(item.id)),
 			topics: Object.fromEntries(await Promise.all(ids.map(async id => [id, (await panel.store.read(id, panel.state.views[id])).data]))),
-			documents: panel.store.documents.snapshot(), documentImages: {}, documentImageProblems: {},
+			documents: selectDocuments({ ...index, documents: [...index.documents, guide] }, [
+				guideId, '.github/design-system/accessibility.design.md', '.github/instructions/design-tokens.instructions.md',
+			]), documentImages: {}, documentImageProblems: {},
 		};
 		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 		const errors = [];
@@ -203,6 +212,11 @@ test('portable navigation retains document links and page history without live A
 		await appearance.click();
 		await expect(menu.getByRole('menuitemradio', { name: 'Dark', exact: true })).toBeChecked();
 		await page.keyboard.press('Escape');
+		await page.goto(new URL(`/snapshot.html?topic=documentation&documentId=${encodeURIComponent(guideId)}`, panel.url).href);
+		await expect(page.locator('h1')).toHaveText('Portable links');
+		const outside = page.getByRole('link', { name: 'Read authoring (opens in a new tab)', exact: true });
+		await expect(outside).toHaveAttribute('href', `https://github.com/microsoft/vscode/blob/${snapshot.commit}/.github/design-system/authoring.md#`);
+		await expect(outside).toHaveAttribute('target', '_blank');
 		assert.deepEqual({ errors, apiRequests }, { errors: [], apiRequests: [] });
 	} finally { await browser.close(); await panel.close(); }
 });

@@ -20,6 +20,8 @@ The full book is the default experience. Ordinary sidebar navigation selects a t
 
 The package contains no book manifest, chapter data, or design guidance. `adapters/vscode/repository.mjs` reads a bounded, validated projection from `.github/design-system/` in the canonical selected checkout. Each runtime has its own catalog and metadata; an explicit root never falls back to the provider checkout's content. `/api/repository` supplies the browser's local presentation context before mounting any article. Portable snapshots embed the same projection. Installing this package separately must leave repository content usable without this viewer. There must be only one active registration for the stable canvas ID.
 
+Release snapshots select their embedded document library from each exported topic's normalized `resources.guidance` references. This preserves the book's actual guidance without copying unrelated repository instructions and product documentation. The full local document library and default standalone export remain unchanged. Portable links outside an embedded selection open the source revision on GitHub, with new-tab announcement, rather than navigating to a missing offline document.
+
 The lazy registered/contributed color-definition reader and saved-fixture source-tree synchronization belong to this runtime. Product motion tokens/controllers remain in their owning product files; the motion topic reads those saved sources directly.
 
 The fixed modules use `.mjs` so Node and browsers run the same ESM without a compiler. Their narrowly scoped `code-no-new-javascript-files` lint exception documents this deliberate no-build requirement; repository lint configuration is unchanged. Other applicable lint rules still run.

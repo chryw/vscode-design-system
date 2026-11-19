@@ -97,7 +97,7 @@ export async function buildSnapshot({ root, output, tag }) {
 		cwd: root, stdio: 'inherit', timeout: 180000,
 	});
 	run('book.mjs', ['validate', '--root', root]);
-	run('export.mjs', [path.join(output, 'design-system.html'), '--root', root]);
+	run('export.mjs', [path.join(output, 'design-system.html'), '--root', root, '--guidance-only']);
 	const rendered = await checkRendering(path.join(output, 'design-system.html'), root);
 	assert.deepEqual(await Promise.all([sourceFingerprint(root, output), sourceFingerprint(packageRoot, output)]), before,
 		'Sources changed while building. Discard this output and retry after edits settle.');

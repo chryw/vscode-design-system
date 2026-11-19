@@ -171,6 +171,22 @@ export function findDocument(index, id) {
 	return index.documents.find(document => document.id === canonical);
 }
 
+export function selectDocuments(index, documentIds) {
+	const selected = new Set([...documentIds].map(id => {
+		const document = findDocument(index, id);
+		if (!document) { throw new DocumentError('DOCUMENT_NOT_FOUND', `Document is not available in the configured library: ${id}`); }
+		return document.id;
+	}));
+	const documents = index.documents.filter(document => selected.has(document.id));
+	const scopes = new Set(documents.map(document => document.scope));
+	return {
+		...index, documents,
+		aliases: Object.fromEntries(Object.entries(index.aliases ?? {}).filter(([, target]) => selected.has(target))),
+		scopes: index.scopes.filter(scope => scopes.has(scope.id)),
+		diagnostics: index.diagnostics.filter(diagnostic => selected.has(diagnostic.file)),
+	};
+}
+
 export function documentView(index, view) {
 	const listing = queryDocuments(index, { query: view.query ?? '', scope: view.documentScope ?? '', offset: view.documentOffset ?? 0 });
 	const document = view.documentId ? findDocument(index, view.documentId) : undefined;

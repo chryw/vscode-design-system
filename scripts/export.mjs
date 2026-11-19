@@ -8,18 +8,22 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { parseArgs } from 'node:util';
 import { TopicStore } from '../runtime/store.mjs';
 import { readRepository } from '../adapters/vscode/repository.mjs';
 import { curateFixtures } from '../model/components.mjs';
-import { DocumentError, resolveDocumentReference } from '../model/documents.mjs';
+import { DocumentError, documentView, resolveDocumentReference, selectDocuments } from '../model/documents.mjs';
 import { defaultView } from '../runtime/view-state.mjs';
 import { workspaceRoot } from '../runtime/paths.mjs';
 
-const [output, option, selectedRoot, ...extra] = process.argv.slice(2);
-if (!output || extra.length || option !== undefined && (option !== '--root' || !selectedRoot)) {
-	throw new Error('Usage: node scripts/export.mjs <output.html> [--root <checkout>]');
+const { values, positionals } = parseArgs({ allowPositionals: true, options: {
+	root: { type: 'string' }, 'guidance-only': { type: 'boolean', default: false },
+} });
+if (positionals.length !== 1 || !positionals[0] || values.root === '') {
+	throw new Error('Usage: node scripts/export.mjs <output.html> [--root <checkout>] [--guidance-only]');
 }
-const root = path.resolve(selectedRoot ?? workspaceRoot);
+const [output] = positionals;
+const root = path.resolve(values.root ?? workspaceRoot);
 const assets = fileURLToPath(new URL('../view/', import.meta.url));
 const destination = path.resolve(output);
 const scratch = await mkdtemp(path.resolve('.design-system-export-'));
@@ -46,6 +50,10 @@ try {
 	const provenance = topics.principles.provenance;
 	const snapshot = { createdAt: new Date().toISOString(), commit: provenance.commit, modified: provenance.modified, catalog: selected, topics, repository: repository.projection };
 	snapshot.documents = store.documents.snapshot();
+	if (values['guidance-only']) {
+		snapshot.documents = selectDocuments(snapshot.documents, Object.values(topics).flatMap(topic => topic.resources.guidance.map(item => item.file)));
+		if (topics.documentation?.library) { topics.documentation.library = documentView(snapshot.documents, topics.documentation.view); }
+	}
 	snapshot.documentImages = Object.create(null);
 	snapshot.documentImageProblems = Object.create(null);
 	let documentImageBytes = 0;
@@ -194,7 +202,7 @@ try {
 <a class="skip" href="#reference">Skip to content</a>
 <header class="explorer-heading"><div class="site-bar"><div class="site-navigation"></div><p class="book-title" title="Visual Studio Code Design System"><span class="brand-product">VS Code </span>Design System</p>
 <nav class="page-history" aria-label="Page history"><button id="history-back" type="button" disabled>Back</button><button id="history-forward" type="button" disabled>Forward</button></nav></div></header>
-<details class="snapshot-info"><summary class="chrome-disclosure"><span class="chrome-icon codicon-chevron-right" aria-hidden="true"></span><span>Review snapshot · <time id="snapshot-date"></time></span></summary><p>Not a published specification. A shared starting point for reviewing the topic breakdown and deciding what to document and centralize. Topic data and interactive fixtures are frozen; topics without documentation remain open work.</p><p>Share a topic using its address. This static page doesn't save shared comments or edits.</p><p>Source links open the base commit on GitHub; local working changes in this snapshot may differ.</p></details>
+<details class="snapshot-info"><summary class="chrome-disclosure"><span class="chrome-icon codicon-chevron-right" aria-hidden="true"></span><span>Review snapshot · <time id="snapshot-date"></time></span></summary><p>Not a published specification. A shared starting point for reviewing the topic breakdown and deciding what to document and centralize. Topic data and interactive fixtures are frozen; topics without documentation remain open work.</p><p>Share a topic using its address. This static page doesn't save shared comments or edits.</p><p>Source links open the base commit on GitHub; local working changes in this snapshot may differ.</p>${values['guidance-only'] ? '<p>The source library includes guidance used by these chapters. Other document references open their source on GitHub.</p>' : ''}</details>
 <div class="explorer-layout"><div id="book-navigation"></div><div class="explorer-article">
 <main id="reference" tabindex="-1"><p role="status">Opening the design-system snapshot...</p></main>
 </div></div><noscript>This interactive reference requires JavaScript.</noscript>
@@ -203,7 +211,7 @@ try {
 	if (html.includes(root) || /https?:\/\/(?:localhost|127\.0\.0\.1):/.test(html)) { throw new Error('Export contains a machine-local dependency'); }
 	await mkdir(path.dirname(destination), { recursive: true });
 	await writeFile(destination, html);
-	console.log(JSON.stringify({ file: destination, bytes: Buffer.byteLength(html), topics: selected.length,
+	console.log(JSON.stringify({ file: destination, bytes: Buffer.byteLength(html), topics: selected.length, documents: snapshot.documents.documents.length,
 		fixtures: new Set(snapshot.fixtures.controls.flatMap(item => item.variants.map(variant => variant.id))).size, commit: snapshot.commit, modified: snapshot.modified }, null, 2));
 } finally {
 	store.close();

@@ -15,7 +15,9 @@ For the complete software-and-snapshot workflow, use the repository's [release s
 3. Keep the **github-pages** environment's deployment protection rules enabled as appropriate for the team. Permit snapshot tags to deploy if the environment restricts branches and tags.
 4. Sign in with `gh auth login` using an account allowed to create releases in that repository.
 
-**Public repositories produce public Pages sites.** A snapshot embeds the discovered source-document library as well as curated chapters. Review the generated HTML before publishing; do not include confidential documents or working changes. Public publication requires `--allow-public`. For access-controlled enterprise hosting, use the separate [private review publisher](private-review.md).
+**Public repositories produce public Pages sites.** Release builds pass `--guidance-only` to the exporter: they embed documents explicitly used as guidance by the exported chapters, with their matching aliases and source scopes. Unrelated repository instructions, skills, and product documentation are not copied merely because local source browsing can discover them. References to documents outside that selection open the base source revision on GitHub.
+
+Review the generated HTML, including its compressed source payload, before publishing; selected guidance still needs review for confidential material or working changes. The standalone exporter retains its full-library default for local or access-controlled review; use `--guidance-only` when preparing a guidance-only export directly. Public publication requires `--allow-public`. For access-controlled enterprise hosting, use the separate [private review publisher](private-review.md).
 
 ## Build and inspect without publishing
 
