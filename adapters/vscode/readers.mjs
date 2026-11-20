@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { createReferenceModel } from './reference-model.mjs';
 import { readProvenance } from './provenance.mjs';
@@ -11,19 +11,33 @@ import { contained } from '../../runtime/paths.mjs';
 import { documentView } from '../../model/documents.mjs';
 import { createTopicResources } from './topic-resources.mjs';
 
+function isCheckoutRoot(root) {
+	return existsSync(path.join(root, 'src/vs/base/common/lifecycle.ts'))
+		|| existsSync(path.join(root, 'src/vs/platform/theme/common/sizes/baseSizes.ts'));
+}
+
 export function canonicalRoot(root) {
 	const result = realpathSync(root);
-	if (!existsSync(path.join(result, 'src/vs/base/common/lifecycle.ts'))
-		&& !existsSync(path.join(result, 'src/vs/platform/theme/common/sizes/baseSizes.ts'))) {
+	if (!isCheckoutRoot(result)) {
 		throw new Error('Select a VS Code checkout');
 	}
 	return result;
 }
 
+export function checkoutForWorkspace(workspace) {
+	const directory = realpathSync(workspace);
+	for (let candidate = directory; ; candidate = path.dirname(candidate)) {
+		if (isCheckoutRoot(candidate)) { return candidate; }
+		if (lstatSync(path.join(candidate, '.git'), { throwIfNoEntry: false }) || path.dirname(candidate) === candidate) {
+			return directory;
+		}
+	}
+}
+
 export const vscodeAdapter = {
 	canonicalRoot,
 	sourcePath(root, file, bookRoot) {
-		const prefix = '.github/design-system/';
+		const prefix = `${path.relative(root, bookRoot).split(path.sep).join('/')}/`;
 		return typeof file === 'string' && file.startsWith(prefix) ? contained(bookRoot, file.slice(prefix.length)) : contained(root, file);
 	},
 	readTopic: (...args) => readTopic(...args),

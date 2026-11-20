@@ -11,10 +11,18 @@ import { workspaceRoot } from './runtime/paths.mjs';
 import { viewProperties } from './model/view-state.mjs';
 
 const runtime = createBookRuntime(workspaceRoot);
+const versionSchema = {
+	type: 'object', additionalProperties: false, required: ['kind'],
+	properties: {
+		kind: { type: 'string', enum: ['latest', 'shared', 'session'] },
+		branch: { type: 'string', minLength: 1, maxLength: 2048, description: 'Required only for shared: a remote branch name or GitHub branch URL.' },
+	},
+};
 const inputSchema = {
 	type: 'object', additionalProperties: false,
 	properties: {
-		root: { type: 'string', description: 'VS Code checkout path. Defaults to the current workspace; another checkout can be selected in the same canvas.' },
+		root: { type: 'string', description: 'Explicit local checkout override, mutually exclusive with version. Defaults to the session worktree; outside a VS Code session, defaults to latest remote main. Existing panels retain their selection.' },
+		version: { ...versionSchema, description: 'Read latest remote main, a shared branch, or saved session files without switching the session checkout.' },
 		topics: { type: 'array', items: { type: 'string' }, uniqueItems: true },
 		active: { type: 'string' }, layout: { type: 'string', enum: ['single', 'compare'] },
 	},
@@ -36,6 +44,9 @@ await joinSession({
 		description: 'Browse source-backed design references, authored specifications and live product examples.',
 		inputSchema,
 		actions: [
+			{ name: 'select_content_version', description: 'Read freshly fetched remote main, a shared branch name/GitHub URL, or the originating session worktree including saved uncommitted edits. Never switches the user checkout.',
+				inputSchema: versionSchema,
+				handler: guarded(({ instanceId, input }) => runtime.required(instanceId).selectContentVersion(input)) },
 			{ name: 'select_checkout', description: 'Browse another local VS Code checkout or worktree in this canvas without switching its Git branch.',
 				inputSchema: { type: 'object', additionalProperties: false, required: ['root'], properties: { root: { type: 'string', maxLength: 4096 } } },
 				handler: guarded(({ instanceId, input }) => runtime.required(instanceId).selectCheckout(input)) },

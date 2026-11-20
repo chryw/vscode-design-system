@@ -6,9 +6,10 @@
 import { colorDefinitions, createColorResolver } from '../color-catalog.mjs';
 
 export function load({read,source,root}, palettes = []){
-	const elevationGuidance = {file:'.github/skills/design-philosophy/SKILL.md',text:read('.github/skills/design-philosophy/SKILL.md')};
-	const tierStart = elevationGuidance.text.indexOf('### Elevation tiers');
-	const tierEnd = elevationGuidance.text.indexOf('\n<a id=', tierStart);
+	const elevationFile = '.github/skills/design-system/foundations/elevation.design.md';
+	const elevationText = read(elevationFile);
+	const tierStart = elevationText.indexOf('## Surface hierarchy');
+	const tierEnd = elevationText.indexOf('\n## What makes elevation', tierStart);
 	if (tierStart === -1 || tierEnd === -1) {
 		throw new Error('Elevation guidance changed. Update the source adapter.');
 	}
@@ -25,7 +26,7 @@ export function load({read,source,root}, palettes = []){
 		throw new Error('Widget shadow defaults changed. Update the source adapter.');
 	}
 	const elevation = {
-		tiers: { text: elevationGuidance.text.slice(tierStart, tierEnd), source: source(elevationGuidance.file, tierStart) },
+		tiers: { text: elevationText.slice(tierStart, tierEnd), source: source(elevationFile, tierStart) },
 		shadows: { text: shadowText.slice(shadowStart, shadowEnd).trim(), source: source(shadowFile, shadowStart), registrations: shadowRegistrations },
 		cssShadows: [...read('src/vs/workbench/browser/media/style.css').matchAll(/^[ \t]*(?<css>--vscode-shadow-(?:sm|md|lg|xl)):\s*(?<value>[^;]+);/gm)]
 			.filter(match => !match.groups.value.includes('transparent'))

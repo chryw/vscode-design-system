@@ -166,7 +166,8 @@ test('toolkit evidence is retained without promoting every specification to prim
 	assert.equal(catalog.some(topic => topic.id === 'components'), false);
 	for (const control of controls) {
 		const topic = catalog.find(topic => topic.controlId === control.id);
-		assert.equal('family' in control || 'subgroup' in topic, false);
+		assert.equal('family' in control, false);
+		assert.equal('subgroup' in topic, control.kind === 'primitive' || control.kind === 'composite');
 		assert.deepEqual({ content: topic.content, fixture: topic.fixture, hidden: topic.hidden },
 			{ content: control.content, fixture: control.content === 'ready', hidden: control.hidden });
 	}
@@ -255,9 +256,8 @@ test('new authored guidance topics retain source scope without claiming product 
 
 test('elevation reads live tier guidance, registered radii, and actual shadow sources', async t => {
 	const system = await reader(t)('elevation');
-	assert.match(system.elevation.tiers.text, /Control.*cornerRadius-small/);
-	assert.match(system.elevation.tiers.text, /Inner.*cornerRadius-medium/);
-	assert.match(system.elevation.tiers.text, /Outer.*cornerRadius-large/);
+	assert.match(system.elevation.tiers.text, /Inside a surface/);
+	assert.match(system.elevation.tiers.text, /Blocking the work/);
 	assert.deepEqual(system.elevation.shadows.registrations.map(({ id, defaults }) => ({ id, defaults })), [
 		{ id: 'widget.shadow', defaults: '{ dark: transparent(Color.black, .36), light: transparent(Color.black, .16), hcDark: null, hcLight: null }' },
 		{ id: 'widget.border', defaults: '{ dark: null, light: null, hcDark: contrastBorder, hcLight: contrastBorder }' },
@@ -277,7 +277,7 @@ test('elevation reads live tier guidance, registered radii, and actual shadow so
 		id, contrast: id.startsWith('Default High Contrast'),
 		editor: themes.themeGallery.find(theme => theme.id === id).palette.editor,
 	})));
-	assert.ok(system.sourceFiles.includes('.github/design-system/elevation.design.md'));
+	assert.ok(system.sourceFiles.includes('.github/skills/design-system/foundations/elevation.design.md'));
 	assert.ok(system.sizes.some(token => token.id === 'cornerRadius.xLarge'));
 });
 

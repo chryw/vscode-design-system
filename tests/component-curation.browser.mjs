@@ -26,17 +26,23 @@ test('the full canvas browses canonical component families and preserves grouped
 		await expect(page.locator('[data-topic="component-pill"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const navigation = page.getByRole('navigation', { name: 'Topics', exact: true });
 		const names = await navigation.locator('a[href]').evaluateAll(links => links
-			.filter(link => new URL(link.href).searchParams.get('section') === 'components').map(link => link.textContent));
-		assert.deepEqual(names, controls.filter(control => !control.hidden).map(control => control.name));
+			.filter(link => new URL(link.href).searchParams.get('section') === 'components')
+			.map(link => link.firstElementChild.textContent));
+		assert.deepEqual([...names].sort((a, b) => a.localeCompare(b, 'en')),
+			controls.filter(control => !control.hidden).map(control => control.name).sort((a, b) => a.localeCompare(b, 'en')));
 		const group = navigation.locator(':scope > details').filter({ has: page.getByText('Components', { exact: true }) });
-		const componentNames = await group.locator('a[href]').allTextContents();
-		assert.deepEqual(componentNames, [...componentNames].sort((a, b) => a.localeCompare(b, 'en')));
-		await group.getByRole('link', { name: 'Menu', exact: true }).focus();
+		const componentNames = await group.locator('a[href]').evaluateAll(links => links.map(link => link.firstElementChild.textContent));
+		assert.deepEqual([...componentNames].sort((a, b) => a.localeCompare(b, 'en')),
+			controls.filter(control => !control.hidden).map(control => control.name).sort((a, b) => a.localeCompare(b, 'en')));
+		for (const subgroup of await group.locator('details').all()) {
+			if (!await subgroup.evaluate(element => element.open)) { await subgroup.locator(':scope > summary').click(); }
+		}
+		await group.getByRole('link', { name: /^Menu/ }).focus();
 		await page.keyboard.press('Tab');
-		await expect(group.getByRole('link', { name: 'Multi-select', exact: true })).toBeFocused();
+		await expect(group.getByRole('link', { name: /^Toolbar/ })).toBeFocused();
 		const patterns = navigation.locator(':scope > details').filter({ has: page.getByText('Patterns', { exact: true }) });
 		await patterns.locator('summary').click();
-		assert.deepEqual(await patterns.locator('a[href]').allTextContents(),
+		assert.deepEqual(await patterns.locator('a[href]').evaluateAll(links => links.map(link => link.firstElementChild.textContent)),
 			catalog.filter(topic => topic.group === 'Patterns' && !topic.hidden).map(topic => topic.title));
 		await patterns.getByRole('link', { name: 'Modal', exact: true }).focus();
 		await page.keyboard.press('Enter');
@@ -45,17 +51,20 @@ test('the full canvas browses canonical component families and preserves grouped
 		await page.goto(new URL('/?section=modal&anchor=modal-composition&mode=all', panel.url).href);
 		await expect(page.locator('[data-topic="modal"] #modal-composition')).toBeVisible();
 		await expect(page.locator('[data-topic="modal"] #modal-scenarios')).toContainText('Remote environments');
-		const button = navigation.getByRole('link', { name: 'Button', exact: true });
-		if (!await button.isVisible()) { await navigation.getByText('Components', { exact: true }).click(); }
+		const components = navigation.locator(':scope > details').filter({ has: page.getByText('Components', { exact: true }) });
+		if (!await components.evaluate(element => element.open)) { await components.locator(':scope > summary').click(); }
+		const primitives = components.locator('details').filter({ has: page.getByText('Primitives', { exact: true }) });
+		if (!await primitives.evaluate(element => element.open)) { await primitives.locator(':scope > summary').click(); }
+		const button = navigation.getByRole('link', { name: /^Button/ });
 		await button.focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="component-button"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('[data-topic="component-button"] .component-api-table')).toContainText('ButtonBar.addButton');
 		await expect(page.locator('[data-topic="component-button"] .control-stage')).toHaveAttribute('data-preview-state', 'ready');
 		await page.goto(new URL('/?section=components&controlId=icon-label&mode=all', panel.url).href);
-		await expect(page.locator('[data-topic="component-label"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await expect(page.locator('[data-topic="component-label"] .component-api-table')).toContainText('IconLabel.setLabel');
-		assert.equal(panel.state.scope.active, 'component-label');
+		await expect(page.locator('[data-topic="component-icon-label"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(page.locator('[data-topic="component-icon-label"] .component-api-table')).toContainText('IconLabel.setLabel');
+		assert.equal(panel.state.scope.active, 'component-icon-label');
 		await page.goto(new URL('/?section=components&controlId=chat-attachment&mode=all', panel.url).href);
 		await expect(page.getByRole('heading', { name: 'Resource pill', exact: true })).toBeVisible();
 		await expect(page.locator('[data-topic="component-pill"] iframe, [data-topic="component-pill"] .component-api-table')).toHaveCount(0);

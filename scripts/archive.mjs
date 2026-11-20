@@ -8,6 +8,7 @@ import path from 'node:path';
 import { packageRoot, workspaceRoot } from '../runtime/paths.mjs';
 import { TopicStore } from '../runtime/store.mjs';
 import { defaultView } from '../runtime/view-state.mjs';
+import { repositoryDirectoryFor } from '../runtime/book.mjs';
 
 export async function copyReviewSources(destination, root = workspaceRoot) {
 	await cp(packageRoot, path.join(destination, 'book'), {
@@ -22,13 +23,15 @@ export async function copyReviewSources(destination, root = workspaceRoot) {
 		},
 	});
 	const repositoryRoot = path.join(destination, 'repository');
-	await cp(path.join(root, '.github/design-system'), path.join(repositoryRoot, '.github/design-system'), { recursive: true });
+	const bookRoot = repositoryDirectoryFor(root);
+	const bookPrefix = path.relative(root, bookRoot).split(path.sep).join('/');
+	await cp(bookRoot, path.join(repositoryRoot, bookPrefix), { recursive: true });
 	const store = new TopicStore(root);
 	try {
 		const documents = new Set();
 		for (const topic of store.repository.catalog.filter(topic => !topic.hidden)) {
 			const result = await store.read(topic.id, defaultView(topic.id, store.repository));
-			for (const file of result.sources.filter(file => file.endsWith('.md') && !file.startsWith('.github/design-system/'))) { documents.add(file); }
+			for (const file of result.sources.filter(file => file.endsWith('.md') && !file.startsWith(`${bookPrefix}/`))) { documents.add(file); }
 		}
 		for (const file of documents) {
 			const target = path.join(repositoryRoot, file);

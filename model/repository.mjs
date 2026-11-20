@@ -15,7 +15,7 @@ export function createRepository(input) {
 		|| typeof input.references?.components !== 'string' || typeof input.references.foundations !== 'string') {
 		throw new Error('Invalid design-system repository projection');
 	}
-	const { controls, aliases } = createControls(input.curation, input.toolkit.specifications);
+	const { controls, aliases } = createControls(input.curation, input.toolkit.specifications, input.designSpecs ?? []);
 	validateBook(input.book);
 	if (input.book.components !== undefined) {
 		const { components, ...book } = input.book;
@@ -23,7 +23,10 @@ export function createRepository(input) {
 			id: `component-${control.id}`, title: control.name, group: 'Components', section: 'components', controlId: control.id,
 			aliases: [control.id, ...(control.aliases ?? [])], compare: true, fixture: Boolean(control.groups.length),
 			content: control.content, hidden: control.hidden, renderer: 'components', page: components.page,
-			kind: 'component', ...(control.design ? { design: control.design } : {}),
+			kind: control.kind ?? 'component', ...(control.status ? { status: control.status } : {}),
+			...(control.replacedBy ? { replacedBy: `component-${control.replacedBy}` } : {}),
+			...(control.specPath || control.design ? { design: control.specPath ?? control.design } : {}),
+			...(control.kind ? { subgroup: control.kind === 'primitive' ? 'Primitives' : 'Composites' } : {}),
 		}));
 		input = { ...input, book: { ...book, topics: book.topics.flatMap(topic => topic.id === components.after ? [topic, ...topics] : [topic]) } };
 	}

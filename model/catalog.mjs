@@ -70,10 +70,14 @@ export function validateBook(book) {
 			|| topic.hidden !== undefined && typeof topic.hidden !== 'boolean'
 			|| topic.navigation !== undefined && !['topic', 'utility'].includes(topic.navigation)
 			|| topic.page !== undefined && !/^(?:pages|content\/topics)\/[a-z][a-z0-9-]*\.json$/.test(topic.page)
-			|| topic.kind !== undefined && !['foundation', 'component', 'pattern'].includes(topic.kind)
+			|| topic.kind !== undefined && !['foundation', 'component', 'primitive', 'composite', 'pattern'].includes(topic.kind)
 			|| topic.design !== undefined && (typeof topic.design !== 'string'
-				|| !/^(?:\.github\/design-system|src\/vs)\/[\w/.-]+\.design\.md$/.test(topic.design)
+				|| !/^(?:\.github\/(?:design-system|skills\/design-system)|src\/vs)\/[\w/.-]+\.design\.md$/.test(topic.design)
 				|| topic.design.split('/').includes('..'))
+			|| topic.status !== undefined && !['draft', 'stable', 'deprecated'].includes(topic.status)
+			|| topic.status === 'deprecated' && (typeof topic.replacedBy !== 'string' || !/^[a-z][a-z0-9-]*$/.test(topic.replacedBy))
+			|| topic.status === 'deprecated' && !book.topics.some(entry => entry.id === topic.replacedBy && entry.status !== 'deprecated')
+			|| topic.status !== undefined && topic.status !== 'deprecated' && topic.replacedBy !== undefined
 			|| topic.section !== 'components' && topic.section !== topic.id
 			|| topic.renderer !== 'guidance' && !sectionRenderers[topic.renderer]?.includes(topic.section)
 			|| topic.renderer === 'guidance' && Object.values(sectionRenderers).some(sections => sections.includes(topic.section))
@@ -81,6 +85,7 @@ export function validateBook(book) {
 			throw new Error(`Invalid book topic: ${topic?.id}`);
 		}
 		return { ...topic, references: Object.hasOwn(references, topic.id) ? references[topic.id] : [],
+			hidden: topic.status === 'deprecated' || topic.hidden === true,
 			rendererKind: topic.renderer, renderer: renderers[topic.renderer] };
 	});
 }
@@ -97,12 +102,16 @@ export function createCatalog(manifest, componentAliases) {
 	const catalog = validateBook(manifest);
 	const aliases = new Map(componentAliases);
 	for (const topic of catalog.filter(topic => topic.section !== 'components')) {
+		const target = topic.status === 'deprecated' ? topic.replacedBy : topic.id;
+		if (topic.status === 'deprecated') {
+			aliases.set(topic.id, target);
+		}
 		for (const alias of topic.aliases) {
 			if (alias === 'components' || catalog.some(entry => entry.id === alias && entry.id !== topic.id)
-				|| aliases.has(alias) && aliases.get(alias) !== topic.id) {
+				|| aliases.has(alias) && aliases.get(alias) !== target) {
 				throw new Error(`Conflicting topic alias: ${alias}`);
 			}
-			aliases.set(alias, topic.id);
+			aliases.set(alias, target);
 		}
 	}
 	const sections = [

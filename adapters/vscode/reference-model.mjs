@@ -14,7 +14,7 @@ export function createReferenceModel(system, selected) {
 		return result;
 	};
 	const lazyDocument = file => ({ get file() { return document(file).file; }, get text() { return document(file).text; } });
-	const philosophy = lazyDocument('.github/skills/design-philosophy/SKILL.md');
+	const principles = lazyDocument('.github/skills/design-system/foundations/principles.design.md');
 	const sizing = lazyDocument('.github/instructions/design-tokens.instructions.md');
 	const layout = lazyDocument('.github/skills/ux-css-layout/SKILL.md');
 	const theming = lazyDocument('.github/skills/ux-theming/SKILL.md');
@@ -27,8 +27,8 @@ export function createReferenceModel(system, selected) {
 	const hasSize = pattern => coveredSizes.some(token => pattern.test(token.id));
 	const topics = {
 		principles: ({ documented, unassessed }) => [
-			documented('Design principles', philosophy.file),
-			unassessed('Application across the product', [philosophy.file]),
+			documented('Design principles', principles.file),
+			unassessed('Application across the product', [principles.file]),
 		],
 		typography: ({ registered, assessment, gap }) => [
 			registered('UI role scale'),
@@ -45,7 +45,7 @@ export function createReferenceModel(system, selected) {
 		],
 		shape: ({ registered, documented }) => [
 			registered('Radius scale'),
-			documented('Surface-role guidance', philosophy.file, sizing.file),
+			documented('Surface-role guidance', system.authored.markdownSource, sizing.file),
 		],
 		size: ({ registered, gap, assessment, unassessed }) => [
 			registered('Icon dimensions'),
@@ -74,13 +74,13 @@ export function createReferenceModel(system, selected) {
 		],
 		iconography: ({ assessment, documented }) => [
 			assessment('Glyph catalog', 'source-defined', ['src/vs/base/common/codiconsLibrary.ts']),
-			documented('Glyph sizing and naming guidance', philosophy.file, sizing.file),
+			documented('Glyph sizing and naming guidance', system.authored.markdownSource, sizing.file),
 		],
 		illustration: ({ documented }) => [
 			documented('Illustration guidance', system.page.source ?? system.page.sources[0].file),
 		],
 		motion: ({ documented, gap, assessment }) => [
-			documented('Motion intent', philosophy.file),
+			documented('Motion intent', system.motionDocumentation.page.source),
 			system.motionDocumentation?.status === 'defined'
 				? documented('Named timing and easing system', ...system.motionDocumentation.scope)
 				: gap('Named timing and easing system', ...(system.motionDocumentation?.scope ?? [base])),

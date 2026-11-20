@@ -38,7 +38,7 @@ test('discovery and search locate ordinary Markdown by content, path, and metada
 	const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
 	try {
 		fixture.write('src/vs/feature/other.md', '# A reference\n\nRead the feature notes for details.\n');
-		const byContent = library.list({ query: 'distinct contract' });
+		const byContent = library.list({ query: '7f31' });
 		const byMetadata = library.list({ query: 'special-scope' });
 		assert.deepEqual({
 			ids: byContent.results.map(item => item.id),
@@ -47,12 +47,12 @@ test('discovery and search locate ordinary Markdown by content, path, and metada
 			complete: byContent.complete,
 			titleMatch: library.list({ query: 'feature notes', limit: 1 }).results[0].id,
 		}, { ids: ['src/vs/feature/feature-notes.md'], scope: ['instruction'], metadata: true, complete: true, titleMatch: 'src/vs/feature/feature-notes.md' });
-		fixture.write('src/vs/new-feature/DESIGN.md', '# New feature\n\nNew guidance.\n');
-		assert.equal(library.list({ query: 'New feature' }).total, 1);
-		fixture.write('src/vs/new-feature/DESIGN.md', '# New feature\n\nRevised guidance.\n');
+		fixture.write('src/vs/new-feature/DESIGN.md', '# New feature sentinel 4d92\n\nNew guidance.\n');
+		assert.equal(library.list({ query: '4d92' }).total, 1);
+		fixture.write('src/vs/new-feature/DESIGN.md', '# New feature sentinel 4d92\n\nRevised guidance.\n');
 		assert.match(library.read('src/vs/new-feature/DESIGN.md').markdown, /Revised guidance/);
 		rmSync(path.join(fixture.root, 'src/vs/new-feature/DESIGN.md'));
-		assert.equal(library.list({ query: 'New feature' }).total, 0);
+		assert.equal(library.list({ query: '4d92' }).total, 0);
 		assert.throws(() => library.read('src/vs/new-feature/DESIGN.md'), error => error.code === 'DOCUMENT_NOT_FOUND');
 		assert.throws(() => library.list({ scope: 'unconfigured' }), /Unknown documentation scope/);
 		assert.throws(() => library.list({ limit: 101 }), /page bounds/);
@@ -99,11 +99,10 @@ test('discovery watches additions and closes its bounded source watchers when in
 		const fixture = checkout(t);
 		const old = 'src/vs/feature/old-design.md';
 		const canonical = 'src/vs/feature/feature.design.md';
-		fixture.write(canonical, '# Feature design\n\n## Usage\n\nKeep the original intent.\n');
-		const file = path.join(fixture.bookRoot, 'topics.json');
-		const book = JSON.parse(readFileSync(file, 'utf8'));
-		book.documentAliases = { [old]: canonical };
-		writeFileSync(file, JSON.stringify(book));
+		fixture.write(canonical, '---\ntitle: Feature design bookmark sentinel\nkind: composite\nstatus: draft\n---\n# Feature design bookmark sentinel\n\n## Usage\n\nKeep the original intent.\n');
+		const file = path.join(fixture.bookRoot, 'content/legacy-document-paths.json');
+		const aliases = { [old]: canonical };
+		writeFileSync(file, JSON.stringify(aliases));
 		const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
 		try {
 			const index = library.snapshot();
@@ -111,7 +110,7 @@ test('discovery watches additions and closes its bounded source watchers when in
 				read: library.read(old, { anchor: 'usage' }).id,
 				selected: documentView(index, { documentId: old }).document.id,
 				portable: documentView(JSON.parse(JSON.stringify(index)), { documentId: old }).document.id,
-				results: library.list({ query: 'Feature design' }).results.map(document => document.id),
+				results: library.list({ query: 'feature design bookmark sentinel' }).results.map(document => document.id),
 				diagnostics: index.diagnostics,
 			}, { read: canonical, selected: canonical, portable: canonical, results: [canonical], diagnostics: [] });
 			fixture.write(old, '# Conflicting copy\n');
@@ -121,7 +120,7 @@ test('discovery watches additions and closes its bounded source watchers when in
 			assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'missing-alias-target'), true);
 		} finally { library.close(); }
 		for (const aliases of [null, [], { [old]: '../outside.md' }, { [old]: canonical, [canonical]: old }]) {
-			writeFileSync(file, JSON.stringify({ ...book, documentAliases: aliases }));
+			writeFileSync(file, JSON.stringify(aliases));
 			assert.throws(() => new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot }), /Invalid document aliases/);
 		}
 	});
@@ -135,9 +134,9 @@ test('discovery watches additions and closes its bounded source watchers when in
 		assert.equal(library.list({ query: 'Newly authored' }).total, 1);
 		library.setActive(false);
 		assert.ok(watched.every(item => item.options.recursive === ['darwin', 'win32'].includes(process.platform) && item.watcher.closed));
-		fixture.write('src/vs/feature/new-spec.md', '# Changed while hidden\n');
+		fixture.write('src/vs/feature/new-spec.md', '# Changed while hidden sentinel 2a4c\n');
 		library.setActive(true);
-		assert.equal(library.list({ query: 'Changed while hidden' }).total, 1);
+		assert.equal(library.list({ query: '2a4c' }).total, 1);
 	} finally { library.close(); }
 });
 
@@ -229,7 +228,7 @@ test('HTTP and topic controls expose the same document identities and reject inv
 	const panel = await createExplorer(fixture.root, { bookRoot: fixture.bookRoot });
 	try {
 		const origin = new URL(panel.url).origin;
-		const listing = await (await fetch(`${origin}/api/documents?query=distinct`)).json();
+		const listing = await (await fetch(`${origin}/api/documents?query=7f31`)).json();
 		const id = listing.results[0].id;
 		const response = await fetch(`${origin}/api/document?id=${encodeURIComponent(id)}&anchor=behavior`);
 		const document = await response.json();

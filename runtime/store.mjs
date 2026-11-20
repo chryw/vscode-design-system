@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { vscodeAdapter, canonicalRoot } from '../adapters/vscode/readers.mjs';
 import { contained } from './paths.mjs';
 import { DocumentLibrary } from './documents.mjs';
-import { readRepository, repositoryDirectory } from '../adapters/vscode/repository.mjs';
+import { readRepository, repositoryDirectory, repositoryDirectoryFor } from '../adapters/vscode/repository.mjs';
 
 export { canonicalRoot, contained };
 const signature = target => {
@@ -19,7 +19,7 @@ const signature = target => {
 class SourceRevisionError extends Error { }
 
 export class TopicStore {
-	constructor(root, { onEvent = () => {}, watchFactory = watch, adapter = vscodeAdapter, bookRoot = contained(root, repositoryDirectory), repository = readRepository(root, { bookRoot }) } = {}) {
+	constructor(root, { onEvent = () => {}, watchFactory = watch, adapter = vscodeAdapter, bookRoot = repositoryDirectoryFor(root), repository = readRepository(root, { bookRoot }) } = {}) {
 		Object.defineProperty(this, 'root', { value: adapter.canonicalRoot(root), enumerable: true });
 		this.adapter = adapter;
 		this.bookRoot = bookRoot;
@@ -36,7 +36,11 @@ export class TopicStore {
 		this.identityAt = 0;
 	}
 	sourcePath(file) {
-		return this.adapter.sourcePath?.(this.root, file, this.bookRoot) ?? contained(this.root, file);
+		const selectedBookRoot = path.relative(this.root, this.bookRoot).split(path.sep).join('/');
+		const canonicalContentRoot = `${repositoryDirectory}/`;
+		const source = selectedBookRoot !== repositoryDirectory && file.startsWith(canonicalContentRoot)
+			? `${selectedBookRoot}/${file.slice(canonicalContentRoot.length)}` : file;
+		return this.adapter.sourcePath?.(this.root, source, this.bookRoot) ?? contained(this.root, source);
 	}
 	get documents() {
 		if (!this.documentLibrary) {

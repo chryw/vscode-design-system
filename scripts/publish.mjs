@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot, packageRoot } from '../runtime/paths.mjs';
+import { repositoryDirectoryFor } from '../runtime/book.mjs';
 import { copyReviewSources } from './archive.mjs';
 
 const args = process.argv.slice(2);
@@ -102,7 +103,7 @@ async function fingerprint() {
 		}
 	}
 	await bookFiles(packageRoot);
-	await bookFiles(path.join(workspaceRoot, '.github/design-system'));
+	await bookFiles(repositoryDirectoryFor(workspaceRoot));
 	return hash.digest('hex');
 }
 

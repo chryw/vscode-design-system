@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See LICENSE.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-export function basicBook() {
+export function basicBook(guidanceRoot = '.github/skills/design-system') {
 	return {
 		version: 1, id: 'vscode-design-system', title: 'Visual Studio Code Design System', defaultTopic: 'documentation',
 		topics: [{
@@ -13,7 +13,7 @@ export function basicBook() {
 			{ id: 'product', title: 'Product documentation', root: 'src/vs', origin: 'product' },
 			{ id: 'instructions', title: 'Instructions', root: '.github/instructions', origin: 'instruction' },
 			{ id: 'skills', title: 'Skills', root: '.github/skills', origin: 'skill' },
-			{ id: 'guidance', title: 'Design guidance', root: '.github/design-system', origin: 'book' },
+			{ id: 'guidance', title: 'Design guidance', root: guidanceRoot, origin: 'book' },
 		],
 	};
 }

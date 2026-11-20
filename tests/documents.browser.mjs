@@ -143,7 +143,7 @@ test('portable navigation retains document links and page history without live A
 			scope: 'design-system', revision: 'portable-links',
 		};
 		const snapshot = {
-			createdAt: new Date().toISOString(), commit: 'a'.repeat(40),
+			createdAt: '2026-11-19T20:00:00Z', viewerVersion: '1.2.3', branch: 'feature/portable', modified: true, commit: 'a'.repeat(40),
 			repository: panel.store.repository.projection,
 			catalog: panel.store.repository.catalog.filter(item => ids.includes(item.id)),
 			topics: Object.fromEntries(await Promise.all(ids.map(async id => [id, (await panel.store.read(id, panel.state.views[id])).data]))),
@@ -165,11 +165,26 @@ test('portable navigation retains document links and page history without live A
 			<link rel="stylesheet" href="/canvas.css"><link rel="stylesheet" href="/shell.css"><link rel="stylesheet" href="/book-navigation.css">
 			<script type="module" src="/portable.mjs"></script></head><body class="design-reference explorer book-layout">
 			<header class="explorer-heading"><div class="site-bar"><div class="site-navigation"></div><p class="book-title">Design System</p>
-			<nav class="page-history" aria-label="Page history"><button id="history-back" disabled>Back</button><button id="history-forward" disabled>Forward</button></nav></div></header><time id="snapshot-date"></time>
+			<div class="checkout-details"><nav class="page-history" aria-label="Page history"><button id="history-back" disabled>Back</button><button id="history-forward" disabled>Forward</button></nav></div></div></header>
 			<div class="explorer-layout"><div id="book-navigation"></div><main id="reference" tabindex="-1"></main></div>
 			</body></html>` }));
 		await page.goto(new URL('/snapshot.html?topic=documentation', panel.url).href);
 		await expect(page.locator('h1')).toHaveText('Source library');
+		const details = page.getByRole('button', { name: 'Snapshot details', exact: true });
+		const popup = page.getByRole('dialog', { name: 'Snapshot', exact: true });
+		await expect(details).toHaveText('Snapshot v1.2.3');
+		await expect(popup).toBeHidden();
+		await expect(page.locator('.snapshot-info')).toHaveCount(0);
+		await details.focus();
+		await page.keyboard.press('Enter');
+		await expect(popup.getByRole('link')).toBeFocused();
+		assert.deepEqual(await popup.locator('dt, dd').allTextContents(), [
+			'Viewer', 'v1.2.3', 'Captured', 'November 19, 2026', 'Repository', 'microsoft/vscode',
+			'Checkout', 'feature/portable', 'Base revision', 'aaaaaaaa', 'Saved changes', 'Included',
+		]);
+		await expect(popup.getByRole('link')).toHaveAttribute('href', `https://github.com/microsoft/vscode/tree/${snapshot.commit}`);
+		await page.keyboard.press('Escape');
+		await expect(details).toBeFocused();
 		const topics = page.getByRole('navigation', { name: 'Topics', exact: true });
 		const tools = page.getByRole('navigation', { name: 'Book tools', exact: true });
 		await expect(topics.getByRole('link', { name: 'Source library', exact: true })).toHaveCount(0);
@@ -185,6 +200,13 @@ test('portable navigation retains document links and page history without live A
 		await topics.getByRole('link', { name: 'Accessibility', exact: true }).click();
 		await expect(page.locator('h1')).toHaveText('Accessibility');
 		await page.setViewportSize({ width: 390, height: 900 });
+		await details.click();
+		await expect(popup).toBeVisible();
+		await expect.poll(() => popup.evaluate(popup => {
+			const bounds = popup.getBoundingClientRect();
+			return bounds.left >= 0 && bounds.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth;
+		})).toBe(true);
+		await page.keyboard.press('Escape');
 		const browse = page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true });
 		await expect(browse).toBeVisible();
 		await expect(page.locator('.book-current, #book-navigation .book-toolbar')).toHaveCount(0);
@@ -322,7 +344,7 @@ test('an unavailable document deep link leaves topic navigation usable', { timeo
 
 test('renamed design guidance renders from canonical sources and restores an old document bookmark', { timeout: 60000 }, async () => {
 	const old = 'src/vs/platform/theme/common/sizes/typography.md';
-	const canonical = '.github/design-system/typography.design.md';
+	const canonical = '.github/skills/design-system/foundations/typography.design.md';
 	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'documentation' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -346,7 +368,7 @@ test('renamed design guidance renders from canonical sources and restores an old
 			fixtures: (await (await page.request.get(new URL('/api/metrics', panel.url).href)).json()).fixtureRequests,
 			errors,
 		}, { id: canonical, source: canonical, canonicalListed: true, oldListed: false, fixtures: 0, errors: [] });
-		panel.setView({ section: 'documentation', documentId: '.github/design-system/motion.design.md', anchor: 'accessibility' });
+		panel.setView({ section: 'documentation', documentId: '.github/skills/design-system/foundations/motion.design.md', anchor: 'accessibility' });
 		await expect(page.getByRole('heading', { name: 'Motion', level: 1, exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Accessibility', exact: true })).toBeFocused();
 		await expect(page.locator('.documentation')).toContainText('workbench.reduceMotion');

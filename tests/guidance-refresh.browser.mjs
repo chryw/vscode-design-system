@@ -13,10 +13,14 @@ import { chromium, expect } from './playwright.mjs';
 
 test('removing and restoring a chapter introduction updates the same open canvas', { timeout: 30000 }, async t => {
 	const fixture = createDocumentCheckout(t);
-	const file = '.github/design-system/designing-for-ai.design.md';
+	const file = '.github/skills/design-system/patterns/designing-for-ai.design.md';
 	const source = readFileSync(path.join(checkoutRoot, file), 'utf8');
+	const metadata = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(source)?.[0];
+	assert.ok(metadata);
+	const heading = /^# Designing for AI\r?\n/m.exec(source)?.[0];
+	assert.ok(heading);
 	const body = source.slice(source.indexOf('## Choose the guidance'));
-	const write = lead => fixture.write(file, `# Designing for AI\n\n${lead}${body}`);
+	const write = lead => fixture.write(file, `${metadata}${heading}\n${lead}${body}`);
 	write('## Introduction\n\nAn optional introduction.\n\n');
 	const panel = await createExplorer(fixture.root, { watchCheckout: false, scope: { operation: 'all', active: 'designing-for-ai' } });
 	const browser = await chromium.launch({ headless: true });

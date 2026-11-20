@@ -6,13 +6,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, expect } from './playwright.mjs';
 import { createDocumentCheckout, checkoutRoot } from './document-helpers.mjs';
 import { createExplorer } from '../runtime/server.mjs';
+import { createVersionCheckout } from './content-version-helpers.mjs';
 
-test('the same canvas browses a basic checkout, saved edits and a curated book through keyboard-accessible checkout controls', { timeout: 60000 }, async t => {
+test('content versions preserve keyboard access, responsive popup geometry, saved session edits and explicit local compatibility', { timeout: 60000 }, async t => {
 	const fixture = createDocumentCheckout(t);
 	rmSync(fixture.bookRoot, { recursive: true });
 	execFileSync('git', ['init', '-q', '-b', 'ordinary'], { cwd: fixture.root });
@@ -32,7 +33,7 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 		await expect(page.getByRole('heading', { name: 'Saved edit', exact: true })).toBeVisible();
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await page.evaluate(() => document.fonts.ready);
-		const picker = page.getByRole('button', { name: 'Checkout details', exact: true });
+		const picker = page.getByRole('button', { name: 'Content version', exact: true });
 		await expect(picker).toBeEnabled();
 		await expect(page.locator('.checkout-details > #checkout')).toHaveCount(0);
 		await expect(page.locator('#checkout-picker #checkout')).toHaveCount(1);
@@ -51,14 +52,14 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 			await page.keyboard.press('Enter');
 			await expect(page.locator('#checkout-form')).toBeVisible();
 			assert.deepEqual(await geometry(), before, `Opening the checkout switcher at ${width}px`);
-			await expect(page.getByLabel('Local worktree')).toBeFocused();
+			await expect(page.getByRole('combobox', { name: 'Content version', exact: true })).toBeFocused();
 			await expect.poll(() => page.locator('#checkout-picker').evaluate(panel => {
 				const trigger = document.querySelector('#checkout-toggle').getBoundingClientRect();
 				const popup = panel.getBoundingClientRect();
 				return popup.left >= 0 && popup.top > trigger.bottom && popup.right <= innerWidth
 					&& Math.abs(popup.right - Math.max(trigger.right, popup.width + 8)) <= 1;
 			})).toBe(true);
-			await page.getByLabel('Local worktree').selectOption('');
+			await page.getByRole('combobox', { name: 'Content version', exact: true }).selectOption('shared');
 			assert.deepEqual(await geometry(), before, `Showing a checkout path at ${width}px`);
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 			await page.keyboard.press('Escape');
@@ -72,18 +73,19 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 		await page.setViewportSize({ width: 1100, height: 900 });
 		await picker.focus();
 		await page.keyboard.press('Enter');
-		await page.getByLabel('Local worktree').selectOption('');
-		const checkoutPath = page.getByLabel('Checkout path', { exact: true });
+		await page.getByRole('combobox', { name: 'Content version', exact: true }).selectOption('shared');
+		const checkoutPath = page.getByLabel('Branch name or GitHub branch URL', { exact: true });
 		await expect(checkoutPath).toBeFocused();
-		await checkoutPath.fill('/definitely/not/a/checkout');
+		await checkoutPath.fill('../invalid-branch');
 		await page.keyboard.press('Tab');
-		await expect(page.getByRole('button', { name: 'Browse checkout', exact: true })).toBeFocused();
+		await expect(page.getByRole('button', { name: 'Browse version', exact: true })).toBeFocused();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('#checkout-error')).toBeVisible();
 		assert.equal(panel.root, fixture.root);
-		await checkoutPath.fill(checkoutRoot);
-		await page.getByRole('button', { name: 'Browse checkout', exact: true }).click();
+		await page.getByRole('combobox', { name: 'Content version', exact: true }).selectOption('session');
+		await page.getByRole('button', { name: 'Browse version', exact: true }).click();
 		await expect(picker).toHaveAttribute('aria-expanded', 'false');
+		panel.selectCheckout({ root: checkoutRoot });
 		await expect(page.locator('#checkout-mode')).toHaveText('');
 		await expect(picker).toBeFocused();
 		assert.equal(new URL(page.url()).origin, origin);
@@ -97,7 +99,7 @@ test('the same canvas browses a basic checkout, saved edits and a curated book t
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('checkout split button starts without new runtime assets or product dependencies and separates refresh from its popup', { timeout: 30000 }, async t => {
+test('content version split button starts without product dependencies and separates refresh from its popup', { timeout: 30000 }, async t => {
 	const fixture = createDocumentCheckout(t);
 	rmSync(fixture.bookRoot, { recursive: true });
 	const panel = await createExplorer(fixture.root, { watchCheckout: false });
@@ -111,7 +113,7 @@ test('checkout split button starts without new runtime assets or product depende
 		page.on('request', request => {
 			const pathname = new URL(request.url()).pathname;
 			if (pathname === '/page-history.mjs' || pathname === '/codicon.ttf') { unavailableAssets.push(pathname); }
-			if (pathname === '/api/checkout' && request.method() === 'POST') { checkoutPosts.push(request.postDataJSON()); }
+			if (pathname === '/api/content-version' && request.method() === 'POST') { checkoutPosts.push(request.postDataJSON()); }
 		});
 		await page.route('**/page-history.mjs', route => route.fulfill({ status: 404, body: 'Unknown asset' }));
 		let releaseChoices;
@@ -119,7 +121,7 @@ test('checkout split button starts without new runtime assets or product depende
 		await page.route('**/api/checkouts', async route => { await pendingChoices; await route.continue(); });
 		await page.goto(panel.url, { waitUntil: 'domcontentloaded' });
 		const refresh = page.getByRole('button', { name: 'Refresh', exact: true });
-		const picker = page.getByRole('button', { name: 'Checkout details', exact: true });
+		const picker = page.getByRole('button', { name: 'Content version', exact: true });
 		await expect(refresh).toBeDisabled();
 		await expect(picker).toBeDisabled();
 		releaseChoices();
@@ -129,7 +131,7 @@ test('checkout split button starts without new runtime assets or product depende
 		await page.keyboard.press('Tab');
 		await expect(picker).toBeFocused();
 		await page.keyboard.press('Enter');
-		await expect(page.getByRole('combobox', { name: 'Local worktree', exact: true })).toBeFocused();
+		await expect(page.getByRole('combobox', { name: 'Content version', exact: true })).toBeFocused();
 		await expect(picker).toHaveAttribute('aria-expanded', 'true');
 		assert.deepEqual(checkoutPosts, []);
 		await page.keyboard.press('Escape');
@@ -137,30 +139,107 @@ test('checkout split button starts without new runtime assets or product depende
 		await page.keyboard.press('ArrowLeft');
 		await expect(refresh).toBeFocused();
 		await page.keyboard.press('ArrowDown');
-		await expect(page.getByRole('dialog', { name: 'Checkout', exact: true })).toBeVisible();
+		await expect(page.getByRole('dialog', { name: 'Content version', exact: true })).toBeVisible();
 		await page.keyboard.press('Escape');
 		await picker.focus();
 		await page.keyboard.press('ArrowLeft');
 		await page.keyboard.press('Enter');
-		await expect(page.locator('#checkout-status')).toHaveText('Checkout reloaded');
-		await expect(page.getByRole('dialog', { name: 'Checkout', exact: true })).toBeHidden();
-		assert.deepEqual({ checkoutPosts, unavailableAssets, errors }, { checkoutPosts: [{ root: fixture.root }], unavailableAssets: [], errors: [] });
+		await expect(page.locator('#checkout-status')).toHaveText('Content version reloaded');
+		await expect(page.getByRole('dialog', { name: 'Content version', exact: true })).toBeHidden();
+		assert.deepEqual({ checkoutPosts, unavailableAssets, errors }, { checkoutPosts: [{ kind: 'session' }], unavailableAssets: [], errors: [] });
+	} finally { await browser.close(); await panel.close(); }
+});
+
+test('readers browse fresh remote main, a shared branch and session edits without enumerating or changing local branches', { timeout: 60000 }, async t => {
+	const fixture = createVersionCheckout(t);
+	fixture.publish('design/shared-guidance', '# Shared guidance\n\nA teammate branch.\n');
+	const before = { branch: fixture.git(['symbolic-ref', 'HEAD']), status: fixture.git(['status', '--porcelain']), markdown: fixture.read(fixture.root) };
+	const panel = await createExplorer(fixture.root, { home: fixture.home, scope: { operation: 'all', active: 'documentation' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		await page.goto(panel.url);
+		const origin = new URL(page.url()).origin;
+		const picker = page.getByRole('button', { name: 'Content version', exact: true });
+		const choice = page.getByRole('combobox', { name: 'Content version', exact: true });
+		const browse = page.getByRole('button', { name: 'Browse version', exact: true });
+		await page.getByRole('link', { name: 'Session edit', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'Session edit', exact: true })).toBeVisible();
+		await picker.click();
+		assert.deepEqual(await choice.locator('option').allTextContents(), ['Latest (main)', 'Shared branch…', 'This session']);
+		await choice.selectOption('latest');
+		await browse.click();
+		await expect(picker).toBeFocused();
+		await page.getByRole('link', { name: 'Remote main', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'Remote main', exact: true })).toBeVisible();
+		fixture.publish('main', '# Updated main\n\nNew remote guidance.\n');
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'Updated main', exact: true })).toBeVisible();
+		await picker.click();
+		await choice.selectOption('shared');
+		const branch = page.getByLabel('Branch name or GitHub branch URL', { exact: true });
+		await expect(branch).toBeFocused();
+		await branch.fill('design/shared-guidance');
+		await page.keyboard.press('Tab');
+		await page.keyboard.press('Enter');
+		await expect(picker).toBeFocused();
+		await page.getByRole('link', { name: 'Shared guidance', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'Shared guidance', exact: true })).toBeVisible();
+		let failFetch;
+		const pendingFetch = new Promise(resolve => { failFetch = resolve; });
+		await page.route('**/api/content-version', async route => {
+			await pendingFetch;
+			await route.fulfill({ status: 503, body: 'Remote temporarily unavailable' });
+		}, { times: 1 });
+		await picker.click();
+		await choice.selectOption('latest');
+		await browse.click();
+		await expect(page.locator('#checkout-form')).toHaveAttribute('aria-busy', 'true');
+		await expect(choice).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeDisabled();
+		await page.keyboard.press('Escape');
+		await expect(page.getByRole('dialog', { name: 'Content version', exact: true })).toBeHidden();
+		failFetch();
+		await expect(page.locator('#shell-problem')).toContainText('Remote temporarily unavailable');
+		await expect(page.getByRole('heading', { name: 'Shared guidance', exact: true })).toBeVisible();
+		await expect(picker).toBeEnabled();
+		await picker.click();
+		await expect(page.locator('#checkout-location')).toContainText('design/shared-guidance');
+		await choice.selectOption('shared');
+		await branch.fill('missing-branch');
+		await browse.click();
+		await expect(page.locator('#checkout-error')).toContainText("Couldn't load missing-branch");
+		await expect(page.getByRole('heading', { name: 'Shared guidance', exact: true })).toBeVisible();
+		await choice.selectOption('session');
+		await browse.click();
+		await page.getByRole('link', { name: 'Session edit', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'Session edit', exact: true })).toBeVisible();
+		assert.deepEqual({
+			branch: fixture.git(['symbolic-ref', 'HEAD']), status: fixture.git(['status', '--porcelain']),
+			markdown: fixture.read(fixture.root), origin: new URL(page.url()).origin, errors,
+		}, { ...before, origin, errors: [] });
 	} finally { await browser.close(); await panel.close(); }
 });
 
 test('new authored guidance renders through aliases, tracks saved edits and survives same-checkout catalog refresh', { timeout: 60000 }, async t => {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/topics.json';
-	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
-	const entry = { id: 'routing-study', section: 'routing-study', group: 'Guidance', title: 'Routing study',
-		renderer: 'guidance', aliases: ['previous-study'], page: 'content/topics/routing-study.json', fixture: false, compare: true };
-	const writeBook = (topics, includeLibrary = true) => fixture.write(manifest, JSON.stringify({
-		...book, components: undefined, references: {}, defaultTopic: entry.id,
-		topics: [...topics, ...(includeLibrary ? [book.topics.find(topic => topic.id === 'documentation')] : [])],
-	}));
+	const entry = { id: 'routing-study', title: 'Routing study', aliases: ['previous-study'] };
+	const foundations = path.join(fixture.bookRoot, 'foundations');
+	rmSync(foundations, { recursive: true, force: true });
+	const writeBook = topics => {
+		rmSync(foundations, { recursive: true, force: true });
+		mkdirSync(foundations, { recursive: true });
+		for (const [index, topic] of topics.entries()) {
+			const aliases = topic.aliases?.length ? `aliases:\n${topic.aliases.map(alias => `  - "${alias}"`).join('\n')}\n` : '';
+			fixture.write(`.github/skills/design-system/foundations/${topic.id}.design.md`,
+				`---\ntitle: "${topic.title}"\nkind: foundation\nstatus: stable\norder: ${index}\n${aliases}---\n# ${topic.title}\n`);
+		}
+	};
 	const source = 'src/vs/feature/routing.md';
 	fixture.write(source, '# Routing study\n\n## Introduction\n\nLocal authored introduction.\n\n## Usage\n\nFirst saved guidance with a [related document](./feature-notes.md).\n');
-	fixture.write('.github/design-system/content/topics/routing-study.json', JSON.stringify({
+	fixture.write('.github/skills/design-system/content/topics/routing-study.json', JSON.stringify({
 		version: 1, id: entry.id, renderer: 'guidance', source, content: {},
 		sections: [{ id: 'routing-usage', key: 'usage', heading: 'Usage' }],
 	}));
@@ -182,8 +261,8 @@ test('new authored guidance renders through aliases, tracks saved edits and surv
 		fixture.write(source, readFileSync(path.join(fixture.root, source), 'utf8').replace('First saved guidance', 'Updated saved guidance'));
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(content).toContainText('Updated saved guidance');
-		const second = { ...entry, id: 'second-study', section: 'second-study', title: 'Second study', aliases: [], page: 'content/topics/second-study.json' };
-		fixture.write('.github/design-system/content/topics/second-study.json', JSON.stringify({
+		const second = { id: 'second-study', title: 'Second study', aliases: [] };
+		fixture.write('.github/skills/design-system/content/topics/second-study.json', JSON.stringify({
 			version: 1, id: second.id, renderer: 'guidance', source, content: {},
 			guidance: [{ id: 'second-usage', heading: 'Usage' }],
 		}));
@@ -198,11 +277,20 @@ test('new authored guidance renders through aliases, tracks saved edits and surv
 		const secondContent = page.locator('[data-topic="second-study"] .topic-content');
 		await expect(secondContent).toHaveAttribute('data-topic-state', 'ready');
 		await expect(secondContent).toContainText('Updated saved guidance');
-		writeBook([entry, second], false);
+		writeBook([entry, second]);
+		const documentSources = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'content/document-sources.json'), 'utf8'));
+		fixture.write('.github/skills/design-system/content/document-sources.json',
+			JSON.stringify(documentSources.filter(source => source.id !== 'product')));
+		rmSync(path.join(fixture.root, 'src/vs/feature/feature-notes.md'), { force: true });
 		panel.selectCheckout({ root: fixture.root });
-		await expect(secondContent.getByText('related document (topic unavailable in this checkout)', { exact: true })).toBeVisible();
+		const unavailableDocument = secondContent.getByRole('link', { name: 'related document', exact: true });
+		await expect(unavailableDocument).toHaveAttribute('href', /documentId=src%2Fvs%2Ffeature%2Ffeature-notes\.md/);
+		await unavailableDocument.click();
+		const problem = page.locator('#shell-problem');
+		await expect(problem).toBeVisible();
+		await problem.locator('summary').click();
+		await expect(problem.locator('p')).toContainText('Document is not available in the configured library');
 		await expect(secondContent).toHaveAttribute('data-topic-state', 'ready');
-		await expect(secondContent.getByRole('link', { name: 'related document', exact: true })).toHaveCount(0);
 		assert.deepEqual(errors, []);
 	} finally { await browser.close(); await panel.close(); }
 });

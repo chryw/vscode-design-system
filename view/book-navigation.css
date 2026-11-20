@@ -65,6 +65,8 @@
 	line-height: 1.5;
 	scroll-margin-block: 40px 8px;
 }
+/* Reserve the disclosure's icon column, minus the link's selection border. */
+.book-group a { padding-inline-start: calc(8px + 16px + 6px - 1px); }
 .book-panel a:hover { background: var(--recessed); color: var(--ink); }
 .book-panel a[aria-current="page"] {
 	font-weight: 600;
@@ -72,6 +74,17 @@
 	background: var(--recessed);
 	border-inline-start-color: var(--accent);
 }
+.book-topic-status {
+	display: inline-block;
+	padding: 1px 6px;
+	border: 1px solid var(--line);
+	border-radius: var(--control-radius);
+	color: var(--muted);
+	font-size: 10px;
+	font-weight: 400;
+	line-height: 1.4;
+}
+.book-topic-status { margin-inline-start: 6px; vertical-align: 1px; }
 .book-panel a:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--focus)); outline-offset: -1px; }
 .book-empty { color: var(--muted); font-size: 12px; }
 @media (forced-colors: active) {

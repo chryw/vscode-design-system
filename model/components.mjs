@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-export function createControls(input, specifications) {
+export function createControls(input, specifications, designSpecs = []) {
 	const object = value => value && typeof value === 'object' && !Array.isArray(value);
 	const words = value => Array.isArray(value) && value.every(item => typeof item === 'string' && item);
 	const source = value => typeof value === 'string' && /^src\/[\w/.-]+\.(?:ts|css)$/.test(value) && !value.split('/').includes('..');
@@ -19,7 +19,7 @@ export function createControls(input, specifications) {
 		&& design(control)
 		&& [control.owner, control.evidence, control.file, ...(control.relatedOwners ?? [])].every(file => file === undefined || source(file));
 	if (input?.version !== 1 || !Array.isArray(input.productControls) || !Array.isArray(input.families)
-		|| !Array.isArray(input.additions) || !Array.isArray(specifications)
+		|| !Array.isArray(input.additions) || !Array.isArray(specifications) || !Array.isArray(designSpecs)
 		|| input.productControls.some(control => !definition(control)) || input.additions.some(control => !definition(control))
 		|| input.families.some(family => !Array.isArray(family) || family.length !== 2 || typeof family[0] !== 'string' || !object(family[1])
 			|| family[1].aliases !== undefined && !words(family[1].aliases)
@@ -36,6 +36,10 @@ export function createControls(input, specifications) {
 		...specifications.filter(specification => !input.productControls.some(control => control.id === specification.id))
 			.map(specification => [specification.id, { ...specification, groups: [] }]),
 	]);
+	const authoredSpecs = new Map(designSpecs.filter(specification => specification.kind === 'primitive' || specification.kind === 'composite')
+		.map(specification => [specification.id, specification]));
+	const specFor = control => authoredSpecs.get(control.id)
+		?? [...authoredSpecs.values()].find(specification => control.aliases?.includes(specification.id) || specification.aliases.includes(control.id));
 	const canonical = [
 		...input.families.map(([id, options]) => {
 			const control = historical.get(id);
@@ -45,6 +49,10 @@ export function createControls(input, specifications) {
 		...input.additions,
 	].map(control => ({
 		primitive: true, hidden: false, content: control.groups.length ? 'ready' : 'tbd', ...control,
+		...(specFor(control) ? {
+			kind: specFor(control).kind, status: specFor(control).status, specPath: specFor(control).path,
+			replacedBy: specFor(control).replacedBy, hidden: control.hidden || specFor(control).status === 'deprecated',
+		} : {}),
 		nodeId: control.nodeId ?? specifications.find(specification => specification.id === control.id)?.nodeId
 			?? specifications.find(specification => control.aliases?.includes(specification.id))?.nodeId,
 		specifications: specifications.filter(specification => specification.id === control.id || control.aliases?.includes(specification.id)),
@@ -53,11 +61,20 @@ export function createControls(input, specifications) {
 		...canonical.flatMap(control => (control.aliases ?? []).map(alias => [`component-${alias}`, `component-${control.id}`])),
 		...['status-icon', 'file-icon', 'suggest-icon'].map(id => [`component-${id}`, 'iconography']),
 	]);
+	for (const specification of authoredSpecs.values()) {
+		const target = specification.status === 'deprecated' ? specification.replacedBy : specification.id;
+		aliases.set(`component-${specification.id}`, `component-${target}`);
+		for (const alias of specification.aliases) { aliases.set(`component-${alias}`, `component-${target}`); }
+	}
 	const canonicalIds = new Set(canonical.map(control => control.id));
 	const result = [
 		...canonical,
 		...[...historical.values()].filter(control => !canonicalIds.has(control.id)).map(control => ({
 			...control, primitive: false, hidden: true, archived: !aliases.has(`component-${control.id}`),
+			...(specFor(control) ? {
+				kind: specFor(control).kind, status: specFor(control).status, specPath: specFor(control).path,
+				replacedBy: specFor(control).replacedBy,
+			} : {}),
 			content: control.groups.length ? 'ready' : 'tbd',
 			nodeId: control.nodeId ?? specifications.find(specification => specification.id === control.id)?.nodeId,
 			reason: input.archiveReason,
@@ -67,6 +84,8 @@ export function createControls(input, specifications) {
 		typeof control.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(control.id) || typeof control.name !== 'string'
 		|| !Array.isArray(control.groups) || control.groups.some(group => typeof group !== 'string')
 		|| control.aliases && (!Array.isArray(control.aliases) || control.aliases.some(alias => typeof alias !== 'string'))
+		|| control.kind !== undefined && !['primitive', 'composite'].includes(control.kind)
+		|| control.status !== undefined && !['draft', 'stable', 'deprecated'].includes(control.status)
 		|| !['ready', 'tbd'].includes(control.content) || typeof control.reason !== 'string'
 		|| !definition(control))) {
 		throw new Error('Invalid component definition');

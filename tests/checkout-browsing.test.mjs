@@ -16,6 +16,36 @@ import { createBookRuntime } from '../runtime/lifecycle.mjs';
 import { CheckoutStorage } from '../runtime/checkout-storage.mjs';
 import { ViewStateStorage } from '../runtime/state-storage.mjs';
 
+test('opening from a workspace subfolder without input shows the full book for that checkout', async t => {
+	const fixture = createDocumentCheckout(t);
+	execFileSync('git', ['init', '-q'], { cwd: fixture.root });
+	const runtime = createBookRuntime(path.join(fixture.root, 'src/vs'), { home: path.join(fixture.root, 'private-home') });
+	t.after(() => runtime.close('book'));
+	await runtime.open('book', {});
+	const panel = runtime.required('book');
+	assert.deepEqual({
+		root: panel.root,
+		mode: panel.state.scope.mode,
+		topics: panel.state.scope.topics,
+	}, {
+		root: fixture.root,
+		mode: 'all',
+		topics: panel.store.repository.catalog.filter(item => !item.hidden).map(item => item.id),
+	});
+});
+
+test('workspace discovery does not cross a nested repository or reinterpret an explicit checkout', async t => {
+	const fixture = createDocumentCheckout(t);
+	const nested = path.join(fixture.root, 'src/vs/feature');
+	execFileSync('git', ['init', '-q'], { cwd: nested });
+	const runtime = createBookRuntime(nested, { home: path.join(fixture.root, 'private-home') });
+	t.after(() => runtime.close('book'));
+	await assert.rejects(runtime.open('book', { version: { kind: 'session' } }), /no VS Code worktree/);
+	await assert.rejects(runtime.open('book', { root: path.join(fixture.root, 'src/vs') }), /Select a VS Code checkout/);
+	await runtime.open('book', { root: fixture.root });
+	assert.equal(runtime.rootFor('book'), fixture.root);
+});
+
 test('ordinary VS Code checkouts expose saved documentation without exploration metadata or tokens', async t => {
 	const fixture = createDocumentCheckout(t);
 	rmSync(fixture.bookRoot, { recursive: true });
@@ -122,11 +152,7 @@ test('a curated branch can remove saved topics without preventing the same panel
 	const panel = runtime.required('book');
 	panel.setScope({ topics: ['motion', 'typography'], active: 'motion', layout: 'compare' });
 	panel.setView({ theme: 'Light 2026' }, 'motion');
-	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'topics.json'), 'utf8'));
-	book.topics = book.topics.filter(topic => topic.id !== 'motion');
-	if (book.components?.after === 'motion') { book.components.after = 'tokens'; }
-	if (book.references) { delete book.references.motion; }
-	fixture.write('.github/design-system/topics.json', JSON.stringify(book));
+	rmSync(path.join(fixture.bookRoot, 'foundations/motion.design.md'));
 	panel.selectCheckout({ root: fixture.root });
 	const checkouts = await (await fetch(new URL('/api/checkouts', panel.url))).json();
 	assert.deepEqual({
@@ -145,27 +171,22 @@ test('plugin packaging declares a native canvas entry without copying product co
 		name: manifest.name, extensions: manifest.extensions, version: manifest.version,
 		entry: readFileSync(new URL('extensions/vscode-design-system/extension.mjs', root), 'utf8').includes("import '../../extension.mjs'"),
 		release: marketplace.plugins[0].version,
-	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.4.2', entry: true, release: manifest.version });
+	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.5.0', entry: true, release: manifest.version });
 });
 
 test('same-checkout catalog refresh preserves navigation, adopts additions and moves, and rejects broken candidates transactionally', async t => {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/topics.json';
-	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
-	const topic = id => ({
-		id, title: id, section: id, group: 'Guidance', aliases: [`old-${id}`],
-		renderer: 'guidance', page: `content/topics/${id}.json`, compare: true, fixture: false,
-	});
+	const specification = id => `.github/skills/design-system/foundations/${id}.design.md`;
+	const page = id => `.github/skills/design-system/content/topics/${id}.json`;
 	const writeTopic = (id, source, copy) => {
+		fixture.write(specification(id), `---\ntitle: ${id}\nkind: foundation\nstatus: stable\naliases:\n  - old-${id}\n---\n# ${id}\n`);
 		fixture.write(source, `# ${id}\n\n## Introduction\n\n${copy}\n\n## Usage\n\n${copy}\n`);
-		fixture.write(`.github/design-system/content/topics/${id}.json`, JSON.stringify({
+		fixture.write(page(id), JSON.stringify({
 			version: 1, id, renderer: 'guidance', source, content: {},
 			sections: [{ id: `${id}-usage`, key: 'usage', heading: 'Usage' }],
 		}));
 	};
 	writeTopic('routing-study', 'src/vs/feature/routing.md', 'First saved source.');
-	const selectedBook = { ...book, components: undefined, references: {}, defaultTopic: 'routing-study', topics: [topic('routing-study')] };
-	fixture.write(manifest, JSON.stringify(selectedBook));
 	const storage = new ViewStateStorage(fixture.root, { home: path.join(fixture.root, 'private-home'), view: 'routing-test' });
 	const panel = await createExplorer(fixture.root, { stateStorage: storage, watchCheckout: false });
 	t.after(() => panel.close());
@@ -179,7 +200,6 @@ test('same-checkout catalog refresh preserves navigation, adopts additions and m
 	await panel.refreshTopic();
 	const moved = await panel.inspectTopic(undefined, true);
 	writeTopic('second-study', 'src/vs/feature/second.md', 'New topic source.');
-	fixture.write(manifest, JSON.stringify({ ...selectedBook, topics: [...selectedBook.topics, topic('second-study')] }));
 	const oldStore = panel.store;
 	panel.selectCheckout({ root: fixture.root });
 	assert.deepEqual({
@@ -193,11 +213,13 @@ test('same-checkout catalog refresh preserves navigation, adopts additions and m
 	panel.setScope({ operation: 'add', topics: ['second-study'], layout: 'compare' });
 	const beforeInvalid = panel.state;
 	const goodStore = panel.store;
-	fixture.write(manifest, JSON.stringify({ ...selectedBook, topics: [topic('routing-study'), { ...topic('second-study'), renderer: 'motion' }] }));
-	assert.throws(() => panel.selectCheckout({ root: fixture.root }), /Invalid book topic/);
+	const secondSpecification = readFileSync(path.join(fixture.root, specification('second-study')), 'utf8');
+	fixture.write(specification('second-study'), secondSpecification.replace('status: stable', 'status: invalid'));
+	assert.throws(() => panel.selectCheckout({ root: fixture.root }), /invalid design specification metadata/);
 	assert.deepEqual({ state: panel.state, sameStore: panel.store === goodStore, closed: goodStore.closed },
 		{ state: beforeInvalid, sameStore: true, closed: false });
-	fixture.write(manifest, JSON.stringify({ ...selectedBook, defaultTopic: 'second-study', topics: [topic('second-study')] }));
+	fixture.write(specification('second-study'), secondSpecification);
+	rmSync(path.join(fixture.root, specification('routing-study')));
 	panel.selectCheckout({ root: fixture.root });
 	assert.deepEqual(panel.state.scope, { mode: 'focused', topics: ['second-study'], active: 'second-study', layout: 'single' });
 	panel.setView({ theme: 'Dark 2026' });
@@ -205,30 +227,26 @@ test('same-checkout catalog refresh preserves navigation, adopts additions and m
 		panel.state.scope);
 });
 
-test('catalog rejects ambiguous topic routes and renderer contracts before serving content', t => {
+test('generated catalogs reject ambiguous aliases and invalid readiness metadata', t => {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/topics.json';
-	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
-	const topic = { id: 'routing-study', section: 'routing-study', group: 'Guidance', title: 'Routing study',
-		renderer: 'guidance', aliases: ['previous-study'], page: 'content/topics/routing-study.json', fixture: false, compare: true };
-	const writeTopics = topics => fixture.write(manifest, JSON.stringify({
-		...book, components: undefined, references: {}, defaultTopic: 'routing-study', topics,
-	}));
-	writeTopics([topic]);
+	const specification = id => `.github/skills/design-system/foundations/${id}.design.md`;
+	const writeTopic = (id, alias, status = 'stable') => {
+		fixture.write(specification(id), `---\ntitle: ${id}\nkind: foundation\nstatus: ${status}\naliases:\n  - ${alias}\n---\n# ${id}\n`);
+		fixture.write(`.github/skills/design-system/content/topics/${id}.json`, JSON.stringify({
+			version: 1, id, renderer: 'guidance', source: 'src/vs/feature/routing.md', content: {},
+			sections: [{ id: `${id}-usage`, key: 'usage', heading: 'Usage' }],
+		}));
+		fixture.write('src/vs/feature/routing.md', '# Routing study\n\n## Usage\n\nUse this route.\n');
+	};
+	writeTopic('routing-study', 'previous-study');
 	const repository = readRepository(fixture.root);
 	assert.deepEqual({
 		alias: repository.getTopic('previous-study').id,
 		route: repository.topicId({ section: 'previous-study' }),
 		scope: repository.validateScope({ topics: ['previous-study'], active: 'previous-study' }).active,
-	}, { alias: topic.id, route: topic.id, scope: topic.id });
-	for (const change of [{ section: 'another-section' }, { renderer: 'motion' }, { renderer: 'unknown' }]) {
-		writeTopics([{ ...topic, ...change }]);
-		assert.throws(() => readRepository(fixture.root), /Invalid book topic/);
-	}
-	writeTopics([topic, { ...topic, id: 'previous-study', section: 'previous-study', aliases: [] }]);
-	assert.throws(() => readRepository(fixture.root), /Conflicting topic alias/);
-	writeTopics([topic, { ...topic, id: 'second-study', section: 'second-study' }]);
-	assert.throws(() => readRepository(fixture.root), /Conflicting topic alias/);
-	writeTopics([{ ...topic, aliases: ['components'] }]);
-	assert.throws(() => readRepository(fixture.root), /Conflicting topic alias/);
+	}, { alias: 'routing-study', route: 'routing-study', scope: 'routing-study' });
+	writeTopic('second-study', 'previous-study');
+	assert.throws(() => readRepository(fixture.root), /Duplicate design specification alias/);
+	writeTopic('routing-study', 'previous-study', 'unstable');
+	assert.throws(() => readRepository(fixture.root), /invalid design specification metadata/);
 });

@@ -10,7 +10,7 @@ import { readContent } from './authored.mjs';
 
 export function load(context, theme, declarations) {
 	const { read, source } = context;
-	read('.github/design-system/foundations.md');
+	read(context.repository.projection.references.foundations);
 	const tokenGuidance = readContent(read, 'content/foundations/token-domains.json').domains.map(domain => {
 		const text = read(domain.file);
 		const offset = text.indexOf(domain.anchor);

@@ -36,6 +36,8 @@ let pendingNavigations = 0;
 let refreshing = false;
 let reconnecting = false;
 let selectedCheckout;
+let selectedContentVersion;
+let switchingVersion = false;
 const connectionStatus = node('p', undefined, 'meta');
 connectionStatus.setAttribute('role', 'status');
 connectionStatus.hidden = true;
@@ -62,7 +64,7 @@ document.querySelector('.checkout-split').addEventListener('keydown', event => {
 	}
 }, { signal: lifetime.signal });
 function updateRefresh() {
-	refresh.disabled = refreshing || !selectedCheckout;
+	refresh.disabled = refreshing || switchingVersion || !selectedCheckout;
 	checkoutToggle.disabled = refresh.disabled;
 	document.querySelector('#refresh-label').textContent = refreshing ? 'Refreshing…' : 'Refresh';
 	refresh.setAttribute('aria-busy', String(refreshing));
@@ -70,39 +72,44 @@ function updateRefresh() {
 async function updateCheckoutChoices(result) {
 	result ??= await request('/api/checkouts', { signal: lifetime.signal });
 	selectedCheckout = result.checkout;
-	checkoutChoice.replaceChildren(...result.checkouts.map(checkout => {
-		const option = node('option', `${checkout.branch} — ${checkout.root.split(/[\\/]/).at(-1)}`);
-		option.value = checkout.root;
-		option.title = checkout.root;
-		option.selected = checkout.root === result.checkout;
+	selectedContentVersion = result.contentVersion.selection;
+	checkoutChoice.replaceChildren(...result.versions.map(version => {
+		const option = node('option', version.available === false ? `${version.label} — ${version.description}` : version.label);
+		option.value = version.kind;
+		option.title = version.description;
+		option.disabled = version.available === false;
 		return option;
 	}));
-	const other = node('option', 'Other checkout…');
-	other.value = '';
-	checkoutChoice.append(other);
-	checkoutPath.value = result.checkout;
-	checkoutChoice.title = result.checkout;
-	checkoutToggle.title = `Checkout details: ${result.checkout}`;
+	if (selectedContentVersion.kind === 'local') {
+		const local = node('option', 'Local checkout (explicit selection)');
+		local.value = 'local';
+		local.disabled = true;
+		checkoutChoice.append(local);
+	}
+	checkoutChoice.value = selectedContentVersion.kind;
+	checkoutPath.value = selectedContentVersion.branch ?? '';
+	checkoutChoice.title = result.contentVersion.label;
+	checkoutToggle.title = `Content version: ${result.contentVersion.label}`;
 	const checkoutName = document.querySelector('#checkout');
-	checkoutName.textContent = result.checkout.split(/[\\/]/).at(-1);
+	checkoutName.textContent = `Reading: ${result.contentVersion.label}`;
 	checkoutName.title = result.checkout;
-	document.querySelector('#checkout-location').textContent = result.checkout;
-	checkoutPath.hidden = true;
-	checkoutPath.required = false;
-	checkoutPath.previousElementSibling.hidden = true;
+	document.querySelector('#checkout-location').textContent = result.contentVersion.ref
+		? `${result.contentVersion.remote} · ${result.contentVersion.ref} · ${result.contentVersion.commit.slice(0, 12)}` : result.checkout;
+	showSharedBranch();
 	document.querySelector('#checkout-mode').textContent = result.mode === 'basic'
-		? 'Source library: this checkout has no curated design book. Browse local documentation; curated topics and live examples are unavailable.'
+		? 'Source library: this version has no curated design book. Browse repository documentation; curated topics and live examples are unavailable.'
 		: result.unavailableTopics?.length ? 'Some saved topics are unavailable on this branch. Showing the available content.' : '';
 	updateRefresh();
 }
+function showSharedBranch() {
+	const shared = checkoutChoice.value === 'shared';
+	checkoutPath.hidden = !shared;
+	checkoutPath.previousElementSibling.hidden = !shared;
+	checkoutPath.required = shared;
+}
 checkoutChoice.addEventListener('change', () => {
-	const other = !checkoutChoice.value;
-	checkoutChoice.title = checkoutChoice.value;
-	document.querySelector('#checkout-location').textContent = checkoutChoice.value;
-	checkoutPath.hidden = !other;
-	checkoutPath.previousElementSibling.hidden = !other;
-	checkoutPath.required = other;
-	if (other) { checkoutPath.focus(); }
+	showSharedBranch();
+	if (checkoutChoice.value === 'shared') { checkoutPath.focus(); }
 }, { signal: lifetime.signal });
 let checkoutRefresh;
 function reloadCheckout() {
@@ -129,17 +136,41 @@ checkoutForm.addEventListener('submit', async event => {
 	const errorMessage = document.querySelector('#checkout-error');
 	errorMessage.hidden = true;
 	errorMessage.textContent = '';
+	document.querySelector('#shell-problem')?.remove();
+	let loaded = false;
+	switchingVersion = true;
 	button.disabled = true;
+	button.textContent = 'Loading…';
+	checkoutChoice.disabled = true;
+	checkoutPath.disabled = true;
+	checkoutForm.setAttribute('aria-busy', 'true');
+	document.querySelector('#checkout-status').textContent = 'Loading content version…';
+	updateRefresh();
 	try {
-		await post('/api/checkout', { root: checkoutChoice.value || checkoutPath.value });
+		await post('/api/content-version', {
+			kind: checkoutChoice.value, ...(checkoutChoice.value === 'shared' ? { branch: checkoutPath.value } : {}),
+		});
 		await reloadCheckout();
-		checkoutPicker.hidePopover();
-		checkoutToggle.focus();
+		document.querySelector('#checkout-status').textContent = 'Content version loaded';
+		loaded = true;
 	} catch (error) {
+		document.querySelector('#checkout-status').textContent = '';
 		errorMessage.textContent = error.message;
 		errorMessage.hidden = false;
+		if (!checkoutPicker.matches(':popover-open')) { problem(error); }
 	}
-	finally { button.disabled = false; }
+	finally {
+		switchingVersion = false;
+		button.disabled = false;
+		button.textContent = 'Browse version';
+		checkoutChoice.disabled = false;
+		checkoutPath.disabled = false;
+		checkoutForm.setAttribute('aria-busy', 'false');
+		updateRefresh();
+		const open = checkoutPicker.matches(':popover-open');
+		if (loaded) { checkoutPicker.hidePopover(); if (open) { checkoutToggle.focus(); } }
+		else if (open) { (checkoutChoice.value === 'shared' ? checkoutPath : checkoutChoice).focus(); }
+	}
 }, { signal: lifetime.signal });
 const urlFor = id => {
 	const entry = catalog.find(item => item.id === id);
@@ -197,7 +228,7 @@ async function changeScope(input) {
 function reconcile(next) {
 	state = next;
 	updateRefresh();
-	refresh.title = 'Reread saved content, the topic list, and live examples from the selected checkout';
+	refresh.title = 'Reload this content version; remote versions fetch the latest branch content';
 	const all = state.scope.mode === 'all';
 	document.body.classList.toggle('book-layout', all);
 	const restoreFocus = navigation.contains(document.activeElement) || document.querySelector('.site-navigation').contains(document.activeElement);
@@ -275,10 +306,11 @@ refresh.addEventListener('click', async () => {
 	updateRefresh();
 	document.querySelector('#shell-problem')?.remove();
 	try {
-		await post('/api/checkout', { root: selectedCheckout });
+		await post(selectedContentVersion.kind === 'local' ? '/api/checkout' : '/api/content-version',
+			selectedContentVersion.kind === 'local' ? { root: selectedCheckout } : selectedContentVersion);
 		await reloadCheckout();
 		await ready();
-		document.querySelector('#checkout-status').textContent = 'Checkout reloaded';
+		document.querySelector('#checkout-status').textContent = 'Content version reloaded';
 	} catch (error) {
 		problem(error);
 	} finally {

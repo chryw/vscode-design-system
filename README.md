@@ -1,142 +1,64 @@
-# VS Code design-system explorer
+# VS Code Design System Explorer
 
-Browse design guidance from your current VS Code checkout, or choose another local clone or worktree. The viewer is an independent Copilot plugin. The [`chryw/design-system-exploration` branch](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration) provides the full curated book, token references, and live examples; other branches provide a source library without requiring exploration metadata.
+Explore VS Code's design guidance alongside the tokens, APIs, and examples it describes. This repository provides the **viewer**, available as a Copilot canvas or in a browser. Your **VS Code worktree** provides the design specs, code, and fixtures.
 
-The viewer and the content update separately: plugin updates change the browsing UI; your selected checkout supplies the guidance, tokens, styles, and examples. The live viewer runs locally. [Published snapshots](https://chryw.github.io/vscode-design-system/) freeze a selected revision into a browser-only book, with no installation or checkout required.
+[Browse the published snapshot](https://chryw.github.io/vscode-design-system/) without installing the plugin.
 
-## Architecture
+## Quick start
 
-The design system has three kinds of guidance, owned by the product repository rather than this plugin:
+1. **Install the plugin.** On the machine running your Copilot session, use the [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli):
 
-| Kind | Where it lives in the VS Code checkout | What it describes |
-| --- | --- | --- |
-| Foundations | `.github/design-system/{topic}.design.md` | Shared decisions such as typography, spacing, colors, motion, and accessibility. |
-| Components | Beside the implementation, such as `src/vs/base/browser/ui/button/button.design.md` | A reusable control's usage, behavior, pitfalls, and accessibility. |
-| Patterns | `.github/design-system/{topic}.design.md` | How components work together for a recurring task, such as a management modal or an AI-assisted experience. |
+   ```sh
+   copilot plugin marketplace add chryw/vscode-design-system
+   copilot plugin install vscode-design-system@vscode-design-system
+   ```
 
-Components stay beside their code so an implementation change brings its guidance into view. Foundations and patterns stay in one shared, flat folder because they span features rather than having one code owner. The [topic map](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/topics.json) connects those sources to the book. Agents can find and apply the same guidance through the product's [instructions, skills, and source-validation workflow](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/README.md), without installing the viewer.
+2. **Open your VS Code worktree.** The in-progress design-system content lives on [`chryw/design-system-exploration`](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration). Use a worktree that already has that content, or [get the exploration checkout](docs/setup.md#prepare-the-exploration-checkout).
 
-```text
-VS Code checkout                         This repository
-.github/design-system/
-  topics.json          topic map         adapters/vscode/  source readers
-  {topic}.design.md    shared specs  -->  model/            validated projections
-  content/             source curation   runtime/          serving and lifecycle
-src/vs/.../ui/{control}/                  view/             navigation and rendering
-  {control}.design.md  component spec     scripts/          CLI, export, and releases
-  {control}.ts         implementation     tests/            viewer checks
+3. **Open the book.** Run **Open Agents Window** from the VS Code Command Palette. In a Copilot session for the worktree, ask: “Open the Visual Studio Code Design System canvas for this workspace.”
+
+### Set up with Copilot
+
+Share this README with Copilot or paste this prompt into a session with canvas support:
+
+> Set up the VS Code Design System Explorer from https://github.com/chryw/vscode-design-system. Follow its quick start and AGENTS.md to install the plugin and open the canvas. Use my VS Code worktree if it has the exploration content; otherwise, prepare a separate checkout of `microsoft/vscode` on `chryw/design-system-exploration`.
+
+## How it works
+
+```mermaid
+flowchart LR
+  accTitle: VS Code design system architecture
+  accDescr: The VS Code repository owns the design specs and implementation. The separate explorer reads those sources for the canvas, browser, snapshots, and agent tools.
+  subgraph Product["VS Code repository · sources"]
+    Guidance["Shared and component design specs"]
+    Code["Tokens, APIs, and fixtures"]
+  end
+  subgraph Viewer["Explorer repository · viewer"]
+    Readers["Source readers"]
+    Model["Shared book data"]
+    Readers --> Model
+  end
+  Guidance --> Readers
+  Code --> Readers
+  Model --> Canvas["Live book: canvas or browser"]
+  Model --> Snapshot["Frozen snapshot"]
+  Model --> Tools["Agent reads and search"]
 ```
 
-The plugin reads saved Markdown, token registrations, APIs, styles, and selected examples from the **selected checkout**. It derives a shared projection for the canvas, local browser, portable snapshot, and headless agent commands; it does not keep another copy of the guidance or infer design rules from a screenshot.
+VS Code keeps shared guidance for foundations and patterns together, and component specs beside their implementation. Specs explain design intent and usage; product code defines the implemented behavior.
 
-Product code remains authoritative for values and behavior. Specifications explain design intent and link to that code. Existing UI fixtures can illustrate a topic, but they are not the component inventory: one topic may use several fixtures, a fixture may serve several topics, and guidance does not require a matching fixture.
+## Review and contribute
 
-The current checkout uses `content/` metadata for component curation, explicit section bindings, and specimen relationships. This is source composition, not executable page layout or a second set of specifications.
+### Explore and apply guidance
 
-See [architecture and runtime contracts](docs/architecture.md) for the module boundaries, topic/document protocols, source refresh, and state lifecycle. The product checkout owns [guidance authoring and validation](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/design-system/README.md); this repository owns the viewer.
+Before building or reviewing UI, browse the relevant foundation, component, or pattern. For example, use **Spacing** to decide how to group related controls, then follow **Contributor resources** to the files behind the chapter.
 
-## Quick setup with an agent
+### Change guidance or product UI in `microsoft/vscode`
 
-Open a chat in the VS Code checkout you want to browse and paste:
+Edit the owning spec, code, or fixture in your VS Code worktree. Save and choose **Refresh** in the canvas to review the result. If a UI change affects its guidance, review both in the same PR. For agent-assisted work, use the [design-system skill in the VS Code repo](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/skills/design-system/SKILL.md).
 
-> Set up or update https://github.com/chryw/vscode-design-system for this checkout, following its README and AGENTS.md. Use the native plugin manager where supported and open the canvas in this session, reusing its existing panel here; otherwise use the documented browser route. Do not pull or switch my product branch. For native canvas setup, verify the loaded provider comes from the installed plugin. Confirm the selected checkout and open a source document before finishing.
+### Change the explorer in this repository
 
-For a different content checkout, add its absolute path to the prompt. [AGENTS.md](AGENTS.md) provides the setup and verification workflow.
+Edit this repo when changing how the explorer reads, renders, or navigates the book. Use the [development commands](docs/setup.md#development) to preview and test viewer changes against a VS Code checkout.
 
-## Install the canvas plugin
-
-Use a Copilot client with plugin and canvas extension support. The commands below use the Copilot CLI; run them in the environment used by your Copilot session. If your client does not support canvases, use the [browser route](#browser-and-source-development).
-
-**1. Install once**
-
-Previously used the workspace installer? First follow the [migration steps](docs/setup.md#move-from-a-workspace-installation-to-the-plugin): preserve local edits and disable the old workspace provider before enabling the plugin. Keep only one active provider.
-
-```sh
-copilot plugin marketplace add chryw/vscode-design-system
-copilot plugin install vscode-design-system@vscode-design-system
-```
-
-No viewer clone or per-worktree reinstall is needed.
-
-**2. Open the canvas**
-
-Open your VS Code checkout in a supported Copilot session, then ask:
-
-> Open the design-system canvas for this checkout in this session using the installed plugin. Reuse `design-book` in this chat; if none exists here, open `vscode-design-system` with that instance ID and this checkout's absolute path as `root`.
-
-The plugin is installed once, but panels belong to their chat. Another session in the same worktree can open its own panel without reinstalling the plugin or returning to an older chat. Reuse the same panel for topics and refreshes within each chat.
-
-If the plugin is installed but not discovered in an existing chat, ask Copilot to reload extension providers and inspect the loaded source. Native installation should load `plugin:vscode-design-system:vscode-design-system`, not `project:vscode-design-system`. Installation and activation are separate: an existing chat may retain its previous discovery state after a reload. If so, use the client's supported customization refresh or a new supported session and verify again before retiring the old installation.
-
-If opening reports that `design-book` is already owned by a different canvas, that chat still has a legacy-provider binding. Use the host's **Close Canvas** action on its old panel before reopening from the plugin. This does not block opening in another session; see [session and migration guidance](docs/setup.md#keep-one-current-book).
-
-## Browse content from a checkout
-
-- **Current checkout:** the canvas starts from the session's workspace. A previously selected checkout is restored when you reopen the same panel; open the chevron beside **Refresh** to confirm its name and full path.
-- **Another checkout:** open the chevron beside **Refresh**, select a local worktree, or choose **Other checkout…** and enter an absolute clone/worktree path. Select **Browse checkout** to switch content in the same panel. Checkout details stay in this picker rather than occupying a separate site-header row.
-- **Another branch:** select a worktree already on that branch. The canvas never pulls, switches branches, or creates worktrees. If you change branches externally, it reloads the checkout's catalog.
-- **Saved edits:** the viewer reads local saved files, including uncommitted changes. Source watches update supported content; the main **Refresh** button rereads saved content, the topic catalog, and live examples from the selected checkout while preserving the current view. It does not open the checkout picker, update the viewer, or fetch Git changes.
-- **Reading:** one compact global bar contains the site name, **Back**/**Forward**, and **Refresh**. Wide windows show a topic sidebar; smaller windows use the left menu button to open the same navigation on the left. The article title and section links form a separate local header; the overview scrolls with the content. On the smallest panes, the brand shortens and Refresh uses its labeled icon.
-- **Appearance:** use the half-light/half-dark icon in the global bar to choose **System**, **Light**, or **Dark** in both the canvas and portable snapshots. Light and Dark override the host/browser preference for this reader only; examples keep their own theme choices. System follows automatic appearance again.
-- **Contributor resources:** at the end of a topic, expand this optional section when changing its guidance or implementation. Links have readable names with repository paths underneath and open files in a separate tab. A topic can use several files, and one file can serve several topics. This is separate from selecting a checkout.
-
-A checkout with `.github/design-system/topics.json` provides curated topics; the exploration branch contains the full book. A checkout without it provides **Source library** for local product Markdown, instructions, skills, and available design guidance. It does not borrow missing content from another branch. Malformed or incompatible sources report errors.
-
-Basic source browsing needs no product build or dependency installation. Some curated readers need checkout dependencies; live examples also need prepared client output. Follow the selected checkout's setup instructions, restoring dependencies only if needed, then run `pnpm run build-fast --client-only` there for live examples. See [requirements](docs/setup.md#requirements) for Node.js and pnpm versions.
-
-## Get updates
-
-**Native plugin:** the native manager handles automatic updates where enabled by your client and policy. To request an update manually:
-
-```sh
-copilot plugin update vscode-design-system@vscode-design-system
-```
-
-If the running canvas still shows the old viewer, ask Copilot to reload extension providers and verify the loaded plugin source before reopening the same panel, preserving its checkout and view. A successful update command alone does not establish that an existing chat has activated it.
-
-**Browser/source checkout:** run `git pull --ff-only` in the viewer clone, then restart its serving command.
-
-**Legacy workspace copy:** pull the viewer clone, run the [workspace update command](#legacy-workspace-installation), then reload providers and reopen the same panel.
-
-**Design-system content:** update the selected product checkout separately through your normal Git workflow, or select a different prepared worktree. A plugin update does not fetch newer product content.
-
-## Browser and source development
-
-Use this route if your client cannot render canvases, or when developing the viewer. You'll need Git and the Node.js version required by the selected checkout.
-
-```sh
-git clone https://github.com/chryw/vscode-design-system.git
-cd vscode-design-system
-node scripts/book.mjs serve --root /absolute/path/to/vscode-checkout
-```
-
-Keep the viewer clone separate from the product checkout. Open the URL printed in the terminal; keep the server running while you browse and press **Ctrl+C** to stop. The same **Checkout** control works in the browser. Preparing live examples is optional; see [browsing requirements](#browse-content-from-a-checkout).
-
-## Legacy workspace installation
-
-For development or clients that support workspace canvases but not native plugins, run from a separate viewer clone:
-
-```sh
-node scripts/install.mjs --workspace /absolute/path/to/vscode-checkout
-```
-
-This copies the viewer into that checkout's locally ignored `.github/extensions/vscode-design-system/` directory. Open that checkout in your Copilot session, reload providers if needed, and use the [canvas-opening prompt](#install-the-canvas-plugin).
-
-To update an existing managed workspace copy, run from the viewer clone:
-
-```sh
-git pull --ff-only
-node scripts/install.mjs --workspace /absolute/path/to/vscode-checkout --update
-```
-
-Reload extension providers and reopen the same panel afterward. The installer refuses to overwrite locally changed or unmanaged installations; preserve those edits before retrying. Keep [one current book](docs/setup.md#keep-one-current-book) rather than creating replacement panels.
-
-## Working on the design system
-
-Make viewer changes here and guidance, token, style, or fixture changes in the VS Code checkout.
-
-See the [setup reference](docs/setup.md) for updates, troubleshooting, and development commands.
-
-## Share a browser-only snapshot
-
-Use [snapshot releases](docs/snapshot-releases.md) to export a selected checkout, validate its rendered chapters, and publish an offline download plus a versioned GitHub Pages link. Release snapshots embed the guidance used by those chapters, not the checkout's unrelated repository instructions or source-document library. Other document references open their source revision on GitHub. Readers need only a browser. Building locally does not publish anything; public publication is explicit.
+[Setup and troubleshooting](docs/setup.md) · [Local browser viewer](docs/setup.md#local-browser) · [Architecture](docs/architecture.md) · [Agent guide](AGENTS.md)

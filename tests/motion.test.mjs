@@ -19,6 +19,7 @@ const root = workspaceRoot;
 const motionPage = JSON.parse(readFileSync(`${root}/${motionPageFile}`, 'utf8'));
 const motionGuidanceFile = motionPage.source;
 const motionImplementationFile = motionPage.sources[0].file;
+const motionBook = { topics: [{ id: 'motion', page: 'content/topics/motion.json' }] };
 const ts = createRequire(`${root}/package.json`)('typescript');
 const source = (file, offset) => ({ file, line: offset + 1 });
 
@@ -134,7 +135,10 @@ test('motion navigation follows the system hierarchy', () => {
 });
 
 function context(overrides = {}, reads = new Set()) {
-	return { root, source, read: file => { reads.add(file); return overrides[file] ?? readFileSync(`${root}/${file}`, 'utf8'); } };
+	return {
+		root, source, repository: { projection: { book: motionBook } },
+		read: file => { reads.add(file); return overrides[file] ?? readFileSync(`${root}/${file}`, 'utf8'); },
+	};
 }
 
 test('Motion composition and guidance are tracked source dependencies, not renderer prose', () => {
@@ -157,7 +161,7 @@ test('Motion composition and guidance are tracked source dependencies, not rende
 });
 
 test('chapter copy is curated while specifications and timing remain source-backed', () => {
-	const file = '.github/design-system/motion/examples.md';
+	const file = '.github/skills/design-system/foundations/motion/examples.md';
 	const original = context();
 	const reads = new Set();
 	const { motionDocumentation: before } = load(context({}, reads));
@@ -268,7 +272,7 @@ test('Motion binds relocated design and technical sources while retaining single
 
 test('Motion scoped chapter copy preserves explicit composition and source-derived definitions', () => {
 	const original = context();
-	const file = '.github/design-system/motion/examples.md';
+	const file = '.github/skills/design-system/foundations/motion/examples.md';
 	const descriptor = JSON.parse(original.read(motionPageFile));
 	const references = (value, compact) => {
 		if (Array.isArray(value)) { return value.map(item => references(item, compact)); }

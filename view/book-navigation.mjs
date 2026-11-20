@@ -118,7 +118,15 @@ export function createBookNavigation(container, onNavigate, toolbarHost = contai
 	const groups = new Map();
 	const createLink = item => {
 		const link = document.createElement('a');
-		link.textContent = item.title;
+		const title = document.createElement('span');
+		title.textContent = item.title;
+		link.append(title);
+		if (item.status === 'draft') {
+			const status = document.createElement('span');
+			status.className = 'book-topic-status';
+			status.textContent = 'Draft';
+			link.append(status);
+		}
 		link.href = item.href;
 		link.addEventListener('click', event => {
 			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) { return; }
@@ -148,7 +156,7 @@ export function createBookNavigation(container, onNavigate, toolbarHost = contai
 		const query = search.value.trim().toLocaleLowerCase();
 		let count = 0;
 		for (const { link, item } of links.values()) {
-			link.parentElement.hidden = !`${item.title} ${item.group ?? ''} ${item.subgroup ?? ''} ${(item.aliases ?? []).join(' ')}`.toLocaleLowerCase().includes(query);
+			link.parentElement.hidden = !`${item.title} ${item.group ?? ''} ${item.subgroup ?? ''} ${item.status ?? ''} ${(item.aliases ?? []).join(' ')}`.toLocaleLowerCase().includes(query);
 			if (!link.parentElement.hidden) { count++; }
 		}
 		for (const { element, list, open, wrapper } of [...groups.values()].reverse()) {
@@ -197,7 +205,7 @@ export function createBookNavigation(container, onNavigate, toolbarHost = contai
 			if (!panel.isConnected) { toolbarHost.append(toolbar); container.append(panel); }
 			label.hidden = !items.length;
 			navigation.hidden = !items.length;
-			const identity = ({ id, title, group, subgroup, aliases }) => ({ id, title, group, subgroup, aliases });
+			const identity = ({ id, title, group, subgroup, kind, status, aliases }) => ({ id, title, group, subgroup, kind, status, aliases });
 			const nextSignature = JSON.stringify([items.map(identity), tools.map(identity)]);
 			if (nextSignature !== signature) {
 				signature = nextSignature;

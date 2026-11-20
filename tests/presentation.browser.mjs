@@ -22,13 +22,17 @@ const widths = [320, 390, 500, 800, 1440];
 
 test('repository references are collapsed contributor resources after the article and further reading', { timeout: 60000 }, async t => {
 	const fixture = createDocumentCheckout(t);
-	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'topics.json'), 'utf8'));
 	const references = [
 		{ title: 'Text spacing', url: 'https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html', description: 'Check the required user text-spacing overrides.' },
 		{ title: `Variable font axes: ${'LongUnbrokenReferenceTitle'.repeat(4)}`, url: 'https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview', description: 'Understand font-axis interpolation and how it relates to the weight specimen.' },
 	];
-	fixture.write('.github/design-system/topics.json', JSON.stringify({ ...book, references: { typography: references } }));
-	const panel = await createExplorer(root, { bookRoot: fixture.bookRoot, scope: { operation: 'all', active: 'typography' } });
+	const specFile = '.github/skills/design-system/patterns/designing-for-ai.design.md';
+	const spec = readFileSync(path.join(fixture.bookRoot, 'patterns/designing-for-ai.design.md'), 'utf8');
+	const referenceYaml = references.map(reference => `  - title: ${JSON.stringify(reference.title)}\n    url: ${JSON.stringify(reference.url)}\n    description: ${JSON.stringify(reference.description)}`).join('\n');
+	const updatedSpec = spec.replace(/^references:\r?\n[\s\S]*?(?=^legacyPaths:)/m, `references:\n${referenceYaml}\n`);
+	assert.notEqual(updatedSpec, spec);
+	fixture.write(specFile, updatedSpec);
+	const panel = await createExplorer(fixture.root, { scope: { operation: 'all', active: 'designing-for-ai' } });
 	let browser;
 	try {
 		browser = await chromium.launch({ headless: true });
@@ -37,7 +41,7 @@ test('repository references are collapsed contributor resources after the articl
 		page.on('pageerror', error => errors.push(error.message));
 		await mockFixtureRenderer(page, root, ['icon-label', 'button', 'input', 'radio']);
 		await page.goto(panel.url);
-		const article = page.locator('[data-topic="typography"]');
+		const article = page.locator('[data-topic="designing-for-ai"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const footer = article.locator('.topic-actions');
 		const sources = article.locator('.contributor-resources');
@@ -59,7 +63,7 @@ test('repository references are collapsed contributor resources after the articl
 		await page.keyboard.press('Enter');
 		await page.keyboard.press('Tab');
 		await expect(reading.getByRole('link', { name: /^Text spacing/ })).toBeFocused();
-		assert.ok((await sources.locator('.repository-path').allTextContents()).includes('.github/design-system/typography.design.md'));
+		assert.ok((await sources.locator('.repository-path').allTextContents()).includes(specFile));
 		assert.deepEqual(await reading.locator('li').evaluateAll(items => items.map(item => ({
 			title: item.querySelector('a').textContent, url: item.querySelector('a').href, description: item.querySelector('p').textContent,
 			target: item.querySelector('a').target, rel: item.querySelector('a').rel,
@@ -121,38 +125,41 @@ test('repository references are collapsed contributor resources after the articl
 		await expect(page.locator('[data-topic="illustration"] .topic-references')).toBeHidden();
 		await page.locator('[data-topic="illustration"] .contributor-resources > summary').click();
 		await expect(page.locator('[data-topic="illustration"] .contributor-resources a')).toHaveCount(1);
-		panel.setScope({ operation: 'all', active: 'colors' });
-		const colors = page.locator('[data-topic="colors"]');
-		await expect(colors.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		const contributors = colors.locator('.contributor-resources');
-		const colorScroll = colors.getByRole('region', { name: 'Color tokens across four themes; scroll for more rows and columns', exact: true });
-		await colorScroll.evaluate(element => { element.scrollTop = 100; });
-		await expect(contributors).not.toHaveAttribute('open', '');
-		await contributors.locator('summary').focus();
-		await page.keyboard.press('Enter');
-		for (const width of [320, 800, 1440]) {
-			await page.setViewportSize({ width, height: 900 });
-			await contributors.locator('a').last().focus();
-			assert.deepEqual(await colors.evaluate(article => {
-				const resources = article.querySelector('.contributor-resources');
-				const content = article.querySelector('.topic-content');
-				const header = article.querySelector('.color-matrix thead');
-				const link = resources.querySelector('li:last-child a');
-				const bounds = link.getBoundingClientRect();
-				const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
-				return {
-					afterContent: resources.getBoundingClientRect().top >= content.getBoundingClientRect().bottom,
-					linksInFlow: bounds.top >= content.getBoundingClientRect().bottom && bounds.bottom <= resources.getBoundingClientRect().bottom,
-					clearOfTable: resources.getBoundingClientRect().top >= header.getBoundingClientRect().bottom,
-					clickable: hit === link || link.contains(hit),
-					noHeaderControl: !article.querySelector('.topic-context details'),
-					noOverflow: document.documentElement.scrollWidth <= innerWidth,
-				};
-			}), { afterContent: true, linksInFlow: true, clearOfTable: true, clickable: true, noHeaderControl: true, noOverflow: true }, `Colors ${width}px`);
-		}
-		panel.setScope({ operation: 'all', active: 'documentation' });
-		await expect(page.locator('[data-topic="documentation"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await expect(page.locator('[data-topic="documentation"] .topic-actions')).toBeHidden();
+		const contentPanel = await createExplorer(root, { scope: { operation: 'all', active: 'colors' } });
+		try {
+			await page.goto(contentPanel.url);
+			const colors = page.locator('[data-topic="colors"]');
+			await expect(colors.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+			const contributors = colors.locator('.contributor-resources');
+			const colorScroll = colors.getByRole('region', { name: 'Color tokens across four themes; scroll for more rows and columns', exact: true });
+			await colorScroll.evaluate(element => { element.scrollTop = 100; });
+			await expect(contributors).not.toHaveAttribute('open', '');
+			await contributors.locator('summary').focus();
+			await page.keyboard.press('Enter');
+			for (const width of [320, 800, 1440]) {
+				await page.setViewportSize({ width, height: 900 });
+				await contributors.locator('a').last().focus();
+				assert.deepEqual(await colors.evaluate(article => {
+					const resources = article.querySelector('.contributor-resources');
+					const content = article.querySelector('.topic-content');
+					const header = article.querySelector('.color-matrix thead');
+					const link = resources.querySelector('li:last-child a');
+					const bounds = link.getBoundingClientRect();
+					const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+					return {
+						afterContent: resources.getBoundingClientRect().top >= content.getBoundingClientRect().bottom,
+						linksInFlow: bounds.top >= content.getBoundingClientRect().bottom && bounds.bottom <= resources.getBoundingClientRect().bottom,
+						clearOfTable: resources.getBoundingClientRect().top >= header.getBoundingClientRect().bottom,
+						clickable: hit === link || link.contains(hit),
+						noHeaderControl: !article.querySelector('.topic-context details'),
+						noOverflow: document.documentElement.scrollWidth <= innerWidth,
+					};
+				}), { afterContent: true, linksInFlow: true, clearOfTable: true, clickable: true, noHeaderControl: true, noOverflow: true }, `Colors ${width}px`);
+			}
+			contentPanel.setScope({ operation: 'all', active: 'documentation' });
+			await expect(page.locator('[data-topic="documentation"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+			await expect(page.locator('[data-topic="documentation"] .topic-actions')).toBeHidden();
+		} finally { await contentPanel.close(); }
 		assert.deepEqual(errors, []);
 	} finally {
 		await browser?.close();
@@ -206,9 +213,9 @@ test('viewer search fields and command controls share dimensions and honor seman
 		});
 		assert.deepEqual(await buttonStyle(documentSearch), await buttonStyle(refresh));
 		const filter = page.locator('[data-topic="documentation"]').getByRole('combobox', { name: 'Source', exact: true });
-		await page.getByRole('button', { name: 'Checkout details', exact: true }).click();
-		const worktree = page.getByRole('combobox', { name: 'Local worktree', exact: true });
-		assert.deepEqual(await fieldStyle(filter), await fieldStyle(worktree));
+		await page.getByRole('button', { name: 'Content version', exact: true }).click();
+		const version = page.getByRole('combobox', { name: 'Content version', exact: true });
+		assert.deepEqual(await fieldStyle(filter), await fieldStyle(version));
 		await page.keyboard.press('Escape');
 		await page.setViewportSize({ width: 320, height: 900 });
 		await expect(documentSearch).toBeVisible();
@@ -283,8 +290,8 @@ test('Markdown tables retain shared alignment and spacing outside the prose wrap
 test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
 	const read = file => readFileSync(path.join(root, file), 'utf8');
 	const authored = readPage(read, 'typography').authored;
-	const source = '.github/design-system/typography.design.md';
-	const pageFile = '.github/design-system/content/topics/typography.json';
+	const source = '.github/skills/design-system/foundations/typography.design.md';
+	const pageFile = '.github/skills/design-system/content/topics/typography.json';
 	mkdirSync(path.join(root, '.build'), { recursive: true });
 	const scratch = mkdtempSync(path.join(root, '.build/chapter-composition-'));
 	const sourceFile = path.join(scratch, 'source.md');
@@ -345,7 +352,7 @@ test('Illustration uses the shared book frame, source sections, and keyboard out
 		await outline.getByRole('link', { name: 'Visual style', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(article.locator('#illustration-style')).toBeFocused();
-		await expect(article.getByRole('link', { name: 'Motion', exact: true })).toHaveAttribute('href', /documentId=\.github%2Fdesign-system%2Fmotion\.design\.md/);
+		await expect(article.getByRole('link', { name: 'Motion', exact: true })).toHaveAttribute('href', /documentId=\.github%2Fskills%2Fdesign-system%2Ffoundations%2Fmotion\.design\.md/);
 		for (const theme of ['Dark 2026', 'Light 2026', 'High Contrast Dark', 'High Contrast Light']) {
 			panel.setView({ theme });
 			for (const width of [390, 1440]) {
@@ -464,7 +471,7 @@ test('compact topic context stays visible and recoverable errors do not displace
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(problem).toBeHidden();
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
-		await page.route('**/api/checkout', route => route.fulfill({ status: 503, body: 'Checkout read failed' }));
+		await page.route('**/api/checkouts', route => route.fulfill({ status: 503, body: 'Checkout read failed' }));
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.locator('#shell-problem > summary')).toBeVisible();
 		assert.equal(await page.locator('#shell-problem').evaluate(element => element.open), false);
@@ -1071,11 +1078,11 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 			await page.setViewportSize({ width, height: 900 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		}
-		await page.route('**/api/checkout', route => route.fulfill({ status: 503, body: 'Source temporarily unavailable' }));
+		await page.route('**/api/content-version', route => route.fulfill({ status: 503, body: 'Source temporarily unavailable' }));
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.locator('#shell-problem')).toContainText('Source temporarily unavailable');
 		await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
-		await page.unroute('**/api/checkout');
+		await page.unroute('**/api/content-version');
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 		await expect(page.locator('#shell-problem')).toHaveCount(0);
@@ -1131,7 +1138,7 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 	}
 });
 
-test('the full book browses a flat component inventory without an overview page or composite previews', { timeout: 60000 }, async () => {
+test('the full book browses a curated component inventory without an overview page or composite previews', { timeout: 60000 }, async () => {
 	const visibleComponents = catalog.filter(item => item.section === 'components' && !item.hidden);
 	const availableIds = new Set(visibleComponents.map(item => item.controlId));
 	const undocumented = controls.filter(control => availableIds.has(control.id) && control.content === 'tbd');
@@ -1154,8 +1161,13 @@ test('the full book browses a flat component inventory without an overview page 
 		await browse.focus();
 		await page.keyboard.press('Enter');
 		const components = page.locator('.book-panel nav > .book-group').filter({ has: page.getByText('Components', { exact: true }) });
-		assert.deepEqual(await components.getByRole('link').allTextContents(), catalog.filter(item => item.group === 'Components' && !item.hidden).map(item => item.title));
-		await expect(components.locator('h3, ul ul')).toHaveCount(0);
+		for (const subgroup of await components.locator('details').all()) {
+			if (!await subgroup.evaluate(element => element.open)) { await subgroup.locator(':scope > summary').click(); }
+		}
+		assert.deepEqual(
+			(await components.getByRole('link').evaluateAll(links => links.map(link => link.firstElementChild.textContent))).sort((a, b) => a.localeCompare(b, 'en')),
+			catalog.filter(item => item.group === 'Components' && !item.hidden).map(item => item.title).sort((a, b) => a.localeCompare(b, 'en')));
+		await expect(components.locator('h3')).toHaveCount(0);
 		await expect(page.locator('.card, iframe, [data-topic="components"]')).toHaveCount(0);
 		assert.equal(requests.includes('/api/fixtures'), false);
 		for (const width of widths) {
@@ -1165,7 +1177,7 @@ test('the full book browses a flat component inventory without an overview page 
 		await page.setViewportSize({ width: 390, height: 900 });
 		await browse.click();
 		await page.getByRole('searchbox', { name: 'Search topics', exact: true }).fill('Menu');
-		await page.getByRole('link', { name: 'Menu', exact: true }).focus();
+		await page.getByRole('link', { name: /^Menu/ }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="component-menu"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.getByRole('heading', { name: 'Menu', exact: true })).toBeVisible();
@@ -1267,7 +1279,8 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.locator('#book-navigation nav, #scope-controls, #topic, .breadcrumbs, .page-jumps')).toHaveCount(0);
 			await expect(page.getByRole('navigation', { name: 'On this page', exact: true })).toBeVisible();
 			await expect(page.getByRole('heading', { name: 'Motion', exact: true })).toBeVisible();
-			await expect(page.locator('#checkout')).toHaveText(root.split(/[\\/]/).at(-1));
+			await expect(page.locator('#checkout')).toHaveText('Reading: This session');
+			await expect(page.locator('#checkout')).toHaveAttribute('title', root);
 			assert.deepEqual(Object.keys(panel.store.metrics.parses).sort(), ['guidance', 'icons', 'motion', 'motionAppearance', 'sizes', 'sourceDocuments', 'themes', 'typography']);
 			assert.equal(Object.keys(panel.store.metrics.reads).includes('extensions/theme-abyss/themes/abyss-color-theme.json'), false);
 			for (const width of widths) {
@@ -1367,7 +1380,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.getByText('No matching topics', { exact: true })).toBeVisible();
 			await expect(navigation.locator('a:visible')).toHaveCount(0);
 			await filter.fill('button');
-			await expect(navigation.getByRole('link', { name: 'Button', exact: true })).toBeVisible();
+			await expect(navigation.getByRole('link', { name: /^Button/ })).toBeVisible();
 			assert.deepEqual(panel.store.metrics.reads, beforeFiltering);
 			await filter.fill('');
 			await expect(page.getByText('No matching topics', { exact: true })).not.toBeVisible();

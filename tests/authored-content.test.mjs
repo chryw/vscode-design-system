@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { catalog, controls, validateBook, createControls, repository } from './repository-helpers.mjs';
@@ -34,7 +34,7 @@ test('the manifest preserves every original visible and archived topic and binds
 		semantics: createHash('sha256').update(JSON.stringify(originalSemantics)).digest('hex'),
 	}, {
 		title: 'Visual Studio Code Design System', defaultTopic: 'principles', topics: 161, visible: 52,
-		semantics: '148614f227d1af23218b988ce282bf6d539daa85e0b6d2a8b19715d30d686c4e',
+		semantics: '3775a32078348c47301d00758a0ea9140ad08b3acb979c744e1fb4086feaf5c9',
 	});
 	for (const entry of catalog) {
 		assert.match(entry.renderer, /^topics\/[a-z]+\.mjs$/);
@@ -100,7 +100,7 @@ test('component navigation interleaves authored and generated topics without cha
 
 test('prose, structured specimens, and authoritative excerpts project through tracked reads', () => {
 	const original = readPage(read, 'typography').authored;
-	const file = '.github/design-system/typography.design.md';
+	const file = '.github/skills/design-system/foundations/typography.design.md';
 	const introduction = markdownSection(read(file), 'Introduction', file);
 	const updated = readPage(amend(file, text => text.replace(/\r\n?/g, '\n').replace(introduction, 'Changed guidance from the saved book.')), 'typography').authored;
 	assert.deepEqual({
@@ -114,30 +114,23 @@ test('prose, structured specimens, and authoritative excerpts project through tr
 		specimenRoles: original.composition.map(([id]) => id),
 		section: sectionContent(original, 'composition').title,
 	});
-	const source = '.github/design-system/colors.design.md';
-	const reference = { $text: { file: source, heading: 'Preserve component contracts', list: true } };
-	assert.ok(resolveContent(reference, amend(source, text => text.replace('- Reserve accent', '- Changed source: reserve accent')))[0].startsWith('Changed source:'));
+	const source = '.github/skills/design-system/foundations/colors.design.md';
+	const reference = { $text: { file: source, heading: 'Preserve component contracts' } };
+	assert.ok(resolveContent(reference, amend(source, text => text.replace('- Reserve accent for a leading action.', '- Changed source: reserve accent for a leading action.'))).includes('Changed source:'));
 	assert.equal(contentText(updated.baseline, { fontSize: '13px', lineHeight: '1.4em' }),
 		'Workbench baseline: 13px text with 1.4em line-height. Individual widgets can override this.');
 });
 
-test('source composition supports both topic-map locations and rejects malformed new maps', () => {
-	const current = `${bookRoot}topics.json`;
-	const legacy = `${bookRoot}book.json`;
-	const map = JSON.parse(read(current));
+test('authored chapter definitions are read without a hand-maintained topic map', () => {
+	const page = `${bookRoot}content/topics/typography.json`;
 	const original = readPage(read, 'typography');
-	const old = { ...map, topics: map.topics.map(topic => ({ ...topic, page: topic.page.replace(/^content\/topics\//, 'pages/') })) };
-	const legacyRead = file => {
-		if (file === current) { const error = new Error('Missing new map'); error.code = 'ENOENT'; throw error; }
-		if (file === legacy) { return JSON.stringify(old); }
-		return read(file.replace(`${bookRoot}pages/`, `${bookRoot}content/topics/`));
-	};
-	assert.deepEqual(readPage(legacyRead, 'typography'), original);
-	assert.throws(() => readPage(file => file === current ? '{broken' : legacyRead(file), 'typography'), /Couldn't read topics.json/);
+	assert.equal(existsSync(path.join(root, '.github/skills/design-system/topics.json')), false);
+	assert.deepEqual(readPage(read, 'typography', book), original);
+	assert.throws(() => readPage(file => file === page ? '{broken' : read(file), 'typography'), SyntaxError);
 });
 
 test('guidance-only chapters project authored sections and saved source edits without viewer copy', () => {
-	const file = '.github/design-system/illustration.design.md';
+	const file = '.github/skills/design-system/foundations/illustration.design.md';
 	const updated = readPage(amend(file, text => text.replace(
 		markdownSection(read(file), 'Principles', file),
 		'Changed illustration guidance.',
@@ -160,7 +153,7 @@ test('guidance-only chapters project authored sections and saved source edits wi
 });
 
 test('composed chapters accept optional introductions and unheaded lead prose', () => {
-	const file = '.github/design-system/illustration.design.md';
+	const file = '.github/skills/design-system/foundations/illustration.design.md';
 	const body = read(file).slice(read(file).indexOf('## Usage'));
 	const original = readPage(read, 'illustration');
 	const sections = page => page.sourceSections.map(({ sectionId, title, markdown }) => [sectionId, title, markdown]);
@@ -177,7 +170,7 @@ test('composed chapters accept optional introductions and unheaded lead prose', 
 });
 
 test('accessibility composes source guidance while retaining legacy heading-order pages', () => {
-	const file = '.github/design-system/accessibility.design.md';
+	const file = '.github/skills/design-system/foundations/accessibility.design.md';
 	const updated = readPage(amend(file, text => text.replace(
 		'Every action must work without a mouse.', 'Changed keyboard guidance.',
 	)), 'accessibility');
@@ -195,7 +188,7 @@ test('accessibility composes source guidance while retaining legacy heading-orde
 		legacyOrder: legacy.authored.headingOrder,
 		legacySections: legacy.sourceSections,
 	}, {
-		edited: true, sources: [file], modernOrder: undefined,
+		edited: true, 		sources: [file], modernOrder: undefined,
 		legacyOrder: ['Keyboard Navigation'], legacySections: [],
 	});
 	assert.throws(() => readPage(amend(page, text => {
@@ -211,7 +204,7 @@ test('accessibility composes source guidance while retaining legacy heading-orde
 });
 
 test('elevation guidance and scenario captions come from the owning document and reject incomplete composition', () => {
-	const file = '.github/design-system/elevation.design.md';
+	const file = '.github/skills/design-system/foundations/elevation.design.md';
 	const updated = readPage(amend(file, text => text.replace(
 		'The editor leads; navigation and tools support it without becoming independent floating layers.',
 		'Changed relationship caption.',
@@ -265,7 +258,7 @@ test('elevation guidance and scenario captions come from the owning document and
 });
 
 test('a saved authored edit invalidates only its dependent topic and refresh rereads its Markdown', { timeout: 10000 }, async () => {
-	const file = '.github/design-system/typography.design.md';
+	const file = '.github/skills/design-system/foundations/typography.design.md';
 	const scratch = path.relative(process.cwd(), path.join(root, `.build/.authored-edit-${randomUUID()}.md`));
 	const absolute = path.resolve(scratch);
 	const original = read(file);
@@ -311,11 +304,11 @@ test('a saved authored edit invalidates only its dependent topic and refresh rer
 
 test('Button reads its design document and derives API declarations without reference JSON', () => {
 	const file = 'src/vs/base/browser/ui/button/button.design.md';
-	const changed = loadComponent({ root, read: amend(file, text => text.replace('Runs actions through', 'Changed component note: runs actions through')) }, 'button').controls[0];
+	const changed = loadComponent({ root, repository, read: amend(file, text => text.replace('Runs actions through', 'Changed component note: runs actions through')) }, 'button').controls[0];
 	assert.ok(changed.docs.summary.startsWith('Changed component note:'));
 	assert.ok(changed.docs.api.every(member => member.source.file === 'src/vs/base/browser/ui/button/button.ts' && member.source.line > 0));
 	const owner = 'src/vs/base/browser/ui/button/button.ts';
-	const derived = loadComponent({ root, read: file => {
+	const derived = loadComponent({ root, repository, read: file => {
 		if (file === `${bookRoot}content/components/references/button.json`) { throw new Error('Legacy Button reference must not be read'); }
 		return file === owner ? read(file).replace('set label(value: string | IMarkdownString);', 'set label(value: number);') : read(file);
 	} }, 'button').controls[0];
@@ -328,14 +321,14 @@ test('Button reads its design document and derives API declarations without refe
 		label: { name: 'label', type: 'number', optional: false, declaration: 'set label(value: number);', symbol: 'IButton.label', source: { file: owner, line: 71 } },
 		secondary: true,
 	});
-	assert.throws(() => loadComponent({ root, read: amend(owner, text => text.replace('set label(value: string | IMarkdownString);', 'set renamedLabel(value: string | IMarkdownString);')) }, 'button'),
+	assert.throws(() => loadComponent({ root, repository, read: amend(owner, text => text.replace('set label(value: string | IMarkdownString);', 'set renamedLabel(value: string | IMarkdownString);')) }, 'button'),
 		/Expected one public component API member IButton.label/);
-	assert.throws(() => loadComponent({ root, read: amend(file, text => text.replace('## Usage', '## Missing usage')) }, 'button'), /Expected one section "Usage"/);
+	assert.throws(() => loadComponent({ root, repository, read: amend(file, text => text.replace('## Usage', '## Missing usage')) }, 'button'), /Expected one section "Usage"/);
 });
 
 test('Button preserves Markdown structure and rejects invalid API selectors and sources', () => {
 	const file = 'src/vs/base/browser/ui/button/button.design.md';
-	const edited = loadComponent({ root, read: amend(file, text => text.replace(
+	const edited = loadComponent({ root, repository, read: amend(file, text => text.replace(
 		'- Use a clear verb for the action.',
 		'- Use a clear verb for the action.\n  - Keep `onDidClick` as the activation owner.',
 	)) }, 'button').controls[0];
@@ -348,7 +341,7 @@ test('Button preserves Markdown structure and rejects invalid API selectors and 
 		family => { family.api = ['ButtonBar._buttons']; },
 		family => { family.api = ['IButton.missing']; },
 	]) {
-		assert.throws(() => loadComponent({ root, read: amend(curation, text => {
+		assert.throws(() => loadComponent({ root, repository, read: amend(curation, text => {
 			const value = JSON.parse(text);
 			change(value.families.find(([id]) => id === 'button')[1]);
 			return JSON.stringify(value);
@@ -378,7 +371,7 @@ test('component source APIs include inherited accessors, constructors, inferred 
 });
 
 test('inline chapter composition reads complete source sections without paragraph projections', () => {
-	const file = '.github/design-system/typography.design.md';
+	const file = '.github/skills/design-system/foundations/typography.design.md';
 	const page = `${bookRoot}content/topics/typography.json`;
 	const original = readPage(read, 'typography').authored;
 	const candidate = {
@@ -455,7 +448,7 @@ test('invalid manifests, content shapes, and source bindings fail instead of bec
 });
 
 test('Markdown references reject missing, empty, ambiguous, and unsupported selectors', () => {
-	const reference = { file: '.github/design-system/typography.design.md', heading: 'Introduction' };
+	const reference = { file: '.github/skills/design-system/foundations/typography.design.md', heading: 'Introduction' };
 	for (const [value, source, expected] of [
 		[{ $text: reference }, '# Elsewhere\n\nText', /found 0/],
 		[{ $text: reference }, '## Introduction\n\n## Next\n\nText', /Empty content section/],
@@ -474,7 +467,7 @@ test('Markdown references reject missing, empty, ambiguous, and unsupported sele
 });
 
 test('scoped Markdown references resolve whole sections without repeated file paths', () => {
-	const source = '.github/design-system/motion/examples.md';
+	const source = '.github/skills/design-system/foundations/motion/examples.md';
 	const reference = { description: { $text: 'Foundations' }, caption: { $text: 'Selection caption' } };
 	const resolved = resolveContent(reference, read, { source });
 	assert.deepEqual(resolved, {

@@ -10,7 +10,7 @@ import { documentView, findDocument, resolveDocumentReference } from '../model/d
 import { readViewURL, writeViewURL } from '../model/view-state.mjs';
 import { setRepository } from './context.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
-import { createPageHistory, createAppearancePicker } from './ui.mjs';
+import { node, codicon, anchorPopup, createPageHistory, createAppearancePicker } from './ui.mjs';
 
 const snapshot = globalThis.designSnapshot;
 setRepository(snapshot.repository);
@@ -31,6 +31,49 @@ const topicURL = id => {
 	return url;
 };
 const sourceURL = (id, anchor = '') => `https://github.com/microsoft/vscode/blob/${snapshot.commit}/${id.split('/').map(encodeURIComponent).join('/')}#${encodeURIComponent(anchor)}`;
+function createSnapshotDetails() {
+	const button = node('button', undefined, 'chrome-button secondary');
+	button.id = 'snapshot-toggle';
+	button.type = 'button';
+	button.title = `Snapshot details: viewer v${snapshot.viewerVersion}`;
+	button.setAttribute('aria-label', 'Snapshot details');
+	button.setAttribute('aria-haspopup', 'dialog');
+	button.setAttribute('aria-expanded', 'false');
+	button.setAttribute('aria-controls', 'snapshot-details');
+	button.append(node('span', `Snapshot v${snapshot.viewerVersion}`, 'snapshot-label'), codicon('chevron-down'));
+	const popup = node('section', undefined, 'chrome-popup checkout-popup');
+	popup.id = 'snapshot-details';
+	popup.setAttribute('popover', 'auto');
+	popup.setAttribute('role', 'dialog');
+	popup.setAttribute('aria-labelledby', 'snapshot-title');
+	button.popoverTargetElement = popup;
+	const heading = node('h2', 'Snapshot');
+	heading.id = 'snapshot-title';
+	const date = node('time', new Date(snapshot.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }));
+	date.dateTime = snapshot.createdAt;
+	const revision = node('a', snapshot.commit.slice(0, 8));
+	revision.href = `https://github.com/microsoft/vscode/tree/${snapshot.commit}`;
+	revision.target = '_blank';
+	revision.rel = 'noopener noreferrer';
+	revision.autofocus = true;
+	revision.setAttribute('aria-label', `Base revision ${snapshot.commit.slice(0, 8)} on GitHub (opens in a new tab)`);
+	const metadata = node('dl', undefined, 'snapshot-metadata');
+	for (const [label, value] of [
+		['Viewer', `v${snapshot.viewerVersion}`], ['Captured', date], ['Repository', 'microsoft/vscode'],
+		['Checkout', snapshot.branch], ['Base revision', revision], ['Saved changes', snapshot.modified ? 'Included' : 'None'],
+	]) {
+		const description = node('dd');
+		description.append(value);
+		metadata.append(node('dt', label), description);
+	}
+	popup.append(heading, metadata);
+	document.querySelector('.checkout-details').append(button);
+	document.querySelector('.explorer-heading').after(popup);
+	anchorPopup(popup, button, lifetime.signal);
+	button.addEventListener('keydown', event => {
+		if (event.key === 'ArrowDown') { event.preventDefault(); popup.showPopover(); }
+	}, { signal: lifetime.signal });
+}
 const problem = error => {
 	target.replaceChildren();
 	const message = document.createElement('p');
@@ -137,5 +180,5 @@ document.addEventListener('submit', event => {
 window.addEventListener('pagehide', event => {
 	if (!event.persisted) { lifetime.abort(); reference?.dispose(); contents.dispose(); }
 });
-document.querySelector('#snapshot-date').textContent = new Date(snapshot.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+createSnapshotDetails();
 restore();

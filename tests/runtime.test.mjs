@@ -31,40 +31,26 @@ const scratch = prefix => {
 	const directory = path.join(root, '.build');
 	mkdirSync(directory, { recursive: true });
 	const result = mkdtempSync(path.join(directory, prefix));
-	cpSync(repositoryRoot, path.join(result, '.github/design-system'), { recursive: true });
+	cpSync(repositoryRoot, path.join(result, '.github/skills/design-system'), { recursive: true });
 	return result;
 };
 
-test('topic maps prefer the hybrid convention and never hide invalid or unreadable maps behind legacy data', t => {
+test('generated catalogs use specification metadata and reject invalid metadata instead of falling back', t => {
 	const fixture = createDocumentCheckout(t);
-	const current = '.github/design-system/topics.json';
-	const legacy = '.github/design-system/book.json';
-	const original = readFileSync(path.join(fixture.root, current), 'utf8');
-	const book = JSON.parse(original);
-	const old = { ...book, topics: book.topics.map(topic => ({ ...topic, title: `Legacy ${topic.title}` })) };
-	fixture.write(legacy, JSON.stringify(old));
+	const specification = '.github/skills/design-system/foundations/typography.design.md';
+	fixture.write('.github/design-system/topics.json', '{"version":1,"id":"ignored","title":"Legacy map","topics":[]}');
 	assert.equal(readRepository(fixture.root).getTopic('typography').title, 'Typography');
-	rmSync(path.join(fixture.root, current));
-	assert.equal(readRepository(fixture.root).getTopic('typography').title, 'Legacy Typography');
-	fixture.write(current, '{broken');
-	assert.throws(() => readRepository(fixture.root), /Couldn't read topics.json/);
-	fixture.write(current, JSON.stringify({ ...book, version: 99 }));
-	assert.throws(() => readRepository(fixture.root), /Couldn't read topics.json/);
-	rmSync(path.join(fixture.root, current));
-	mkdirSync(path.join(fixture.root, current));
-	assert.throws(() => readRepository(fixture.root), /EISDIR/);
-	rmSync(path.join(fixture.root, current), { recursive: true });
-	rmSync(path.join(fixture.root, legacy));
-	assert.equal(readRepository(fixture.root).projection.mode, 'basic');
+	fixture.write(specification, readFileSync(path.join(fixture.root, specification), 'utf8').replace('status: "stable"', 'status: "invalid"'));
+	assert.throws(() => readRepository(fixture.root), /invalid design specification metadata/);
 });
 
 test('relocated shared specifications resolve their earlier addresses directly while components remain code-local', () => {
 	const store = new TopicStore(root);
 	try {
 		const paths = [
-			['src/vs/platform/theme/common/sizes/typography.md', '.github/design-system/typography.design.md'],
-			['src/vs/platform/theme/common/sizes/typography.design.md', '.github/design-system/typography.design.md'],
-			['.github/design-system/guidance/modal.design.md', '.github/design-system/modal.design.md'],
+			['src/vs/platform/theme/common/sizes/typography.md', '.github/skills/design-system/foundations/typography.design.md'],
+			['src/vs/platform/theme/common/sizes/typography.design.md', '.github/skills/design-system/foundations/typography.design.md'],
+			['.github/design-system/guidance/modal.design.md', '.github/skills/design-system/patterns/modal.design.md'],
 			['src/vs/base/browser/ui/button/button.design.md', 'src/vs/base/browser/ui/button/button.design.md'],
 		];
 		assert.deepEqual(paths.map(([previous]) => store.documents.read(previous).id), paths.map(([, canonical]) => canonical));
@@ -93,7 +79,7 @@ test('review sources keep viewer implementation separate from repository data an
 	const output = path.join(directory, 'archive');
 	try {
 		await copyReviewSources(output);
-		const manifest = '.github/design-system/topics.json';
+		const manifest = '.github/skills/design-system/foundations/typography.design.md';
 		const guidance = 'src/vs/base/browser/ui/button/button.design.md';
 		assert.deepEqual({
 			manifest: readFileSync(path.join(output, 'repository', manifest), 'utf8'),
@@ -180,7 +166,7 @@ test('catalog and scope validation are metadata-only, bounded and exact', async 
 			patternOrder: true, headlessPattern: 'Patterns',
 			utilities: [], groupedLibrary: false, headless: 'utility', defaultPlacement: 'topic',
 		});
-		const book = readBook(path.join(root, '.github/design-system'));
+		const book = readBook(path.join(root, '.github/skills/design-system'));
 		assert.ok(topics.findLastIndex(topic => topic.group === 'Foundations') < topics.findIndex(topic => topic.group === 'Components'),
 			'Read the complete foundation sequence before component references');
 		for (const navigation of ['unknown', false, null]) {
@@ -220,13 +206,11 @@ test('component ordering preserves saved views and focused scope order', () => {
 test('each checkout supplies its own catalog and viewer projection without a package-content fallback', async t => {
 	const first = createDocumentCheckout(t);
 	const second = createDocumentCheckout(t);
-	const book = JSON.parse(readFileSync(path.join(second.bookRoot, 'topics.json'), 'utf8'));
-	book.defaultTopic = 'documentation';
-	book.topics.find(topic => topic.id === 'typography').title = 'Checkout type guidance';
-	second.write('.github/design-system/topics.json', JSON.stringify(book));
+	const specification = '.github/skills/design-system/foundations/typography.design.md';
+	second.write(specification, readFileSync(path.join(second.root, specification), 'utf8').replace('title: "Typography"', 'title: "Checkout type guidance"'));
 	const curation = JSON.parse(readFileSync(path.join(second.bookRoot, 'content/components/curation.json'), 'utf8'));
 	curation.productControls.find(control => control.id === 'button').name = 'Checkout action';
-	second.write('.github/design-system/content/components/curation.json', JSON.stringify(curation));
+	second.write('.github/skills/design-system/content/components/curation.json', JSON.stringify(curation));
 	const panels = await Promise.all([createExplorer(first.root), createExplorer(second.root)]);
 	try {
 		const projections = await Promise.all(panels.map(async panel => (await fetch(new URL('/api/repository', panel.url))).json()));
@@ -236,11 +220,12 @@ test('each checkout supplies its own catalog and viewer projection without a pac
 			controls: panels.map(panel => panel.store.repository.controls.find(control => control.id === 'button').name),
 			headless: listTopics(second.root).topics.find(topic => topic.id === 'typography').title,
 		}, {
-			defaults: ['principles', 'documentation'], titles: ['Typography', 'Checkout type guidance'],
+			defaults: ['principles', 'principles'], titles: ['Typography', 'Checkout type guidance'],
 			controls: ['Button', 'Checkout action'], headless: 'Checkout type guidance',
 		});
 	} finally { await Promise.all(panels.map(panel => panel.close())); }
-	rmSync(path.join(second.bookRoot, 'topics.json'));
+	rmSync(path.join(second.bookRoot, 'foundations'), { recursive: true });
+	rmSync(path.join(second.bookRoot, 'patterns'), { recursive: true });
 	const basic = await createExplorer(second.root);
 	try {
 		assert.deepEqual({ mode: basic.store.repository.projection.mode, topics: basic.state.scope.topics },
@@ -248,27 +233,26 @@ test('each checkout supplies its own catalog and viewer projection without a pac
 	} finally { await basic.close(); }
 });
 
-test('topic references are explicit, ordered and validated for authored and generated topics', t => {
+test('shared-topic references are explicit, ordered, and validated from specification metadata', t => {
 	const fixture = createDocumentCheckout(t);
-	const book = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'topics.json'), 'utf8'));
 	const first = { title: 'Text spacing', url: 'https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html', description: 'Check the required user text-spacing overrides.' };
 	const second = { title: 'Variable fonts', url: 'https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview', description: 'Understand font-axis interpolation.' };
+	const specification = '.github/skills/design-system/foundations/typography.design.md';
+	const original = readFileSync(path.join(fixture.root, specification), 'utf8');
 	const list = references => {
-		fixture.write('.github/design-system/topics.json', JSON.stringify({ ...book, references }));
+		fixture.write(specification, original.replace(/references:\n(?:[ \t]+.*\n)*/, `references: ${JSON.stringify(references)}\n`));
 		return listTopics(fixture.root).topics;
 	};
-	const topics = list({ typography: [second, first], 'component-button': [first] });
-	assert.deepEqual(['typography', 'component-button', 'spacing'].map(id => topics.find(topic => topic.id === id).references),
-		[[second, first], [first], []]);
+	const topics = list([second, first]);
+	assert.deepEqual(['typography', 'spacing'].map(id => topics.find(topic => topic.id === id).references), [[second, first], []]);
 	for (const references of [
-		null, [], { typography: null }, { typography: [null] }, { typography: [{ ...first, description: ' ' }] },
-		{ typography: [{ ...first, extra: true }] }, { typography: [{ ...first, url: 'not a URL' }] },
-		{ typography: [{ ...first, url: 'javascript:alert(1)' }] }, { typography: [{ ...first, url: 'http://example.com' }] },
-		{ typography: [{ ...first, url: 'https://user:password@example.com' }] },
-		{ typography: [first, { ...first, url: first.url.replace('www.w3.org', 'WWW.W3.ORG:443') }] },
-		{ 'component-no-such-topic': [first] },
+		null, { typography: [first] }, [null], [{ ...first, description: ' ' }],
+		[{ ...first, extra: true }], [{ ...first, url: 'not a URL' }],
+		[{ ...first, url: 'javascript:alert(1)' }], [{ ...first, url: 'http://example.com' }],
+		[{ ...first, url: 'https://user:password@example.com' }],
+		[first, { ...first, url: first.url.replace('www.w3.org', 'WWW.W3.ORG:443') }],
 	]) {
-		assert.throws(() => list(references), /reference/i);
+		assert.throws(() => list(references), /reference|metadata/i);
 	}
 });
 
@@ -286,7 +270,7 @@ test('Typography excludes unrelated readers, Spacing reuses registrations, all s
 			provenanceRetained: typography.data.sourceDocuments.length > 1 && typography.data.sourceDocuments.every(document =>
 				typography.data.resources.guidance.some(resource => resource.file === document.id)),
 		}, {
-			primary: '.github/design-system/typography.design.md',
+			primary: '.github/skills/design-system/foundations/typography.design.md',
 			provenanceRetained: true,
 		});
 		assert.equal(store.documentLibrary, undefined);
@@ -557,9 +541,8 @@ test('roots reject symlink escapes and separate instances keep independent cache
 		assert.throws(() => contained(directory, 'escape/file.txt'), /symlink/);
 		assert.throws(() => contained(directory, '../outside'), /relative/);
 		assert.throws(() => { first.store.root = directory; }, TypeError);
-		for (const file of ['.github/skills/design-philosophy/SKILL.md', '.github/instructions/design-tokens.instructions.md',
+		for (const file of ['.github/skills/design-system/foundations/spacing.design.md', '.github/instructions/design-tokens.instructions.md',
 			'.github/skills/ux-css-layout/SKILL.md',
-			'.github/design-system/spacing.design.md',
 			'src/vs/sessions/contrib/automations/browser/media/automationDialog.css',
 			'src/vs/workbench/contrib/chat/browser/aiCustomization/media/agentGlobalConfigurationSettings.css',
 			'src/vs/workbench/test/browser/componentFixtures/baseUI.fixture.ts',
@@ -731,7 +714,7 @@ test('authored sources use the selected repository data root and keep independen
 	t.after(() => { rmSync(bookRoot, { recursive: true, force: true }); rmSync(checkout, { recursive: true, force: true }); });
 	cpSync(repositoryRoot, bookRoot, { recursive: true });
 	writeFileSync(path.join(bookRoot, 'content/example.md'), 'original guidance');
-	const source = '.github/design-system/content/example.md';
+	const source = '.github/skills/design-system/content/example.md';
 	const callbacks = new Map();
 	const events = [];
 	const store = new TopicStore(checkout, {
@@ -763,9 +746,9 @@ test('headless read and search return bounded source-backed results without fixt
 	const button = await readReference(root, 'component-button', { limit: 1000 });
 	const search = await searchReference(root, 'fontSize', { topics: ['typography'], limit: 3 });
 	assert.ok(read.sources.length && read.guidance.length && JSON.stringify(read).length < 8000);
-	assert.equal(read.guidance[0].file, '.github/design-system/typography.design.md');
-	assert.match(read.guidance[0].text, /^# Typography/);
-	assert.equal(motion.guidance[0].file, '.github/design-system/motion.design.md');
+	assert.equal(read.guidance[0].file, '.github/skills/design-system/foundations/typography.design.md');
+	assert.match(read.guidance[0].text, /^---[\s\S]+?\n---\n\n# Typography/);
+	assert.equal(motion.guidance[0].file, '.github/skills/design-system/foundations/motion.design.md');
 	assert.equal(button.guidance[0].file, 'src/vs/base/browser/ui/button/button.design.md');
 	assert.deepEqual({ matches: search.results.length, bounded: search.truncated, sourceBacked: search.results.every(result => result.file && result.line > 0) },
 		{ matches: 3, bounded: true, sourceBacked: true });
@@ -836,7 +819,7 @@ test('headless search reports optional missing sources while returning available
 			writeFileSync(target, readFileSync(store.sourcePath(file)));
 		}
 	} finally { store.close(); }
-	const guidance = path.join(checkout, '.github/design-system/motion.design.md');
+	const guidance = path.join(checkout, '.github/skills/design-system/foundations/motion.design.md');
 	writeFileSync(guidance, `${readFileSync(guidance, 'utf8')}\n\nheadless-missing-source-probe\n`);
 	const result = await searchReference(checkout, 'headless-missing-source-probe', { topics: ['motion'] });
 	assert.deepEqual({

@@ -65,6 +65,9 @@ export function mountReference(root, props, host) {
 	status.setAttribute('role', 'status');
 	const problem = problemDetails('problem');
 	const heading = node('h1');
+	const maturity = node('p', undefined, 'topic-status');
+	maturity.setAttribute('role', 'note');
+	maturity.hidden = true;
 	const guidance = node('div', undefined, 'topic-intro');
 	let metadata;
 	const actions = node('footer', undefined, 'topic-actions');
@@ -76,7 +79,7 @@ export function mountReference(root, props, host) {
 	outline.setAttribute('aria-label', 'On this page');
 	outline.hidden = true;
 	const header = node('div', undefined, 'topic-heading');
-	header.append(heading);
+	header.append(heading, maturity);
 	const context = node('div', undefined, 'topic-context');
 	context.append(header, outline);
 	root.replaceChildren(context, guidance, problem, content, actions, status);
@@ -233,7 +236,10 @@ export function mountReference(root, props, host) {
 			metadata?.remove();
 			metadata = documentContext;
 			if (metadata) { context.before(metadata); }
-			heading.textContent = system.library?.document?.title ?? getTopic(topicId(props)).title;
+			const topic = getTopic(topicId(props));
+			heading.textContent = system.library?.document?.title ?? topic.title;
+			maturity.hidden = topic.status !== 'draft';
+			maturity.textContent = topic.status === 'draft' ? 'Draft guidance' : '';
 			const documentTitle = system.library?.document?.headings.find(item => item.level === 1);
 			heading.id = documentTitle ? `document-${documentTitle.id}` : '';
 			guidance.replaceChildren(...(introduction ? [introduction] : []));

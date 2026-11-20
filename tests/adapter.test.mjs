@@ -62,9 +62,9 @@ test('exact SDK adapter opens idempotently, scopes, stops and reopens without a 
 			topic: topic.topic,
 			source: topic.guidance[0].file,
 		})), [
-			{ topic: 'motion', source: '.github/design-system/motion.design.md' },
-			{ topic: 'typography', source: '.github/design-system/typography.design.md' },
-			{ topic: 'spacing', source: '.github/design-system/spacing.design.md' },
+			{ topic: 'motion', source: '.github/skills/design-system/foundations/motion.design.md' },
+			{ topic: 'typography', source: '.github/skills/design-system/foundations/typography.design.md' },
+			{ topic: 'spacing', source: '.github/skills/design-system/foundations/spacing.design.md' },
 			{ topic: 'component-button', source: 'src/vs/base/browser/ui/button/button.design.md' },
 		]);
 		await declaration.actions.find(item => item.name === 'set_scope').handler({ instanceId: 'complete-system-default', input: { topics: ['typography'] } });
@@ -114,5 +114,8 @@ test('exact SDK adapter opens idempotently, scopes, stops and reopens without a 
 		await action('stop_explorer');
 		const resumed = await declaration.open({ instanceId, input: {} });
 		assert.deepEqual(await (await fetch(new URL('/api/state', resumed.url))).json(), state);
-	} finally { await declaration.onClose({ instanceId }); }
+	} finally {
+		await declaration.onClose({ instanceId: 'complete-system-default' });
+		await declaration.onClose({ instanceId });
+	}
 });

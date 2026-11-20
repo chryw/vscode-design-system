@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
 import test from 'node:test';
-import { motionControls } from './repository-helpers.mjs';
+import { motionControls, repository } from './repository-helpers.mjs';
 import { chromium, expect } from './playwright.mjs';
 import { createBrowserHost } from './explorer-browser-host.mjs';
 import { mockFixtureRenderer } from './browser-helpers.mjs';
@@ -90,12 +90,12 @@ test('Motion renders source guidance and composition without implementation clut
 	const spec = read(motionGuidanceFile)
 		.replace('Help people understand a change', 'Motion explains a meaningful change');
 	const implementation = read(motionImplementationFile).replace('.surface {', '.surface.updated-reference {');
-	const exampleFile = '.github/design-system/motion/examples.md';
+	const exampleFile = '.github/skills/design-system/foundations/motion/examples.md';
 	const examples = read(exampleFile).replace('owns the principles.', 'Clarify meaningful change.');
 	const composition = JSON.parse(read(motionPageFile));
 	composition.sections[0].blocks.reverse();
 	const context = {
-		root, source: file => ({ file, line: 1 }),
+		root, repository, source: file => ({ file, line: 1 }),
 		read: file => file === motionGuidanceFile ? spec : file === motionImplementationFile ? implementation
 			: file === exampleFile ? examples : file === motionPageFile ? JSON.stringify(composition) : read(file),
 	};
@@ -454,7 +454,7 @@ test('single-button players retain their final state until an explicit non-playi
 });
 
 test('published CSS recipes resolve real parameters and run their documented state changes', { timeout: 60000 }, async () => {
-	const context = { root, read: file => readFileSync(`${root}/${file}`, 'utf8'), source: file => ({ file, line: 1 }) };
+	const context = { root, repository, read: file => readFileSync(`${root}/${file}`, 'utf8'), source: file => ({ file, line: 1 }) };
 	const definitions = readMotionDefinitions(context);
 	const model = { ...definitions, ...readMotionPage(context, definitions) };
 	const duration = id => model.tokens.find(token => token.id === id).number;

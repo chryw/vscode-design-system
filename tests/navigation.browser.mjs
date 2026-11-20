@@ -5,7 +5,7 @@
 /* eslint-disable local/code-no-new-javascript-files -- Browser coverage for the no-build canvas. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, expect } from './playwright.mjs';
 import { createDocumentCheckout, checkoutRoot } from './document-helpers.mjs';
@@ -14,24 +14,32 @@ import { mockFixtureRenderer } from './browser-helpers.mjs';
 
 function navigationCheckout(t) {
 	const fixture = createDocumentCheckout(t);
-	const manifest = '.github/design-system/topics.json';
-	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
-	const topic = id => ({ id, section: id, title: `${id} topic`, group: 'Foundations', renderer: 'guidance',
-		aliases: [], page: `content/topics/${id}.json`, fixture: false, compare: true });
-	const topics = ['first', 'second', 'third'].map(topic);
+	const foundations = path.join(fixture.bookRoot, 'foundations');
+	rmSync(foundations, { recursive: true, force: true });
+	rmSync(path.join(fixture.bookRoot, 'patterns'), { recursive: true, force: true });
+	mkdirSync(foundations, { recursive: true });
+	mkdirSync(path.join(fixture.bookRoot, 'patterns'), { recursive: true });
+	const ids = ['first', 'second', 'third'];
+	const specification = id => `.github/skills/design-system/foundations/${id}.design.md`;
 	fixture.write('src/vs/feature/shared.md', '# Shared guidance\n\n## Shared\n\nOne document can contribute to multiple topics.\n');
-	const saveBook = ids => fixture.write(manifest, JSON.stringify({
-		...book, components: undefined, references: {}, defaultTopic: 'first',
-		topics: [...topics.filter(topic => ids.includes(topic.id)), book.topics.find(topic => topic.id === 'documentation')],
-	}));
-	for (const { id } of topics) {
-		fixture.write(`src/vs/feature/${id}.md`, `# ${id} topic\n\n## Introduction\n\nA short overview that scrolls away.\n\n## Start\n\n${'Reading content. '.repeat(400)}\n\n## Continue\n\n[Next topic](./second.md#finish)\n\n${'More guidance. '.repeat(100)}\n\n## Finish\n\nEnd of this topic.\n`);
-		fixture.write(`.github/design-system/content/topics/${id}.json`, JSON.stringify({
-			version: 1, id, renderer: 'guidance', source: `src/vs/feature/${id}.md`, content: {},
-			sections: ['Start', 'Continue', 'Finish'].map(title => ({ id: `${id}-${title.toLowerCase()}`, key: title.toLowerCase(), heading: title })),
-			guidance: [{ id: `${id}-shared`, file: 'src/vs/feature/shared.md', heading: 'Shared' }],
-		}));
-	}
+	const saveBook = (visibleIds, titleOverrides = {}) => {
+		for (const [index, id] of ids.entries()) {
+			const specFile = path.join(fixture.root, specification(id));
+			if (!visibleIds.includes(id)) {
+				rmSync(specFile, { force: true });
+				continue;
+			}
+			const title = titleOverrides[id] ?? `${id} topic`;
+			fixture.write(specification(id), `---\ntitle: "${title}"\nkind: foundation\nstatus: stable\norder: ${index}\n---\n# ${title}\n`);
+			const source = `src/vs/feature/${id}.md`;
+			fixture.write(source, `# ${title}\n\n## Introduction\n\nA short overview that scrolls away.\n\n## Start\n\n${'Reading content. '.repeat(400)}\n\n## Continue\n\n[Next topic](./second.md#finish)\n\n${'More guidance. '.repeat(100)}\n\n## Finish\n\nEnd of this topic.\n`);
+			fixture.write(`.github/skills/design-system/content/topics/${id}.json`, JSON.stringify({
+				version: 1, id, renderer: 'guidance', source, content: {},
+				sections: ['Start', 'Continue', 'Finish'].map(title => ({ id: `${id}-${title.toLowerCase()}`, key: title.toLowerCase(), heading: title })),
+				guidance: [{ id: `${id}-shared`, file: 'src/vs/feature/shared.md', heading: 'Shared' }],
+			}));
+		}
+	};
 	saveBook(['first', 'second']);
 	return { ...fixture, saveBook };
 }
@@ -129,7 +137,7 @@ test('compact reading headers exclude overview and repository controls while ret
 			.replace('## Introduction\n\nA short overview that scrolls away.\n\n', ''));
 		const before = panel.state.views.first;
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-		await expect(page.locator('#checkout-status')).toHaveText('Checkout reloaded');
+		await expect(page.locator('#checkout-status')).toHaveText('Content version reloaded');
 		await expect(article.locator('.topic-intro')).toBeHidden();
 		await expect(page.locator('#book-navigation').getByRole('link', { name: 'third topic', exact: true })).toBeVisible();
 		assert.deepEqual(panel.state.views.first, before);
@@ -137,11 +145,67 @@ test('compact reading headers exclude overview and repository controls while ret
 	} finally { await browser.close(); await panel.close(); }
 });
 
+test('topic labels align with disclosure labels without narrowing selection or focus rows', { timeout: 30000 }, async t => {
+	const fixture = navigationCheckout(t);
+	fixture.saveBook(['first', 'second', 'third'], { second: 'A longer topic label that wraps onto another line' });
+	const panel = await createExplorer(fixture.root, { watchCheckout: false });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage();
+		await page.goto(panel.url);
+		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		const filter = page.getByRole('searchbox', { name: 'Search topics', exact: true });
+		const selected = page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'first topic', exact: true });
+		for (const [colorScheme, forcedColors] of [['light', 'none'], ['dark', 'none'], ['dark', 'active']]) {
+			await page.emulateMedia({ colorScheme, forcedColors });
+			for (const width of [1440, 320]) {
+				await page.setViewportSize({ width, height: 900 });
+				await expect.poll(() => page.locator('.book-panel').evaluate(panel => panel.hasAttribute('popover'))).toBe(width < 960);
+				if (width < 960) { await page.getByRole('button', { name: 'Browse topics', exact: true }).click(); }
+				await page.locator('.book-topics .book-group').evaluateAll(groups => groups.forEach(group => { group.open = true; }));
+				await filter.focus();
+				await page.keyboard.press('ArrowDown');
+				await expect(selected).toBeFocused();
+				await selected.hover();
+				assert.deepEqual(await page.locator('.book-topics').evaluate(navigation => {
+					const textLeft = element => {
+						const text = [...element.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())
+							?? element.querySelector(':scope > span:not(.book-topic-status)');
+						const range = document.createRange();
+						range.selectNodeContents(text);
+						return range.getBoundingClientRect().left;
+					};
+					const groups = [...navigation.querySelectorAll('.book-group')];
+					const selected = navigation.querySelector('[aria-current="page"]');
+					const misalignedLabels = groups.flatMap(group => {
+						const summary = group.querySelector(':scope > summary');
+						return [...group.querySelectorAll(':scope > ul > li > a')].map(link => ({
+							label: link.querySelector(':scope > span:not(.book-topic-status)').textContent,
+							offset: textLeft(link) - textLeft(summary),
+						})).filter(item => Math.abs(item.offset) >= 0.5);
+					});
+					return {
+						aligned: misalignedLabels.length === 0,
+						misalignedLabels,
+						fullRows: groups.every(group => {
+							const bounds = group.querySelector(':scope > summary').getBoundingClientRect();
+							return [...group.querySelectorAll(':scope > ul > li > a')].every(link => {
+								const row = link.getBoundingClientRect();
+								return Math.abs(row.left - bounds.left) < 0.5 && Math.abs(row.right - bounds.right) < 0.5 && link.scrollWidth <= link.clientWidth;
+							});
+						}),
+						focusVisible: getComputedStyle(selected).outlineStyle === 'solid',
+					};
+				}), { aligned: true, misalignedLabels: [], fullRows: true, focusVisible: true }, `${colorScheme}, ${forcedColors}, ${width}px`);
+				if (width < 960) { await page.keyboard.press('Escape'); }
+			}
+		}
+	} finally { await browser.close(); await panel.close(); }
+});
+
 test('compact global navigation and a single local heading remain distinct and gap-free', { timeout: 60000 }, async t => {
 	const fixture = navigationCheckout(t);
-	const manifest = '.github/design-system/topics.json';
-	const book = JSON.parse(readFileSync(path.join(fixture.root, manifest), 'utf8'));
-	fixture.write(manifest, JSON.stringify({ ...book, topics: book.topics.map(topic => topic.id === 'first' ? { ...topic, title: 'Designing for AI' } : topic) }));
+	fixture.saveBook(['first', 'second', 'third'], { first: 'Designing for AI' });
 	const panel = await createExplorer(fixture.root, { watchCheckout: false });
 	const browser = await chromium.launch({ headless: true });
 	try {

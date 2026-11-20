@@ -14,8 +14,9 @@ import { documentExcerpt } from '../model/documents.mjs';
 export function listTopics(root) {
 	const { catalog, projection: { book } } = readRepository(root);
 	return { title: book.title, version: book.version, defaultTopic: book.defaultTopic,
-		topics: catalog.filter(item => !item.hidden).map(({ id, title, group, kind, design, aliases, references, navigation = 'topic' }) => ({
-			id, title, group, ...(kind ? { kind } : {}), ...(design ? { design } : {}), aliases, references, navigation,
+		topics: catalog.filter(item => !item.hidden).map(({ id, title, group, subgroup, kind, status, design, aliases, references, navigation = 'topic' }) => ({
+			id, title, group, ...(subgroup ? { subgroup } : {}), ...(kind ? { kind } : {}),
+			...(status ? { status } : {}), ...(design ? { design } : {}), aliases, references, navigation,
 		})) };
 }
 

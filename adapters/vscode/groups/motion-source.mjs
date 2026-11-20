@@ -9,9 +9,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { motionTokenCategory } from '../../../view/motion-reference.mjs';
 import { bookRoot, contentPath, resolveContent, sourcePath } from './authored.mjs';
-import { readBookSource } from '../../../runtime/book.mjs';
 
-export const motionPageFile = '.github/design-system/content/topics/motion.json';
+export const motionPageFile = '.github/skills/design-system/content/topics/motion.json';
 
 export const motionDefinitionFiles = [
 	'src/vs/platform/theme/common/motionRegistry.ts',
@@ -288,8 +287,7 @@ export function readMotionDefinitions({ root, read, source }) {
 
 /** Resolve the Motion page's heading references without executing authored content. */
 export function readMotionPage(context, definitions, presetBindingIds) {
-	const manifest = readBookSource(file => context.read(`${bookRoot}${file}`))?.book;
-	const binding = manifest?.topics.find(topic => topic.id === 'motion')?.page;
+	const binding = context.repository.projection.book.topics.find(topic => topic.id === 'motion')?.page;
 	if (!binding) { throw new Error('Missing Motion source composition'); }
 	const pageFile = contentPath(binding);
 	const descriptor = JSON.parse(context.read(pageFile));

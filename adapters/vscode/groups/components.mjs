@@ -6,11 +6,12 @@
 import { createControls } from '../../../model/components.mjs';
 import { documentControl } from '../component-docs.mjs';
 import { readContent } from './authored.mjs';
-export function load({ read, root }, controlId) {
-	read('.github/design-system/components.md');
+export function load(context, controlId) {
+	const { read, root, repository } = context;
+	read(repository.projection.references.components);
 	const curation = readContent(read, 'content/components/curation.json');
 	const specifications = readContent(read, 'content/components/toolkit-specifications.json');
-	const { controls } = createControls(curation, specifications.specifications);
+	const { controls } = createControls(curation, specifications.specifications, repository.projection.designSpecs);
 	const control = controls.find(item => item.id === controlId);
 	if (!control) { throw new Error('Unknown component'); }
 	if (control.file) { read(control.file); }

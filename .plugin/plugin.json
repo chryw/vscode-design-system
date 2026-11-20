@@ -1,6 +1,6 @@
 {
 	"name": "vscode-design-system",
-	"version": "0.4.2",
+	"version": "0.5.0",
 	"description": "Browse design guidance and live source data from your selected VS Code checkout.",
 	"extensions": "extensions/"
 }

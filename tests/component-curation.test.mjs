@@ -9,8 +9,9 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { controls, curateFixtures, catalog, getTopic, topicId, validateScope } from './repository-helpers.mjs';
+import { controls, curateFixtures, catalog, getTopic, repository, topicId, validateScope } from './repository-helpers.mjs';
 import { createExplorer } from '../runtime/server.mjs';
+import { createRepository } from '../model/repository.mjs';
 
 const root = workspaceRoot;
 const visible = controls.filter(control => !control.hidden);
@@ -29,9 +30,41 @@ test('component topics are reusable contracts, not individual toolkit fragments 
 	}
 	assert.equal(catalog.some(topic => topic.id === 'components'), false);
 	assert.equal(visible.every(control => !('family' in control)), true);
-	assert.equal(catalog.filter(topic => !topic.hidden && topic.group === 'Components').some(topic => topic.subgroup), false);
+	const visibleComponents = catalog.filter(topic => !topic.hidden && topic.group === 'Components');
+	assert.ok(visibleComponents.some(topic => topic.subgroup === 'Primitives'));
+	assert.ok(visibleComponents.some(topic => topic.subgroup === 'Composites'));
+	assert.ok(visibleComponents.every(topic => topic.subgroup === undefined || ['Primitives', 'Composites'].includes(topic.subgroup)));
 	const listed = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/book.mjs', import.meta.url)), 'list', '--root', root], { cwd: root, encoding: 'utf8' }));
 	assert.deepEqual(listed.topics.map(topic => topic.id), catalog.filter(topic => !topic.hidden).map(topic => topic.id));
+});
+
+test('specification metadata drives readiness and component grouping independently of fixtures', () => {
+	const draftTopics = catalog.filter(topic => topic.status === 'draft');
+	const primitives = catalog.filter(topic => topic.subgroup === 'Primitives');
+	const composites = catalog.filter(topic => topic.subgroup === 'Composites');
+	const fixtureWithoutSpec = controls.find(control => control.id === 'badge');
+	assert.ok(draftTopics.length > 0);
+	assert.ok(draftTopics.some(topic => !topic.hidden));
+	assert.ok(draftTopics.some(topic => topic.hidden));
+	assert.ok(primitives.length > 0);
+	assert.ok(composites.length > 0);
+	assert.equal(fixtureWithoutSpec.groups.length > 0, true);
+	assert.equal(fixtureWithoutSpec.kind, undefined);
+	assert.equal(catalog.find(topic => topic.id === 'component-button').status, 'draft');
+	assert.ok(repository.projection.designSpecs.some(spec => spec.kind === 'foundation' && spec.id === 'colors'));
+
+	const deprecated = {
+		id: 'old-button', path: 'src/vs/base/browser/ui/button/old-button.design.md',
+		title: 'Old Button', kind: 'primitive', status: 'deprecated', aliases: ['button-v1'], legacyPaths: [],
+		replacedBy: 'button', references: [],
+	};
+	const migrated = createRepository({
+		...repository.projection, designSpecs: [...repository.projection.designSpecs, deprecated],
+	});
+	assert.deepEqual([
+		migrated.getTopic('component-old-button').id,
+		migrated.getTopic('component-button-v1').id,
+	], ['component-button', 'component-button']);
 });
 
 test('related variants and structural parts resolve to their component family', () => {
@@ -40,12 +73,12 @@ test('related variants and structural parts resolve to their component family', 
 		'editor-toolbar', 'menu-item', 'menu-section-title', 'file-row', 'folder-row',
 		'quick-pick-shortcut', 'chat-attachment', 'notification-header', 'sidebar-header', 'status-icon',
 	].map(id => getTopic(`component-${id}`).id), [
-		'component-button', 'component-button', 'component-button', 'component-button', 'component-label', 'component-input',
+		'component-button', 'component-button', 'component-button-bar', 'component-button', 'component-icon-label', 'component-input',
 		'component-action-bar', 'component-menu', 'component-menu', 'component-list', 'component-tree',
 		'component-quick-pick', 'component-pill', 'component-message', 'component-pane', 'iconography',
 	]);
 	assert.deepEqual(validateScope({ topics: ['component-icon-button', 'component-button-bar', 'component-icon-label'], active: 'component-icon-button' }).topics,
-		['component-button', 'component-label']);
+		['component-button', 'component-button-bar', 'component-icon-label']);
 	assert.equal(topicId({ section: 'components', controlId: 'status-icon' }), 'iconography');
 	assert.throws(() => getTopic('component-unrecognized-widget'), /Unknown topic/);
 });
@@ -92,12 +125,12 @@ test('canonical view state, source APIs, refresh, and explicit archives stay coh
 		assert.equal(panel.state.scope.active, 'component-pill');
 		assert.equal(panel.state.scope.topics.some(id => getTopic(id).hidden), false);
 		panel.setView({ section: 'components', controlId: 'icon-label', theme: 'Light 2026' });
-		assert.equal(panel.view.controlId, 'label');
-		assert.equal((await panel.inspectTopic('component-icon-label')).topic, 'component-label');
-		const label = (await panel.inspectTopic('component-label', true)).data.controls[0];
+		assert.equal(panel.view.controlId, 'icon-label');
+		assert.equal((await panel.inspectTopic('component-icon-label')).topic, 'component-icon-label');
+		const label = (await panel.inspectTopic('component-icon-label', true)).data.controls[0];
 		assert.equal(label.docs.api.find(member => member.name === 'IconLabel.setLabel(label, description, options)').source.file,
 			'src/vs/base/browser/ui/iconLabel/iconLabel.ts');
-		assert.deepEqual(await panel.refreshTopic('component-icon-label'), { topic: 'component-label', refreshed: true });
+		assert.deepEqual(await panel.refreshTopic('component-icon-label'), { topic: 'component-icon-label', refreshed: true });
 		panel.setView({ section: 'components', controlId: 'status-icon' });
 		assert.equal(panel.state.scope.active, 'iconography');
 		assert.equal(panel.view.section, 'iconography');

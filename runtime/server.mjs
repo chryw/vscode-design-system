@@ -6,7 +6,7 @@
 import http from 'node:http';
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { readRepository } from '../adapters/vscode/repository.mjs';
+import { readRepository, repositoryDirectoryFor } from '../adapters/vscode/repository.mjs';
 import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
 import { TopicStore, canonicalRoot, contained } from './store.mjs';
 import { packageRoot, viewRoot } from './paths.mjs';
@@ -15,7 +15,8 @@ import { defaultView, validateState, validateViewPatch } from './view-state.mjs'
 import { StateStorageError } from './state-storage.mjs';
 import { DocumentError, documentExcerpt } from '../model/documents.mjs';
 import { writeViewURL } from '../model/view-state.mjs';
-import { checkoutRevision, listCheckouts } from '../adapters/vscode/checkouts.mjs';
+import { checkoutRevision } from '../adapters/vscode/checkouts.mjs';
+import { ContentVersions } from '../adapters/vscode/content-versions.mjs';
 
 const assets = new Set([
 	'index.html', 'canvas.css', 'shell.css', 'shell.mjs', 'context.mjs', 'book-navigation.mjs', 'book-navigation.css', 'reference.mjs', 'ui.mjs', 'navigation-model.mjs',
@@ -28,12 +29,15 @@ const assets = new Set([
 const escape = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 export async function createExplorer(root, options = {}) {
 	let canonical = canonicalRoot(root);
-	let roots = { book: options.bookRoot ?? contained(canonical, '.github/design-system'), view: options.viewRoot ?? viewRoot };
+	const contentVersions = options.contentVersions ?? new ContentVersions(canonical, { home: options.home });
+	let contentVersion = options.contentVersion ?? contentVersions.local(canonical);
+	let selectingVersion = false;
+	let roots = { book: options.bookRoot ?? repositoryDirectoryFor(canonical), view: options.viewRoot ?? viewRoot };
 	let repository = readRepository(canonical, { bookRoot: roots.book });
 	let { catalog, getTopic, topicId, validateScope, visibleTopicIds } = repository;
 	let book = repository.projection.book;
 	let content = contentAssets(roots.book);
-	let storage = options.stateStorageFactory?.(canonical, repository) ?? options.stateStorage;
+	let storage = options.stateStorageFactory?.(canonical, repository, contentVersion) ?? options.stateStorage;
 	const initialScope = validateScope(options.scope ?? { operation: 'all', active: book.defaultTopic, layout: 'single' });
 	const restored = storage?.read();
 	const saved = restored?.state;
@@ -142,19 +146,23 @@ export async function createExplorer(root, options = {}) {
 		for (const id of ids) { await read(id, { refresh: true }); }
 		return { topics: ids, refreshed: true };
 	};
-	const selectCheckout = input => {
+	const selectCheckout = (input, selectedVersion) => {
 		if (closed) { throw new Error('Design system stopped'); }
 		if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => key !== 'root')
 			|| typeof input.root !== 'string' || !input.root || input.root.length > 4096 || !path.isAbsolute(input.root)) {
 			throw new Error('Choose an absolute VS Code checkout path');
 		}
 		const nextRoot = canonicalRoot(input.root);
-		const nextBookRoot = nextRoot === canonical && options.bookRoot ? options.bookRoot : contained(nextRoot, '.github/design-system');
+		const nextVersion = selectedVersion ?? (nextRoot === canonical ? contentVersion : contentVersions.local(nextRoot));
+		const nextBookRoot = nextRoot === canonical && options.bookRoot ? options.bookRoot : repositoryDirectoryFor(nextRoot);
 		const nextRepository = readRepository(nextRoot, { bookRoot: nextBookRoot });
 		const nextContent = contentAssets(nextBookRoot);
 		const nextRevision = checkoutRevision(nextRoot);
-		const sameBook = nextRoot === canonical && nextRepository.projection.mode === repository.projection.mode;
-		const nextStorage = options.stateStorageFactory?.(nextRoot, nextRepository)
+		const sameVersion = ['latest', 'shared'].includes(nextVersion.selection.kind)
+			&& JSON.stringify(nextVersion.selection) === JSON.stringify(contentVersion.selection);
+		const sameBook = (nextRoot === canonical || sameVersion)
+			&& nextRepository.projection.mode === repository.projection.mode;
+		const nextStorage = options.stateStorageFactory?.(nextRoot, nextRepository, nextVersion)
 			?? (sameBook ? storage?.withRepository?.(nextRepository) ?? storage : undefined);
 		const nextRestored = nextStorage?.read();
 		const nextSaved = nextRestored?.state;
@@ -176,7 +184,7 @@ export async function createExplorer(root, options = {}) {
 			try { nextStorage.update(() => nextState); }
 			catch (error) { nextStore.close(); throw error; }
 		}
-		try { options.onCheckoutSelected?.(nextRoot); }
+		try { options.onCheckoutSelected?.(nextRoot, nextVersion.selection); }
 		catch (error) { nextStore.close(); throw error; }
 		fixtureController?.abort();
 		invalidateFixtures();
@@ -184,6 +192,7 @@ export async function createExplorer(root, options = {}) {
 		staleFixtureSourceTreeId = undefined;
 		store.close();
 		canonical = nextRoot;
+		contentVersion = nextVersion;
 		roots = { ...roots, book: nextBookRoot };
 		repository = nextRepository;
 		({ catalog, getTopic, topicId, validateScope, visibleTopicIds } = repository);
@@ -196,11 +205,21 @@ export async function createExplorer(root, options = {}) {
 		scope = nextState.scope;
 		views.clear();
 		for (const [id, value] of Object.entries(nextState.views)) { views.set(id, value); }
-		broadcast({ kind: 'checkout', checkout: canonical, mode: repository.projection.mode, state: state() });
-		return { checkout: canonical, mode: repository.projection.mode, state: state() };
+		broadcast({ kind: 'checkout', checkout: canonical, contentVersion, mode: repository.projection.mode, state: state() });
+		return { checkout: canonical, contentVersion, mode: repository.projection.mode, state: state() };
+	};
+	const selectContentVersion = async input => {
+		if (closed) { throw new Error('Design system stopped'); }
+		if (selectingVersion) { throw new Error('A content version is already loading. Wait for it to finish, then retry.'); }
+		selectingVersion = true;
+		try {
+			const selected = await contentVersions.resolve(input, { signal: lifetime.signal });
+			return selectCheckout({ root: selected.root }, selected);
+		} finally { selectingVersion = false; }
 	};
 	const panel = {
 		get root() { return canonical; }, get store() { return store; }, get book() { return book; },
+		get contentVersion() { return contentVersion; },
 		get url() {
 			const active = view(scope.active);
 			const url = writeViewURL(new URL(`http://127.0.0.1:${server.address().port}/`), active);
@@ -210,7 +229,7 @@ export async function createExplorer(root, options = {}) {
 			return url.href;
 		},
 		get view() { return view(scope.active); }, get state() { return state(); },
-		setScope, setView, selectCheckout,
+		setScope, setView, selectCheckout, selectContentVersion,
 		async inspectTopic(id = scope.active, details = false) {
 			id = getTopic(id).id;
 			const envelope = await read(id);
@@ -262,6 +281,7 @@ export async function createExplorer(root, options = {}) {
 					if (url.pathname === '/api/view') { json(setView(input.patch ?? input, input.topic)); return; }
 					if (url.pathname === '/api/refresh') { json(input.topics ? await refreshTopics(input.topics) : await panel.refreshTopic(input.topic)); return; }
 					if (url.pathname === '/api/checkout') { json(selectCheckout(input)); return; }
+					if (url.pathname === '/api/content-version') { json(await selectContentVersion(input)); return; }
 				} catch (error) { send(error instanceof StateStorageError ? 503 : 400, 'text/plain', error.message); return; }
 				send(404, 'text/plain', 'Unknown action'); return;
 			}
@@ -269,7 +289,7 @@ export async function createExplorer(root, options = {}) {
 			if (url.pathname === '/api/catalog') { json({ version: 1, title: bookTitle, topics: catalog }); return; }
 			if (url.pathname === '/api/repository') { json(repository.projection); return; }
 			if (url.pathname === '/api/checkouts') {
-				json({ checkout: canonical, mode: repository.projection.mode, unavailableTopics, checkouts: listCheckouts(canonical) }); return;
+				json({ checkout: canonical, mode: repository.projection.mode, unavailableTopics, contentVersion, versions: contentVersions.list() }); return;
 			}
 			if (url.pathname === '/topics.json' || url.pathname === '/book.json') { json(readBook(roots.book)); return; }
 			if (['/model/documents.mjs', '/model/view-state.mjs', '/model/catalog.mjs', '/model/components.mjs', '/model/repository.mjs', '/model/token-definitions.mjs'].includes(url.pathname)) {

@@ -8,9 +8,9 @@ import { existsSync, lstatSync, readFileSync, readdirSync, statSync, watch } fro
 import path from 'node:path';
 import { contained } from './paths.mjs';
 import { readBook } from './book.mjs';
+import { repositoryDirectoryFor } from '../adapters/vscode/repository.mjs';
 import { DocumentError, documentSection, documentView, findDocument, isRepositoryPath, parseDocument, queryDocuments, resolveDocumentReference } from '../model/documents.mjs';
 
-const bookPrefix = '.github/design-system/';
 const ignoredDirectories = new Set(['.git', 'node_modules', '.build', 'out', 'dist', 'vendor']);
 const maximumDocumentBytes = 512 * 1024;
 const maximumCorpusBytes = 16 * 1024 * 1024;
@@ -20,9 +20,11 @@ const sourceExtensions = new Set(['.md', '.ts', '.js', '.mjs', '.cjs', '.css', '
 const digest = text => createHash('sha256').update(text).digest('hex');
 
 export class DocumentLibrary {
-	constructor(root, { bookRoot = contained(root, '.github/design-system'), onChange = () => {}, onError = () => {}, watchFactory = watch } = {}) {
+	constructor(root, { bookRoot = repositoryDirectoryFor(root), book, onChange = () => {}, onError = () => {}, watchFactory = watch } = {}) {
 		this.root = root;
 		this.bookRoot = bookRoot;
+		this.bookPrefix = `${path.relative(root, bookRoot).split(path.sep).join('/')}/`;
+		this.book = book;
 		this.onChange = onChange;
 		this.onError = onError;
 		this.watchFactory = watchFactory;
@@ -35,7 +37,7 @@ export class DocumentLibrary {
 		this.readScopes();
 	}
 	readScopes() {
-		const book = readBook(this.bookRoot);
+		const book = this.book ?? readBook(this.bookRoot);
 		const scopes = book.documentSources;
 		const aliases = book.documentAliases === undefined ? {} : book.documentAliases;
 		if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases) || Object.keys(aliases).length > 200
@@ -65,8 +67,8 @@ export class DocumentLibrary {
 		if (changed && this.active) { this.setActive(false); this.setActive(true); }
 	}
 	sourcePath(file) {
-		return file.startsWith(bookPrefix) && existsSync(this.bookRoot)
-			? contained(this.bookRoot, file.slice(bookPrefix.length)) : contained(this.root, file);
+		return file.startsWith(this.bookPrefix) && existsSync(this.bookRoot)
+			? contained(this.bookRoot, file.slice(this.bookPrefix.length)) : contained(this.root, file);
 	}
 	invalidate(notify = false) {
 		this.index = undefined;

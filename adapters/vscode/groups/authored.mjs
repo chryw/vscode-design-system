@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { documentSection, isRepositoryPath, parseDocument } from '../../../model/documents.mjs';
-import { readBookSource } from '../../../runtime/book.mjs';
+import { readBook, readBookSource } from '../../../runtime/book.mjs';
 
-export const bookRoot = '.github/design-system/';
+export const bookRoot = '.github/skills/design-system/';
 
 export function contentPath(file) {
 	if (typeof file !== 'string' || !/^(?:content|pages)\/[a-z0-9/-]+\.(?:json|md)$/.test(file)
@@ -128,8 +128,8 @@ function validateChapter(authored, topic, hasGuidance) {
 	}
 }
 
-export function readPage(read, topic) {
-	const manifest = readBookSource(file => read(`${bookRoot}${file}`))?.book;
+export function readPage(read, topic, book) {
+	const manifest = book ?? readBookSource(file => read(`${bookRoot}${file}`))?.book ?? readBook();
 	if (manifest?.version !== 1 || !Array.isArray(manifest.topics) || manifest.topics.some(item => !item || typeof item !== 'object' || Array.isArray(item))) {
 		throw new Error('Invalid book manifest');
 	}
