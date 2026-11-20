@@ -11,6 +11,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { packageRoot } from '../runtime/paths.mjs';
+import { readRepository } from '../adapters/vscode/repository.mjs';
 
 const assets = ['design-system.html', 'snapshot.json'];
 const runGit = (root, args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();

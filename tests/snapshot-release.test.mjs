@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { publishSnapshot, readSnapshot, sha256, validateSnapshotTag } from '../scripts/release-snapshot.mjs';
+import { buildSnapshot, publishSnapshot, readSnapshot, sha256, validateSnapshotTag } from '../scripts/release-snapshot.mjs';
 import { buildSnapshotPages } from '../scripts/build-snapshot-pages.mjs';
 import { linkSnapshotRelease } from '../scripts/link-snapshot-release.mjs';
 
@@ -42,6 +42,15 @@ test('snapshot tags and checksums reject traversal, mismatched tags, and corrupt
 		await assert.rejects(publishSnapshot(dirty.directory, {
 			repository: 'team/book', github: () => { throw new Error('Must not contact GitHub for a dirty viewer'); },
 		}), /Commit and push/);
+	} finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('snapshot builds reject source-library checkouts before creating output', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'snapshot-basic-'));
+	try {
+		const output = path.join(root, 'output');
+		await assert.rejects(buildSnapshot({ root, output, tag: 'snapshot-basic' }), /no curated design-system guidance/);
+		await assert.rejects(readFile(path.join(output, 'snapshot.json')), { code: 'ENOENT' });
 	} finally { await rm(root, { recursive: true, force: true }); }
 });
 
