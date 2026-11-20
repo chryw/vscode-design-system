@@ -8,8 +8,9 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { gzipSync } from 'node:zlib';
 import { buildSnapshot, publishSnapshot, readSnapshot, sha256, validateSnapshotTag } from '../scripts/release-snapshot.mjs';
-import { buildSnapshotPages } from '../scripts/build-snapshot-pages.mjs';
+import { buildSnapshotPages, snapshotSourceHTML } from '../scripts/build-snapshot-pages.mjs';
 import { linkSnapshotRelease } from '../scripts/link-snapshot-release.mjs';
 
 async function snapshot(root, tag, text, overrides = {}) {
@@ -57,8 +58,13 @@ test('snapshot builds reject source-library checkouts before creating output', a
 test('Pages retains old snapshots and chooses the newest publication without lexical tag ordering', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'snapshot-site-'));
 	try {
-		const old = await snapshot(root, 'snapshot-z-old', '<h1>Old</h1>');
-		const latest = await snapshot(root, 'snapshot-a-new', '<h1>New</h1>');
+		const html = title => `<h1>${title}</h1><script id="snapshot-payload" type="application/json">${JSON.stringify({
+			snapshot: gzipSync(JSON.stringify({ catalog: [{ id: 'principles' }] })).toString('base64'),
+		})}</script>`;
+		const oldHTML = html('Old');
+		const latestHTML = html('New');
+		const old = await snapshot(root, 'snapshot-z-old', oldHTML);
+		const latest = await snapshot(root, 'snapshot-a-new', latestHTML);
 		const release = (tag, date) => ({ tag_name: tag, published_at: date, draft: false,
 			assets: [{ name: 'design-system.html' }, { name: 'snapshot.json' }] });
 		const releases = [
@@ -74,19 +80,37 @@ test('Pages retains old snapshots and chooses the newest publication without lex
 		const output = path.join(root, 'site');
 		await buildSnapshotPages({ repository: 'team/book', output, github });
 		assert.deepEqual({
-			latest: await readFile(path.join(output, 'index.html'), 'utf8'),
-			old: await readFile(path.join(output, 'snapshots/snapshot-z-old/index.html'), 'utf8'),
-			new: await readFile(path.join(output, 'snapshots/snapshot-a-new/index.html'), 'utf8'),
+			latest: snapshotSourceHTML(await readFile(path.join(output, 'index.html'), 'utf8')),
+			old: snapshotSourceHTML(await readFile(path.join(output, 'snapshots/snapshot-z-old/index.html'), 'utf8')),
+			new: snapshotSourceHTML(await readFile(path.join(output, 'snapshots/snapshot-a-new/index.html'), 'utf8')),
 			versions: await readdir(path.join(output, 'snapshots')),
-		}, { latest: '<h1>New</h1>', old: '<h1>Old</h1>', new: '<h1>New</h1>', versions: ['snapshot-a-new', 'snapshot-z-old'] });
+		}, { latest: latestHTML, old: oldHTML, new: latestHTML, versions: ['snapshot-a-new', 'snapshot-z-old'] });
+		const hosted = await readFile(path.join(output, 'snapshots/snapshot-z-old/index.html'), 'utf8');
+		const index = JSON.parse(hosted.split('data-base="../../">')[1].split('</script>')[0]);
+		assert.deepEqual(index, {
+			current: 'snapshot-z-old', latest: 'snapshot-a-new',
+			versions: [
+				{ tag: 'snapshot-a-new', label: 'snapshot-a-new', topics: ['principles'] },
+				{ tag: 'snapshot-z-old', label: 'snapshot-z-old', topics: ['principles'] },
+			],
+		});
 		await writeFile(path.join(latest.directory, 'design-system.html'), 'Corrupted');
 		await assert.rejects(buildSnapshotPages({ repository: 'team/book', output: path.join(root, 'bad-site'), github }), /checksum/);
 		await assert.rejects(readFile(path.join(root, 'bad-site/index.html')), { code: 'ENOENT' });
-		assert.equal(await readFile(path.join(output, 'index.html'), 'utf8'), '<h1>New</h1>');
-		await writeFile(path.join(latest.directory, 'design-system.html'), '<h1>New</h1>');
+		assert.equal(snapshotSourceHTML(await readFile(path.join(output, 'index.html'), 'utf8')), latestHTML);
+		await writeFile(path.join(latest.directory, 'design-system.html'), latestHTML);
 		releases[0].assets = [];
 		await assert.rejects(buildSnapshotPages({ repository: 'team/book', output: path.join(root, 'missing-site'), github }), /missing design-system.html/);
 	} finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('hosted navigation preserves the immutable source and rejects malformed marker blocks', () => {
+	const start = '<!-- snapshot-version-navigation:start -->';
+	const end = '<!-- snapshot-version-navigation:end -->';
+	assert.equal(snapshotSourceHTML(`<body>Book${start}<script>Navigation</script>${end}</body>`), '<body>Book</body>');
+	for (const html of [`${start}Book`, `${end}Book`, `${end}${start}`, `${start}${start}${end}`]) {
+		assert.throws(() => snapshotSourceHTML(html), /Invalid hosted snapshot navigation markers/);
+	}
 });
 
 test('publishing requires public consent and an unused tag; uploaded assets verify before publication', async () => {
@@ -155,7 +179,7 @@ test('deployed versioned snapshots link the exact software release without repla
 		const { directory, manifest } = await snapshot(root, 'snapshot-v1.2.3', '<h1>Released</h1>', {
 			viewer: { version: '1.2.3', commit: 'a'.repeat(40), modified: false },
 		});
-		await writeFile(path.join(directory, 'index.html'), '<h1>Released</h1>');
+		await writeFile(path.join(directory, 'index.html'), '<h1>Released</h1><!-- snapshot-version-navigation:start --><script>Hosted navigation</script><!-- snapshot-version-navigation:end -->');
 		let body = 'Existing release notes.';
 		let writes = 0;
 		let sha = manifest.viewer.commit;

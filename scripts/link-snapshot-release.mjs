@@ -9,6 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { sha256 } from './release-snapshot.mjs';
+import { snapshotSourceHTML } from './build-snapshot-pages.mjs';
 
 const start = '<!-- design-system-snapshot:start -->';
 const end = '<!-- design-system-snapshot:end -->';
@@ -22,7 +23,7 @@ export async function linkSnapshotRelease({ directory, repository, pagesUrl, git
 	assert.equal(manifest.viewer.modified, false);
 	const tag = `v${manifest.viewer.version}`;
 	if (manifest.tag !== `snapshot-${tag}`) { return { linked: false, reason: 'Snapshot is not a versioned software-release companion' }; }
-	assert.equal(sha256(await readFile(path.join(directory, 'index.html'))), manifest.sha256);
+	assert.equal(sha256(snapshotSourceHTML(await readFile(path.join(directory, 'index.html'), 'utf8'))), manifest.sha256);
 	const base = new URL(pagesUrl);
 	assert.equal(base.protocol, 'https:');
 	assert.ok(!base.username && !base.password && !base.search && !base.hash);
