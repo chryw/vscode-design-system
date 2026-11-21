@@ -34,7 +34,7 @@ test('the manifest preserves every original visible and archived topic and binds
 		semantics: createHash('sha256').update(JSON.stringify(originalSemantics)).digest('hex'),
 	}, {
 		title: 'Visual Studio Code Design System', defaultTopic: 'principles', topics: 161, visible: 52,
-		semantics: '3775a32078348c47301d00758a0ea9140ad08b3acb979c744e1fb4086feaf5c9',
+		semantics: '6074512197330f9a36f5f26eeae6f437a88919ad983e69a431586553d4ae7aa8',
 	});
 	for (const entry of catalog) {
 		assert.match(entry.renderer, /^topics\/[a-z]+\.mjs$/);

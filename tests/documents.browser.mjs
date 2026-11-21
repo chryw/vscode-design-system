@@ -85,7 +85,7 @@ test('Illustration has the same opening hierarchy in the chapter and the source 
 			introduction: await chapter.locator('.topic-intro').innerText(),
 			sections: await chapter.locator('.article-outline a').allTextContents(),
 		};
-		panel.setView({ section: 'documentation', documentId: '.github/design-system/illustration.design.md' });
+		panel.setView({ section: 'documentation', documentId: '.github/skills/design-system/foundations/illustration.design.md' });
 		const reader = page.locator('[data-topic="documentation"]');
 		await expect(reader.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		assert.deepEqual({
@@ -136,10 +136,10 @@ test('portable navigation retains document links and page history without live A
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const ids = ['accessibility', 'documentation'];
-		const guideId = '.github/design-system/portable-links.md';
+		const guideId = '.github/skills/design-system/references/portable-links.md';
 		const index = panel.store.documents.snapshot();
 		const guide = {
-			...parseDocument('# Portable links\n\n[Read authoring](authoring.md).\n', { id: guideId }),
+			...parseDocument('# Portable links\n\n[Read authoring](authoring-conventions.md).\n', { id: guideId }),
 			scope: 'design-system', revision: 'portable-links',
 		};
 		const snapshot = {
@@ -148,7 +148,7 @@ test('portable navigation retains document links and page history without live A
 			catalog: panel.store.repository.catalog.filter(item => ids.includes(item.id)),
 			topics: Object.fromEntries(await Promise.all(ids.map(async id => [id, (await panel.store.read(id, panel.state.views[id])).data]))),
 			documents: selectDocuments({ ...index, documents: [...index.documents, guide] }, [
-				guideId, '.github/design-system/accessibility.design.md', '.github/instructions/design-tokens.instructions.md',
+				guideId, '.github/skills/design-system/foundations/accessibility.design.md', '.github/instructions/design-tokens.instructions.md',
 			]), documentImages: {}, documentImageProblems: {},
 		};
 		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
@@ -237,7 +237,7 @@ test('portable navigation retains document links and page history without live A
 		await page.goto(new URL(`/snapshot.html?topic=documentation&documentId=${encodeURIComponent(guideId)}`, panel.url).href);
 		await expect(page.locator('h1')).toHaveText('Portable links');
 		const outside = page.getByRole('link', { name: 'Read authoring (opens in a new tab)', exact: true });
-		await expect(outside).toHaveAttribute('href', `https://github.com/microsoft/vscode/blob/${snapshot.commit}/.github/design-system/authoring.md#`);
+		await expect(outside).toHaveAttribute('href', `https://github.com/microsoft/vscode/blob/${snapshot.commit}/.github/skills/design-system/references/authoring-conventions.md#`);
 		await expect(outside).toHaveAttribute('target', '_blank');
 		assert.deepEqual({ errors, apiRequests }, { errors: [], apiRequests: [] });
 	} finally { await browser.close(); await panel.close(); }
@@ -342,10 +342,14 @@ test('an unavailable document deep link leaves topic navigation usable', { timeo
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('renamed design guidance renders from canonical sources and restores an old document bookmark', { timeout: 60000 }, async () => {
-	const old = 'src/vs/platform/theme/common/sizes/typography.md';
+test('older checkouts render moved guidance from canonical sources and restore an old document bookmark', { timeout: 60000 }, async t => {
+	const fixture = createDocumentCheckout(t);
+	const moved = ['src/vs/platform/theme/common/sizes/typography.md', 'src/vs/platform/theme/common/sizes/typography.design.md'];
+	const [old] = moved;
 	const canonical = '.github/skills/design-system/foundations/typography.design.md';
-	const panel = await createExplorer(checkoutRoot, { scope: { operation: 'all', active: 'documentation' } });
+	fixture.write(canonical, readFileSync(path.join(fixture.root, canonical), 'utf8')
+		.replace(/\r?\n---\r?\n/, `\nlegacyPaths:\n${moved.map(item => `  - "${item}"`).join('\n')}\n---\n`));
+	const panel = await createExplorer(fixture.root, { bookRoot: fixture.bookRoot, scope: { operation: 'all', active: 'documentation' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
 		panel.setView({ section: 'documentation', documentId: old, anchor: 'weight-and-emphasis' });
@@ -355,7 +359,7 @@ test('renamed design guidance renders from canonical sources and restores an old
 		await page.goto(panel.url);
 		await expect(page.getByRole('heading', { name: 'Typography', level: 1, exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Weight and emphasis', exact: true })).toBeFocused();
-		const guidance = readDocument(checkoutRoot, canonical, { anchor: 'weight-and-emphasis' });
+		const guidance = readDocument(fixture.root, canonical, { anchor: 'weight-and-emphasis' });
 		await expect(page.locator('.documentation')).toContainText(guidance.markdown.split(/\n\s*\n/)[0]);
 		await page.reload();
 		await expect(page.getByRole('heading', { name: 'Typography', level: 1, exact: true })).toBeVisible();

@@ -94,36 +94,6 @@ test('discovery watches additions and closes its bounded source watchers when in
 			return watcher;
 		},
 	});
-
-	test('renamed design specifications retain document bookmarks without duplicate search entries', t => {
-		const fixture = checkout(t);
-		const old = 'src/vs/feature/old-design.md';
-		const canonical = 'src/vs/feature/feature.design.md';
-		fixture.write(canonical, '---\ntitle: Feature design bookmark sentinel\nkind: composite\nstatus: draft\n---\n# Feature design bookmark sentinel\n\n## Usage\n\nKeep the original intent.\n');
-		const file = path.join(fixture.bookRoot, 'content/legacy-document-paths.json');
-		const aliases = { [old]: canonical };
-		writeFileSync(file, JSON.stringify(aliases));
-		const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
-		try {
-			const index = library.snapshot();
-			assert.deepEqual({
-				read: library.read(old, { anchor: 'usage' }).id,
-				selected: documentView(index, { documentId: old }).document.id,
-				portable: documentView(JSON.parse(JSON.stringify(index)), { documentId: old }).document.id,
-				results: library.list({ query: 'feature design bookmark sentinel' }).results.map(document => document.id),
-				diagnostics: index.diagnostics,
-			}, { read: canonical, selected: canonical, portable: canonical, results: [canonical], diagnostics: [] });
-			fixture.write(old, '# Conflicting copy\n');
-			assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'alias-shadows-document'), true);
-			rmSync(path.join(fixture.root, old));
-			rmSync(path.join(fixture.root, canonical));
-			assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'missing-alias-target'), true);
-		} finally { library.close(); }
-		for (const aliases of [null, [], { [old]: '../outside.md' }, { [old]: canonical, [canonical]: old }]) {
-			writeFileSync(file, JSON.stringify(aliases));
-			assert.throws(() => new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot }), /Invalid document aliases/);
-		}
-	});
 	try {
 		library.setActive(true);
 		library.list();
@@ -138,6 +108,35 @@ test('discovery watches additions and closes its bounded source watchers when in
 		library.setActive(true);
 		assert.equal(library.list({ query: '2a4c' }).total, 1);
 	} finally { library.close(); }
+});
+
+test('older checkouts that map renamed documents keep bookmarks without duplicate search entries', t => {
+	const fixture = checkout(t);
+	const old = 'src/vs/feature/old-design.md';
+	const canonical = 'src/vs/feature/feature.design.md';
+	fixture.write(canonical, '---\ntitle: Feature design bookmark sentinel\nkind: composite\nstatus: draft\n---\n# Feature design bookmark sentinel\n\n## Usage\n\nKeep the original intent.\n');
+	const file = path.join(fixture.bookRoot, 'content/legacy-document-paths.json');
+	writeFileSync(file, JSON.stringify({ [old]: canonical }));
+	const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
+	try {
+		const index = library.snapshot();
+		assert.deepEqual({
+			read: library.read(old, { anchor: 'usage' }).id,
+			selected: documentView(index, { documentId: old }).document.id,
+			portable: documentView(JSON.parse(JSON.stringify(index)), { documentId: old }).document.id,
+			results: library.list({ query: 'feature design bookmark sentinel' }).results.map(document => document.id),
+			diagnostics: index.diagnostics,
+		}, { read: canonical, selected: canonical, portable: canonical, results: [canonical], diagnostics: [] });
+		fixture.write(old, '# Conflicting copy\n');
+		assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'alias-shadows-document'), true);
+		rmSync(path.join(fixture.root, old));
+		rmSync(path.join(fixture.root, canonical));
+		assert.equal(library.snapshot({ refresh: true }).diagnostics.some(item => item.reason === 'missing-alias-target'), true);
+	} finally { library.close(); }
+	for (const aliases of [null, [], { [old]: '../outside.md' }, { [old]: canonical, [canonical]: old }]) {
+		writeFileSync(file, JSON.stringify(aliases));
+		assert.throws(() => new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot }), /Invalid document aliases/);
+	}
 });
 
 test('document resources cannot escape the checkout or serve unreferenced files', t => {

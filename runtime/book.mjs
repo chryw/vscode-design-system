@@ -142,7 +142,11 @@ export function readGeneratedBook(root) {
 	const components = json('content/topics/components.json');
 	const documentation = json('content/topics/documentation.json');
 	const documentSources = json('content/document-sources.json');
-	const documentAliases = json('content/legacy-document-paths.json');
+	// Current guidance updates inbound links when a document moves. Older checkouts may still declare moved paths in
+	// specification `legacyPaths` or this optional file; honor them so those checkouts' saved document links resolve.
+	let documentAliases = {};
+	try { documentAliases = json('content/legacy-document-paths.json'); }
+	catch (error) { if (error.code !== 'ENOENT') { throw error; } }
 	if (!documentAliases || typeof documentAliases !== 'object' || Array.isArray(documentAliases)) {
 		throw new Error('Invalid document aliases; use direct repository Markdown paths');
 	}

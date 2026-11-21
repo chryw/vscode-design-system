@@ -15,7 +15,7 @@ Run CLI commands through [`scripts/book.mjs`](../scripts/book.mjs). Pass `--root
 ## Authoring
 
 - **Discovery:** The current book defines `documentSources` in `.github/skills/design-system/content/document-sources.json`, with scopes such as `id`, `title`, `root`, `origin`, and optional `fileName` or `excludeDirectories`. Add normal Markdown files inside those scopes. Discovery skips dependency and build trees and does not follow symlinks.
-- **Identity:** A document ID is its repository-relative path. The current book maps renamed documents in `.github/skills/design-system/content/legacy-document-paths.json`; map the old path directly to the new one. Aliases cannot chain or shadow a real document.
+- **Identity:** A document ID is its repository-relative path. When a document moves, update its inbound links; the current book declares no path aliases. Older checkouts may still map old paths with specification `legacyPaths` or `content/legacy-document-paths.json`, and the viewer honors those mappings when present. Aliases cannot chain or shadow a real document.
 - **Composition:** For a prose chapter, use `renderer: "guidance"` and the worktree's page bindings to select source sections. A `guidance` entry identifies the section with `id` and `file`, plus an optional `title` and either `heading` or `anchor`. Use the source section rather than copying its text into the viewer.
 - **Further reading:** Add ordered `references` to the owning foundation or pattern specification's front matter. Each entry has a title, an HTTPS URL, and a description of why it is useful. Older checkouts may still define these bindings in `topics.json`.
 

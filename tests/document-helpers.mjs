@@ -25,7 +25,6 @@ export function createDocumentCheckout(t) {
 		{ id: 'design-patterns', title: 'Design patterns', root: '.github/skills/design-system/patterns', origin: 'book' },
 	];
 	writeFileSync(path.join(bookRoot, 'content/document-sources.json'), JSON.stringify(documentSources));
-	writeFileSync(path.join(bookRoot, 'content/legacy-document-paths.json'), '{}');
 	const write = (file, text) => {
 		const target = path.join(directory, file);
 		mkdirSync(path.dirname(target), { recursive: true });

@@ -44,36 +44,6 @@ test('generated catalogs use specification metadata and reject invalid metadata 
 	assert.throws(() => readRepository(fixture.root), /invalid design specification metadata/);
 });
 
-test('relocated shared specifications resolve their earlier addresses directly while components remain code-local', () => {
-	const store = new TopicStore(root);
-	try {
-		const paths = [
-			['src/vs/platform/theme/common/sizes/typography.md', '.github/skills/design-system/foundations/typography.design.md'],
-			['src/vs/platform/theme/common/sizes/typography.design.md', '.github/skills/design-system/foundations/typography.design.md'],
-			['.github/design-system/guidance/modal.design.md', '.github/skills/design-system/patterns/modal.design.md'],
-			['src/vs/base/browser/ui/button/button.design.md', 'src/vs/base/browser/ui/button/button.design.md'],
-		];
-		assert.deepEqual(paths.map(([previous]) => store.documents.read(previous).id), paths.map(([, canonical]) => canonical));
-	} finally { store.close(); }
-});
-
-test('component design-document renames retain both earlier bookmark forms without alias chains', () => {
-	const store = new TopicStore(root);
-	try {
-		const ids = [
-			'src/vs/base/browser/ui/inputbox/input-design.md',
-			'src/vs/base/browser/ui/inputbox/input.design.md',
-		];
-		assert.deepEqual(ids.map(id => {
-			const document = store.documents.read(id);
-			return { id: document.id, source: document.source.file, title: document.title };
-		}), ids.map(() => ({
-			id: 'src/vs/base/browser/ui/inputbox/input-box.design.md',
-			source: 'src/vs/base/browser/ui/inputbox/input-box.design.md', title: 'InputBox',
-		})));
-	} finally { store.close(); }
-});
-
 test('review sources keep viewer implementation separate from repository data and code-local guidance', async () => {
 	const directory = scratch('design-review-sources-');
 	const output = path.join(directory, 'archive');

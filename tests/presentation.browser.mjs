@@ -29,7 +29,7 @@ test('repository references are collapsed contributor resources after the articl
 	const specFile = '.github/skills/design-system/patterns/designing-for-ai.design.md';
 	const spec = readFileSync(path.join(fixture.bookRoot, 'patterns/designing-for-ai.design.md'), 'utf8');
 	const referenceYaml = references.map(reference => `  - title: ${JSON.stringify(reference.title)}\n    url: ${JSON.stringify(reference.url)}\n    description: ${JSON.stringify(reference.description)}`).join('\n');
-	const updatedSpec = spec.replace(/^references:\r?\n[\s\S]*?(?=^legacyPaths:)/m, `references:\n${referenceYaml}\n`);
+	const updatedSpec = spec.replace(/^references:\r?\n(?:[ \t]+.*\r?\n)*/m, `references:\n${referenceYaml}\n`);
 	assert.notEqual(updatedSpec, spec);
 	fixture.write(specFile, updatedSpec);
 	const panel = await createExplorer(fixture.root, { scope: { operation: 'all', active: 'designing-for-ai' } });
