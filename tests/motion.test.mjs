@@ -492,7 +492,7 @@ test('fenced heading-like text is code, and CRLF source headings retain their au
 	}, {
 		headingCreated: false,
 		purposeful: true,
-		sourceLine: implementation.split('\n').findIndex(line => line.startsWith('### Notification arrival composition')) + 1,
+		sourceLine: implementation.split('\n').findIndex(line => /^#{1,6} Notification arrival composition\r?$/.test(line)) + 1,
 	});
 });
 

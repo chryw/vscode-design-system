@@ -6,14 +6,14 @@
 import { createRepository } from '../model/repository.mjs';
 
 export let catalog, sections, bookTitle, controls, motionControls, spacingControl, componentAliases;
-export let toolkitFile, toolkitSpecifications, tokenDomains, corePaletteThemes, pageStructures, expectedCapabilities;
+export let toolkitFile, toolkitSpecifications, tokenDomains, corePaletteThemes;
 export let primitiveReference, foundationReference, controlGaps;
 let repository;
 
 export function setRepository(projection) {
 	repository = createRepository(projection);
 	({ catalog, sections, bookTitle, controls, motionControls, spacingControl, componentAliases,
-		toolkitFile, toolkitSpecifications, tokenDomains, corePaletteThemes, pageStructures, expectedCapabilities,
+		toolkitFile, toolkitSpecifications, tokenDomains, corePaletteThemes,
 		primitiveReference, foundationReference, controlGaps } = repository);
 }
 

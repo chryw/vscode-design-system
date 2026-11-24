@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { catalog, sections, controls, curateFixtures, foundationSections, pageStructures } from './repository-helpers.mjs';
+import { catalog, sections, controls, curateFixtures, foundationSections } from './repository-helpers.mjs';
 import { parseJsonc } from '../adapters/vscode/jsonc.mjs';
 import { TopicStore } from '../runtime/store.mjs';
 import { toolkitSpecifications, specificationUrl } from '../view/component-specs.mjs';
@@ -173,15 +173,10 @@ test('toolkit evidence is retained without promoting every specification to prim
 	}
 });
 
-test('navigation and page structures are metadata, not a second source inventory', () => {
+test('chapter introductions and navigation come from authored pages', () => {
 	assert.deepEqual(sections.filter(section => !['motion', 'patterns'].includes(section.id))
 		.filter(section => !readPage(file => readFileSync(`${root}/${file}`, 'utf8'), section.id).authored.intro).map(section => section.id), []);
 	assert.deepEqual(pageJumps({ section: 'components' }, readPage(file => readFileSync(`${root}/${file}`, 'utf8'), 'components').page), []);
-	for (const id of [...foundationSections, 'accessibility', 'content', 'components']) {
-		const structure = pageStructures[id]
-			?? readPage(file => readFileSync(`${root}/${file}`, 'utf8'), id).page.guidance.map(section => section.id);
-		assert.ok(structure.length >= 2 && new Set(structure).size === structure.length, id);
-	}
 });
 
 test('foundation source actions and presentation policy use only the selected topic', async t => {

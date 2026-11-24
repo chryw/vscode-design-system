@@ -10,6 +10,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { basicProjection } from '../adapters/vscode/basic-book.mjs';
 import { readRepository } from '../adapters/vscode/repository.mjs';
+import { createRepository } from '../model/repository.mjs';
 import { legacyRepositoryDirectory, readGeneratedBook, repositoryDirectory, repositoryDirectoryFor } from '../runtime/book.mjs';
 import { DocumentLibrary } from '../runtime/documents.mjs';
 import { TopicStore } from '../runtime/store.mjs';
@@ -85,6 +86,23 @@ test('canonical checkouts load without moved-path metadata and do not resolve mo
 		}, { documentAliases: {}, read: colorsSpec, diagnostics: [] });
 		assert.throws(() => library.read('.github/design-system/colors.design.md'), /not available/);
 	} finally { library.close(); }
+});
+
+test('removing the redundant expectations inventory preserves catalog and view defaults', t => {
+	const fixture = canonicalCheckout(t);
+	const inventory = path.join(fixture.bookRoot, 'content/foundations/reference-expectations.json');
+	const expectations = { structures: { motion: ['Obsolete heading'] }, capabilities: { motion: ['Obsolete capability'] } };
+	writeFileSync(inventory, JSON.stringify(expectations));
+	const older = readRepository(fixture.root);
+	rmSync(inventory);
+	const current = readRepository(fixture.root);
+	const snapshot = createRepository({ ...current.projection, expectations });
+	const observe = repository => ({
+		catalog: repository.catalog,
+		controls: repository.controls,
+		views: repository.catalog.filter(topic => !topic.hidden).map(topic => defaultView(topic.id, repository)),
+	});
+	assert.deepEqual([observe(current), observe(snapshot)], [observe(older), observe(older)]);
 });
 
 test('older checkouts that declare moved paths keep chapter and document links on canonical guidance', t => {

@@ -11,7 +11,6 @@ export function createRepository(input) {
 		|| !Array.isArray(input.toolkit?.specifications) || typeof input.toolkit.file !== 'string'
 		|| !Array.isArray(input.bindings?.motion) || !input.bindings.spacing
 		|| !Array.isArray(input.tokens?.domains) || !Array.isArray(input.tokens.palettes)
-		|| !input.expectations?.structures || !input.expectations.capabilities
 		|| typeof input.references?.components !== 'string' || typeof input.references.foundations !== 'string') {
 		throw new Error('Invalid design-system repository projection');
 	}
@@ -39,7 +38,6 @@ export function createRepository(input) {
 		motionControls: input.bindings.motion, spacingControl: input.bindings.spacing,
 		toolkitFile: input.toolkit.file, toolkitSpecifications: input.toolkit.specifications,
 		tokenDomains: input.tokens.domains, corePaletteThemes: input.tokens.palettes,
-		pageStructures: input.expectations.structures, expectedCapabilities: input.expectations.capabilities,
 		primitiveReference: input.references.components, foundationReference: input.references.foundations,
 		controlGaps: controls.filter(control => !control.hidden && control.content === 'tbd')
 			.map(control => ({ name: control.name, note: input.curation.missingReference, owner: control.owner })),

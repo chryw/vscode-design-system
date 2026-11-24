@@ -33,7 +33,6 @@ export function readRepository(root = workspaceRoot, options = {}) {
 		book: generated?.book ?? source.book, designSpecs: generated?.specs ?? [],
 		curation: json('content/components/curation.json'), bindings: json('content/components/fixture-bindings.json'),
 		toolkit: json('content/components/toolkit-specifications.json'), tokens: json('content/foundations/token-domains.json'),
-		expectations: json('content/foundations/reference-expectations.json'),
 		references: {
 			components: `${prefix}/${generated ? 'references/component-overview.md' : 'components.md'}`,
 			foundations: `${prefix}/${generated ? 'references/authoring-conventions.md' : 'foundations.md'}`,

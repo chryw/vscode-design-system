@@ -10,7 +10,7 @@ export { readRepository };
 export { validateBook } from '../model/catalog.mjs';
 export const repository = readRepository();
 export const { catalog, sections, bookTitle, controls, motionControls, spacingControl, componentAliases,
-	toolkitFile, toolkitSpecifications, tokenDomains, corePaletteThemes, pageStructures, expectedCapabilities,
+	toolkitFile, toolkitSpecifications, tokenDomains, corePaletteThemes,
 	primitiveReference, foundationReference, controlGaps, getTopic, topicId, visibleTopicIds, validateScope } = repository;
 setRepository(repository.projection);
 export const foundationSections = repository.catalog.filter(topic => topic.group === 'Foundations').map(topic => topic.id);

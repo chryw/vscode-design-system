@@ -24,7 +24,7 @@ export function basicProjection(book = basicBook()) {
 		capabilities: { curatedTopics: false, liveExamples: false, documents: true },
 		curation: { version: 1, productControls: [], families: [], additions: [] },
 		bindings: { motion: [], spacing: {} }, toolkit: { file: '', specifications: [] },
-		tokens: { domains: [], palettes: [] }, expectations: { structures: {}, capabilities: {} },
+		tokens: { domains: [], palettes: [] },
 		references: { components: '', foundations: '' },
 	};
 }

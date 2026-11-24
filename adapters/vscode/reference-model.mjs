@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 export function createReferenceModel(system, selected) {
-	const { structures: pageStructures, capabilities: expectedCapabilities } = system.referenceExpectations;
 	const documents = Object.values(system.documents).flat();
 	const document = file => {
 		const result = documents.find(item => item.file === file);
@@ -129,8 +128,6 @@ export function createReferenceModel(system, selected) {
 		})];
 	});
 	return {
-		expected: expectedCapabilities,
-		structure: pageStructures,
 		topics: Object.fromEntries(assessments),
 		scales: {
 			typeRoles: system.typography.tokens.filter(token => !token.deprecated && token.id.startsWith('fontSize.')),

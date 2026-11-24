@@ -72,7 +72,7 @@ export async function readTopic(store, id, settings) {
 	// Empty fields are structural adapters for retained templates, not invented source defaults.
 	const data = {
 		sections, sizes: [], colors: [], themes: [], themeGallery: [], icons: [], motion: [],
-		catalog: store.repository.catalog, repositoryReferences: projection.references, referenceExpectations: projection.expectations,
+		catalog: store.repository.catalog, repositoryReferences: projection.references,
 		topicReferences: entry.references,
 		typography: { tokens: [], families: [] }, elevation: { cssShadows: [], shadowUsage: [] },
 		documents: {}, controls: [], theme: { id: settings.theme }, chain: [],
@@ -128,8 +128,6 @@ export async function readTopic(store, id, settings) {
 	data.sourceFiles = [...new Set(dependencies.flatMap(item => item.files))];
 	if (data.library?.document) { data.sourceFiles.push(data.library.document.source.file); }
 	data.reference = createReferenceModel(data, ['components', 'tokens', 'accessibility', 'content', 'patterns', 'documentation'].includes(section) ? [] : [section]);
-	data.reference.expected = { [section]: data.reference.expected[section] };
-	data.reference.structure = { [section]: data.reference.structure[section] };
 	if (['spacing', 'layout'].includes(section)) { data.sizes = data.sizes.filter(token => token.category === 'spacing'); }
 	if (section === 'shape') { data.sizes = data.sizes.filter(token => token.id.startsWith('cornerRadius.')); }
 	if (section === 'size') { data.sizes = data.sizes.filter(token => token.id.startsWith('codiconFontSize')); }
