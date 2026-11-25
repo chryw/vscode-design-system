@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, expect } from './playwright.mjs';
 import { createDocumentCheckout, checkoutRoot } from './document-helpers.mjs';
@@ -90,7 +90,7 @@ test('content versions preserve keyboard access, responsive popup geometry, save
 		await expect(picker).toBeFocused();
 		assert.equal(new URL(page.url()).origin, origin);
 		await page.locator('#book-navigation summary').filter({ hasText: 'Foundations' }).click();
-		await expect(page.getByRole('link', { name: 'Typography', exact: true })).toBeVisible();
+		await expect(page.getByRole('link', { name: /^Typography(?: Draft)?$/ })).toBeVisible();
 		for (const width of [390, 1100]) {
 			await page.setViewportSize({ width, height: 900 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -228,45 +228,37 @@ test('new authored guidance renders through aliases, tracks saved edits and surv
 	const entry = { id: 'routing-study', title: 'Routing study', aliases: ['previous-study'] };
 	const foundations = path.join(fixture.bookRoot, 'foundations');
 	rmSync(foundations, { recursive: true, force: true });
-	const writeBook = topics => {
+	// Each specification owns its guidance; a catalog refresh rediscovers the specifications themselves.
+	const writeBook = (topics, guidance) => {
 		rmSync(foundations, { recursive: true, force: true });
 		mkdirSync(foundations, { recursive: true });
 		for (const [index, topic] of topics.entries()) {
 			const aliases = topic.aliases?.length ? `aliases:\n${topic.aliases.map(alias => `  - "${alias}"`).join('\n')}\n` : '';
 			fixture.write(`.github/skills/design-system/foundations/${topic.id}.design.md`,
-				`---\ntitle: "${topic.title}"\nkind: foundation\nstatus: stable\norder: ${index}\n${aliases}---\n# ${topic.title}\n`);
+				`---\ntitle: "${topic.title}"\nkind: foundation\nstatus: stable\norder: ${index}\n${aliases}---\n# ${topic.title}\n\n`
+				+ `## Introduction\n\nLocal authored introduction.\n\n## Usage\n\n${guidance} with a [related document](../../../../src/vs/feature/feature-notes.md).\n`);
 		}
 	};
-	const source = 'src/vs/feature/routing.md';
-	fixture.write(source, '# Routing study\n\n## Introduction\n\nLocal authored introduction.\n\n## Usage\n\nFirst saved guidance with a [related document](./feature-notes.md).\n');
-	fixture.write('.github/skills/design-system/content/topics/routing-study.json', JSON.stringify({
-		version: 1, id: entry.id, renderer: 'guidance', source, content: {},
-		sections: [{ id: 'routing-usage', key: 'usage', heading: 'Usage' }],
-	}));
-	writeBook([entry]);
+	writeBook([entry], 'First saved guidance');
 	const panel = await createExplorer(fixture.root, { watchCheckout: false });
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 		const errors = [];
 		page.on('pageerror', error => errors.push(error.message));
-		await page.goto(`${new URL('/', panel.url)}?section=previous-study&mode=all#routing-usage`);
+		await page.goto(`${new URL('/', panel.url)}?section=previous-study&mode=all#routing-study-usage`);
 		const content = page.locator('[data-topic="routing-study"] .topic-content');
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
 		await expect(content.locator('h2')).toHaveText('Usage');
 		await expect(content).toContainText('First saved guidance');
 		await expect(content.getByRole('link', { name: 'related document', exact: true })).toHaveAttribute('href', /documentId=src%2Fvs%2Ffeature%2Ffeature-notes\.md/);
-		await expect(content.locator('#routing-usage')).toBeFocused();
+		await expect(content.locator('#routing-study-usage')).toBeFocused();
 		const before = panel.state;
-		fixture.write(source, readFileSync(path.join(fixture.root, source), 'utf8').replace('First saved guidance', 'Updated saved guidance'));
+		writeBook([entry], 'Updated saved guidance');
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(content).toContainText('Updated saved guidance');
 		const second = { id: 'second-study', title: 'Second study', aliases: [] };
-		fixture.write('.github/skills/design-system/content/topics/second-study.json', JSON.stringify({
-			version: 1, id: second.id, renderer: 'guidance', source, content: {},
-			guidance: [{ id: 'second-usage', heading: 'Usage' }],
-		}));
-		writeBook([entry, second]);
+		writeBook([entry, second], 'Updated saved guidance');
 		panel.selectCheckout({ root: fixture.root });
 		await expect(content).toHaveAttribute('data-topic-state', 'ready');
 		await expect(content).toContainText('Updated saved guidance');
@@ -277,10 +269,6 @@ test('new authored guidance renders through aliases, tracks saved edits and surv
 		const secondContent = page.locator('[data-topic="second-study"] .topic-content');
 		await expect(secondContent).toHaveAttribute('data-topic-state', 'ready');
 		await expect(secondContent).toContainText('Updated saved guidance');
-		writeBook([entry, second]);
-		const documentSources = JSON.parse(readFileSync(path.join(fixture.bookRoot, 'content/document-sources.json'), 'utf8'));
-		fixture.write('.github/skills/design-system/content/document-sources.json',
-			JSON.stringify(documentSources.filter(source => source.id !== 'product')));
 		rmSync(path.join(fixture.root, 'src/vs/feature/feature-notes.md'), { force: true });
 		panel.selectCheckout({ root: fixture.root });
 		const unavailableDocument = secondContent.getByRole('link', { name: 'related document', exact: true });

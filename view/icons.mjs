@@ -24,13 +24,13 @@ function glyph(icon, compact = false) {
 
 export async function renderIcons(content, system, onFilter, signal) {
 	if (!system.codiconFontAvailable) {
-		content.append(node('p', 'The local Codicon font is missing. Restore the repository Codicon dependency to display glyphs.', 'notice'));
+		content.append(node('p', 'The session Codicon font is missing. Restore the session workspace dependencies to display glyphs.', 'notice'));
 		return 0;
 	}
 	const faces = await content.ownerDocument.fonts.load('16px canvas-codicon');
 	signal.throwIfAborted();
 	if (!faces.length) {
-		throw new Error('The local Codicon font could not load');
+		throw new Error('The session Codicon font could not load');
 	}
 	const label = node('label', 'Filter icons', 'icon-filter');
 	const input = node('input', undefined, 'chrome-input');

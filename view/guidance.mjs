@@ -9,6 +9,7 @@ import {markdown} from './markdown.mjs';
 import { documentMarkup } from './documents.mjs';
 
 export function renderSimplePage(content, system, host) {
+	if (system.genericGuidance) { return system.sourceSections.length || Number(Boolean(system.authored.intro)); }
 	const page = system.view.section;
 	if (page === 'patterns') {
 		for (const document of system.documents[page]) { content.append(markdown(document.text, 2)); }

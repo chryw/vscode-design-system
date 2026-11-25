@@ -2,20 +2,30 @@
 
 Follow the [quick start](../README.md#quick-start) to install and open the canvas.
 
-## Prepare the exploration checkout
+## Prepare the docs-only checkout
 
-Use your existing VS Code worktree if it has the exploration content. If you need a separate checkout:
+From a prepared VS Code session, select **Shared branch…** in the canvas and enter `https://github.com/microsoft/vscode/tree/chryw/design-system-docs-pr`. No local branch switch or installation in the downloaded source checkout is needed.
+
+For local authoring or live examples, reuse an existing checkout of that branch. If you need a separate checkout:
 
 ```sh
-git clone --depth 1 --branch chryw/design-system-exploration \
-  https://github.com/microsoft/vscode.git vscode-design-exploration
+git clone --depth 1 --branch chryw/design-system-docs-pr \
+  https://github.com/microsoft/vscode.git vscode-design-system-docs
 ```
 
 Open a Copilot session in that checkout. The current book is discovered from foundation, pattern, and code-local specification front matter under `.github/skills/design-system` and `src/vs`. Older checkouts with `.github/design-system/topics.json` remain supported; a checkout without either layout shows the Source library.
 
+Each component chapter reads its owning code-local specification. The Source library indexes existing repository documents independently of authored chapters.
+
+The docs-only source is [microsoft/vscode#350445](https://github.com/microsoft/vscode/pull/350445); the tested revision is recorded in [`compatibility.json`](../compatibility.json). It does not include experimental product token, style, or motion changes. Motion remains browsable as guidance; source-defined interactive motion presentations remain supported in checkouts that provide them.
+
 ## Component APIs and live examples
 
-You can open the canvas and read foundations without installing VS Code dependencies. For component APIs, run `pnpm install` in the VS Code checkout. For live examples, also run `pnpm run build-fast --client-only`. Use the Node.js version in that checkout's `.nvmrc` and the pnpm version pinned in `package.json`.
+The source readers use the session workspace's `js-yaml` and TypeScript tooling to parse saved files without executing the selected source checkout. If the session's VS Code checkout is not prepared, run its normal `pnpm install`. Use that checkout's `.nvmrc` and the pnpm version pinned in `package.json`.
+
+Remote content versions need no dependency installation or build. For live examples, select a prepared local docs checkout, run its `pnpm install` and `pnpm run build-fast --client-only`, and reuse its Component Explorer. Live examples never borrow another branch's dependencies or build output. Missing prerequisites are reported rather than replaced with examples from a different branch.
+
+Remote versions show a source-only notice in place of live previews; guidance and source-derived APIs remain available. A specification without a fixture binding states that no live example is defined.
 
 ## Local browser
 

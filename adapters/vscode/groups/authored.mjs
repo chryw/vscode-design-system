@@ -3,10 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-import { documentSection, isRepositoryPath, parseDocument } from '../../../model/documents.mjs';
-import { readBook, readBookSource } from '../../../runtime/book.mjs';
+import { documentSection, isRepositoryPath, parseDocument, withoutPresentationData } from '../../../model/documents.mjs';
+import { parseSpecMetadata, readBook, readBookSource } from '../../../runtime/book.mjs';
 
 export const bookRoot = '.github/skills/design-system/';
+const requiredSections = {
+	principles: ['practice'], typography: ['composition', 'emphasis', 'styles', 'metrics', 'families'],
+	spacing: ['grouping', 'ownership', 'patterns', 'product', 'responsive', 'ramp'],
+	shape: ['roles', 'scale'], size: ['glyphs', 'reference'], stroke: ['usage', 'reference'],
+	layout: ['hierarchy', 'responsive'], elevation: ['tiers', 'anatomy', 'scenarios', 'shadows', 'guidance', 'role'],
+	theming: ['guidance', 'comparison'], colors: ['usage', 'surfaces', 'accent', 'feedback', 'states', 'palette'],
+};
 
 export function contentPath(file) {
 	if (typeof file !== 'string' || !/^(?:content|pages)\/[a-z0-9/-]+\.(?:json|md)$/.test(file)
@@ -34,9 +41,105 @@ function chapterIntroduction(document) {
 	const title = document.headings.find(heading => heading.level === 1);
 	const start = title?.bodyOffset ?? 0;
 	const first = document.headings.find(heading => heading.offset >= start);
-	const preamble = document.markdown.slice(start, first?.offset).trim();
+	const preamble = document.markdown.slice(start, first?.startOffset).trim();
 	const introduction = first?.title === 'Introduction' ? documentSection(document, { anchor: first.id }).markdown : '';
 	return [preamble, introduction].filter(Boolean).join('\n\n');
+}
+
+/**
+ * Returns the owning specification with its saved composition. The catalog keeps identity and placement; `specimens`
+ * and `sectionCopy` are reread through the tracked reader so a saved front-matter edit refreshes its chapter.
+ */
+export function currentSpecification(read, topic, repository) {
+	const spec = repository.projection.designSpecs.find(spec => spec.id === topic);
+	if (!spec) { throw new Error(`Missing owning specification: ${topic}`); }
+	const current = parseSpecMetadata(read(spec.path), spec.path, ['component', 'primitive', 'composite'].includes(spec.kind) ? 'component' : spec.kind);
+	if (current.id !== spec.id || current.presentation !== spec.presentation) {
+		throw new Error(`${spec.path}: identity or presentation changed; reload the checkout`);
+	}
+	return { ...spec, specimens: current.specimens, sectionCopy: current.sectionCopy };
+}
+
+export function readSpecification(read, topic, repository) {
+	const spec = currentSpecification(read, topic, repository);
+	if (spec.presentation === 'motion') {
+		// Motion projects its selected headings and visual bindings separately; generic source sections would repeat them.
+		return { documents: { [topic]: [{ file: spec.path, text: withoutPresentationData(read(spec.path)) }] } };
+	}
+	const document = parseDocument(read(spec.path), { id: spec.path, origin: 'product' });
+	const specimens = resolveContent(spec.specimens ?? {}, read, { source: spec.path });
+	const consumed = new Set();
+	const collectReferences = value => {
+		if (!value || typeof value !== 'object') { return; }
+		if (Object.hasOwn(value, '$text')) {
+			const reference = typeof value.$text === 'string' ? { heading: value.$text } : value.$text;
+			if (!reference.file || reference.file === spec.path) { consumed.add(reference.heading); }
+		} else { Object.values(value).forEach(collectReferences); }
+	};
+	collectReferences(spec.specimens);
+	collectReferences(spec.sectionCopy);
+	const composed = spec.presentation !== undefined;
+	const required = composed ? requiredSections[topic] ?? [] : [];
+	const bindings = document.headings.flatMap(heading => {
+		const key = required.find(key => heading.aliases.includes(`${topic}-${key}`));
+		return key ? [{ key, heading, id: `${topic}-${key}` }] : [];
+	});
+	// A heading whose own body is empty and whose every subheading supplies specimen or section copy only holds that copy.
+	const holdsConsumedCopy = heading => {
+		const index = document.headings.indexOf(heading);
+		const end = document.headings.findIndex((item, at) => at > index && item.level <= heading.level);
+		const children = document.headings.slice(index + 1, end < 0 ? undefined : end);
+		return children.length > 0 && children.every(child => consumed.has(child.title))
+			&& !document.markdown.slice(heading.bodyOffset, children[0].startOffset).trim();
+	};
+	const unbound = document.headings.filter(heading => !bindings.some(binding => binding.heading === heading)
+		&& heading.level > 1 && heading.title !== 'Introduction');
+	const explicit = unbound.filter(heading => heading.aliases.length);
+	const guidance = explicit.length && composed ? explicit
+		: unbound.filter(heading => heading.level === 2
+			&& (!composed || !consumed.has(heading.title) && !holdsConsumedCopy(heading)));
+	const sourceSections = guidance.map(heading => ({
+		...documentSection(document, { anchor: heading.id }),
+		sectionId: heading.aliases[0] ?? `${topic}-${heading.id}`,
+		aliases: heading.aliases.slice(1),
+		...(bindings.find(binding => binding.heading.offset > heading.offset)
+			? { before: bindings.find(binding => binding.heading.offset > heading.offset).id } : {}),
+	}));
+	// `sectionCopy.<key>.title` replaces the rendered heading; `label` is the compact outline entry for that section.
+	const labels = {};
+	const authoredSections = Object.fromEntries(bindings.map(({ key, heading }) => {
+		const section = documentSection(document, { anchor: heading.id });
+		const { label, ...copy } = resolveContent(spec.sectionCopy?.[key] ?? {}, read, { source: spec.path });
+		for (const [field, value] of [['label', label], ['title', copy.title]]) {
+			if (value !== undefined && (typeof value !== 'string' || !value.trim())) {
+				throw new Error(`${spec.path}: sectionCopy.${key}.${field} must be non-empty text`);
+			}
+		}
+		labels[key] = label ?? copy.title ?? section.title;
+		return [key, { title: section.title, description: section.markdown, paragraphs: [], source: section.source, ...copy }];
+	}));
+	const authored = {
+		...specimens,
+		version: 1, id: topic, status: 'book-authored', markdownSource: spec.path,
+		intro: chapterIntroduction(document), sections: authoredSections,
+		sectionIds: Object.fromEntries(bindings.map(({ key, id }) => [key, id])),
+	};
+	if (composed) { validateChapter(authored, topic, sourceSections.length > 0); }
+	return {
+		documents: { [topic]: [{ file: spec.path, text: withoutPresentationData(read(spec.path)) }] },
+		page: {
+			version: 1, id: topic, renderer: spec.presentation ?? 'guidance', source: spec.path,
+			sources: [{ file: spec.path }],
+			sections: [
+				...bindings.map(({ key, heading, id }) => ({ key, id, title: labels[key], offset: heading.offset,
+					aliases: heading.aliases.filter(alias => alias !== id) })),
+				...sourceSections.map(section => ({ id: section.sectionId, title: section.title,
+					offset: document.headings.find(heading => heading.id === section.anchor).offset })),
+			].sort((a, b) => a.offset - b.offset).map(({ offset, ...section }) => section),
+		},
+		authored,
+		sourceSections,
+	};
 }
 
 export function resolveContent(value, read, { source } = {}) {
@@ -93,13 +196,6 @@ function validateChapter(authored, topic, hasGuidance) {
 	const text = value => typeof value === 'string' && value.trim().length > 0;
 	const rows = (value, columns) => Array.isArray(value) && value.length > 0
 		&& value.every(row => Array.isArray(row) && row.length === columns && row.every(text));
-	const requiredSections = {
-		principles: ['practice'], typography: ['composition', 'emphasis', 'styles', 'metrics', 'families'],
-		spacing: ['grouping', 'ownership', 'patterns', 'product', 'responsive', 'ramp'],
-		shape: ['roles', 'scale'], size: ['glyphs', 'reference'], stroke: ['usage', 'reference'],
-		layout: ['hierarchy', 'responsive'], elevation: ['tiers', 'anatomy', 'scenarios', 'shadows', 'guidance', 'role'],
-		theming: ['guidance', 'comparison'], colors: ['usage', 'surfaces', 'accent', 'feedback', 'states', 'palette'],
-	};
 	if (authored.id !== topic || authored.status !== 'book-authored' || typeof authored.intro !== 'string' || !authored.sections || Array.isArray(authored.sections)
 		|| typeof authored.sections !== 'object' || (requiredSections[topic] ?? []).some(id => !authored.sections[id])
 		|| Object.values(authored.sections).some(section => !section || !text(section.title) || !text(section.description)

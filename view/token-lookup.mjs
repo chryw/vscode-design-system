@@ -20,6 +20,12 @@ export function designTokenGroups(entries, domains = tokenDomains) {
 	return new Map(domains.filter(domain => groups.has(domain.id)).map(domain => [domain.id, groups.get(domain.id)]));
 }
 
+/** Token groups whose owning specification does not declare `tokenDomain`; the reference reports them instead of hiding them. */
+export function undeclaredTokenGroups(entries, domains = tokenDomains) {
+	return [...new Set(entries.map(token => token.deprecated ? 'legacy' : token.group))]
+		.filter(id => !domains.some(domain => domain.id === id));
+}
+
 export function visualTokens(system, section) {
 	if (section === 'spacing' || section === 'shape') {
 		return system.reference.scales[section === 'spacing' ? 'spacing' : 'radii'];

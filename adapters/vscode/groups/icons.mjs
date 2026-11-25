@@ -5,12 +5,12 @@
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { workspaceRoot } from '../../../runtime/paths.mjs';
 
-export function load({ read, source, root }, selected = false) {
+export function load({ read, source }, selected = false, dependency = path.join(workspaceRoot, 'node_modules/@vscode/codicons/dist')) {
 	const ids = Array.isArray(selected) ? selected : selected ? ['add', 'add-compact'] : undefined;
 	const file = 'src/vs/base/common/codiconsLibrary.ts';
 	const text = read(file);
-	const dependency = path.join(root, 'node_modules/@vscode/codicons/dist');
 	const codes = existsSync(path.join(dependency, 'codicon.ttf'))
 		? new Set([...readFileSync(path.join(dependency, 'codicon.css'), 'utf8').matchAll(/content:\s*["']\\(?<code>[\da-f]+)["']/gi)].map(match => Number.parseInt(match.groups.code, 16)))
 		: new Set();

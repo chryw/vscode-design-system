@@ -6,6 +6,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { documentSection, parseDocument } from '../../model/documents.mjs';
+import { workspaceRoot } from '../../runtime/paths.mjs';
 
 export function validateControlDocumentation(input, id) {
 	if (input?.version !== 1 || input.id !== id || typeof input.className !== 'string'
@@ -29,8 +30,9 @@ export function describeControl(control, input) {
 }
 
 function sourceApi(control, read, root) {
+	if (!control.api.length) { return []; }
 	if (typeof root !== 'string' || !root) { throw new Error('Component API extraction requires the selected checkout root'); }
-	const ts = createRequire(path.join(root, 'package.json'))('typescript');
+	const ts = createRequire(path.join(workspaceRoot, 'package.json'))('typescript');
 	const files = [control.owner, ...(control.relatedOwners ?? [])].map(file => {
 		const text = read(file);
 		const ast = ts.createSourceFile(path.resolve(root, file), text, ts.ScriptTarget.Latest, true);

@@ -11,7 +11,6 @@ import { renderFixturePreview } from './components.mjs';
 import { chapterContent, sectionContent } from './page-content.mjs';
 
 const isColor = value => /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value) || value.startsWith('color-mix(in srgb,');
-const isFoundation = token => token.definitionSource.file === 'src/vs/platform/theme/common/colors/semanticColors.ts';
 
 function section(id, title, description) {
 	const result = example(title, description);
@@ -22,6 +21,13 @@ function section(id, title, description) {
 
 export function renderColors(content, system, host, signal) {
 	const authored = chapterContent(system);
+	const sharedColors = 'src/vs/platform/theme/common/colors/semanticColors.ts';
+	const foundationFile = system.colorCatalog.some(token => token.definitionSource.file === sharedColors)
+		? sharedColors : 'src/vs/platform/theme/common/colors/baseColors.ts';
+	const isFoundation = token => token.definitionSource.file === foundationFile;
+	const representative = system.colorCatalog.find(token => isFoundation(token)
+		&& token.id === (foundationFile === sharedColors ? 'color.background.accent' : 'focusBorder'));
+	if (!representative) { throw new Error('The selected checkout has no recognized foundation color registration'); }
 	const specimen = id => {
 		const { title, description } = sectionContent(authored, id);
 		return section(id, title, description);
@@ -48,7 +54,7 @@ export function renderColors(content, system, host, signal) {
 	}
 	usage.append(roles);
 	const anatomy = node('p', undefined, 'color-token-anatomy');
-	anatomy.append(node('code', 'color.background.accent'), document.createTextNode(' = color · property · purpose'));
+	anatomy.append(node('code', representative.id), document.createTextNode(' uses '), node('code', representative.css));
 	usage.append(anatomy, ...paragraphs('usage'));
 
 	const surfaces = specimen('surfaces');

@@ -92,7 +92,7 @@ export async function buildSnapshot({ root, output, tag }) {
 	root = path.resolve(root);
 	output = path.resolve(output);
 	const repository = readRepository(root);
-	assert.equal(repository.projection.mode, 'curated', 'The selected checkout has no curated design-system guidance');
+	assert.ok(['curated', 'authored'].includes(repository.projection.mode), 'The selected checkout has no curated design-system guidance');
 	await mkdir(output);
 	const before = await Promise.all([sourceFingerprint(root, output), sourceFingerprint(packageRoot, output)]);
 	const run = (script, args) => execFileSync(process.execPath, [path.join(packageRoot, 'scripts', script), ...args], {

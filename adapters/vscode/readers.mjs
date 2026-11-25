@@ -7,7 +7,7 @@ import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { createReferenceModel } from './reference-model.mjs';
 import { readProvenance } from './provenance.mjs';
-import { contained } from '../../runtime/paths.mjs';
+import { contained, workspaceRoot } from '../../runtime/paths.mjs';
 import { documentView } from '../../model/documents.mjs';
 import { createTopicResources } from './topic-resources.mjs';
 
@@ -77,45 +77,52 @@ export async function readTopic(store, id, settings) {
 		typography: { tokens: [], families: [] }, elevation: { cssShadows: [], shadowUsage: [] },
 		documents: {}, controls: [], theme: { id: settings.theme }, chain: [],
 		view: { section, controlId: entry.controlId ?? '', ...settings }, controlGaps: [],
-		codiconFontAvailable: existsSync(path.join(store.root, 'node_modules/@vscode/codicons/dist/codicon.ttf')),
+		codiconFontAvailable: existsSync(path.join(workspaceRoot, 'node_modules/@vscode/codicons/dist/codicon.ttf')),
 	};
-	if (projection.mode !== 'basic') { Object.assign(data, await use('guidance', [section])); }
-	if (['typography', 'spacing', 'shape', 'size', 'stroke', 'tokens', 'layout', 'elevation'].includes(section)) {
-		Object.assign(data, await use('sizes'));
+	const authored = projection.mode === 'authored';
+	const generic = authored && entry.rendererKind === 'guidance' && !projection.designSpecs.find(spec => spec.id === section)?.presentation;
+	data.genericGuidance = generic;
+	if (projection.mode !== 'basic' && (!authored || section !== 'components')) {
+		Object.assign(data, await use('guidance', [section]));
 	}
-	if (section === 'typography' || section === 'tokens') {
-		Object.assign(data, await use('typography', [data.sizes]));
-		if (section === 'tokens') {
-			data.sizes = [...data.sizes, ...data.typography.tokens.filter(item => !data.sizes.some(token => token.id === item.id))];
-		}
-	}
-	if (['colors', 'theming', 'tokens'].includes(section)) {
-		Object.assign(data, await use('themes', [settings.theme, settings.compareTheme, section === 'colors']));
-	}
-	if (section === 'tokens') { Object.assign(data, await use('designTokens', [data.theme, data.colors])); }
-	if (section === 'colors') { Object.assign(data, await use('colorUsage')); }
-	if (section === 'iconography' || section === 'size') {
-		Object.assign(data, await use('icons', [section === 'size']));
-	}
-	if (section === 'principles') { Object.assign(data, await use('philosophy')); }
-	if (section === 'spacing') { Object.assign(data, await use('spacing')); }
-	if (section === 'shape' || section === 'tokens') { Object.assign(data, await use('elevation')); }
-	if (section === 'elevation') {
-		const palettes = [];
-		for (const { id, label } of store.repository.corePaletteThemes) {
-			const { theme, colors } = await use('themes', [id, id, false, false]);
-			palettes.push({ theme, colors, label });
-		}
-		Object.assign(data, await use('elevation', [palettes]));
-	}
-	if (section === 'motion') {
-		Object.assign(data, await use('motion'));
-		if (data.motionDocumentation.status === 'defined') {
+	if (!generic) {
+		if (['typography', 'spacing', 'shape', 'size', 'stroke', 'tokens', 'layout', 'elevation'].includes(section)) {
 			Object.assign(data, await use('sizes'));
+		}
+		if (section === 'typography' || section === 'tokens') {
 			Object.assign(data, await use('typography', [data.sizes]));
-			const palettes = await use('themes', ['Dark 2026', 'Light Modern', false, false]);
-			Object.assign(data, await use('icons', [['play', 'debug-pause', 'debug-restart', 'loading']]));
-			Object.assign(data, await use('motionAppearance', [palettes.theme, palettes.colors, palettes.comparison.theme, palettes.comparison.colors]));
+			if (section === 'tokens') {
+				data.sizes = [...data.sizes, ...data.typography.tokens.filter(item => !data.sizes.some(token => token.id === item.id))];
+			}
+		}
+		if (['colors', 'theming', 'tokens'].includes(section)) {
+			Object.assign(data, await use('themes', [settings.theme, settings.compareTheme, section === 'colors']));
+		}
+		if (section === 'tokens') { Object.assign(data, await use('designTokens', [data.theme, data.colors])); }
+		if (section === 'colors') { Object.assign(data, await use('colorUsage')); }
+		if (section === 'iconography' || section === 'size') {
+			Object.assign(data, await use('icons', [section === 'size']));
+		}
+		if (section === 'principles') { Object.assign(data, await use('philosophy')); }
+		if (section === 'spacing') { Object.assign(data, await use('spacing')); }
+		if (section === 'shape' || section === 'tokens') { Object.assign(data, await use('elevation')); }
+		if (section === 'elevation') {
+			const palettes = [];
+			for (const { id, label } of store.repository.corePaletteThemes) {
+				const { theme, colors } = await use('themes', [id, id, false, false]);
+				palettes.push({ theme, colors, label });
+			}
+			Object.assign(data, await use('elevation', [palettes]));
+		}
+		if (section === 'motion') {
+			Object.assign(data, await use('motion'));
+			if (data.motionDocumentation.status === 'defined') {
+				Object.assign(data, await use('sizes'));
+				Object.assign(data, await use('typography', [data.sizes]));
+				const palettes = await use('themes', ['Dark 2026', 'Light Modern', false, false]);
+				Object.assign(data, await use('icons', [['play', 'debug-pause', 'debug-restart', 'loading']]));
+				Object.assign(data, await use('motionAppearance', [palettes.theme, palettes.colors, palettes.comparison.theme, palettes.comparison.colors]));
+			}
 		}
 	}
 	if (section === 'components') { Object.assign(data, await use('components', [entry.controlId])); }
@@ -127,7 +134,7 @@ export async function readTopic(store, id, settings) {
 	data.primarySourceDocument = data.sourceDocuments?.find(document => document.id === primarySource);
 	data.sourceFiles = [...new Set(dependencies.flatMap(item => item.files))];
 	if (data.library?.document) { data.sourceFiles.push(data.library.document.source.file); }
-	data.reference = createReferenceModel(data, ['components', 'tokens', 'accessibility', 'content', 'patterns', 'documentation'].includes(section) ? [] : [section]);
+	data.reference = createReferenceModel(data, authored || ['components', 'tokens', 'accessibility', 'content', 'patterns', 'documentation'].includes(section) ? [] : [section]);
 	if (['spacing', 'layout'].includes(section)) { data.sizes = data.sizes.filter(token => token.category === 'spacing'); }
 	if (section === 'shape') { data.sizes = data.sizes.filter(token => token.id.startsWith('cornerRadius.')); }
 	if (section === 'size') { data.sizes = data.sizes.filter(token => token.id.startsWith('codiconFontSize')); }

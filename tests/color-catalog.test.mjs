@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { colorDefinitions, createColorResolver } from '../adapters/vscode/color-catalog.mjs';
+import { colorDefinitions, createColorResolver, readColorDefinitionFiles } from '../adapters/vscode/color-catalog.mjs';
 import { TopicStore } from '../runtime/store.mjs';
 
 const root = workspaceRoot;
@@ -17,6 +17,18 @@ const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026', query: '' };
 test('consolidated color reader excludes comments and records exact registration sources', () => {
 	const definitions = colorDefinitions('// registerColor(\'fake\', null)\nconst id=\'real.constant\';\nconst a=registerColor(id, {dark:null});\nconst b=registerColor(`real.template`, \'#fff\');', 'example.ts');
 	assert.deepEqual(definitions.map(item => [item.id, item.definitionSource.line]), [['real.constant', 3], ['real.template', 4]]);
+});
+
+test('checkouts without shared semantic color roles still read their other registrations', () => {
+	const semantic = 'src/vs/platform/theme/common/colors/semanticColors.ts';
+	const base = 'src/vs/platform/theme/common/colors/baseColors.ts';
+	const missing = file => Object.assign(new Error(`ENOENT: ${file}`), { code: 'ENOENT' });
+	const read = file => {
+		if (file === base) { return 'registerColor(\'focusBorder\', \'#0078d4\');'; }
+		throw missing(file);
+	};
+	assert.deepEqual(readColorDefinitionFiles([base, semantic], read).map(item => item.id), ['focusBorder']);
+	assert.throws(() => readColorDefinitionFiles(['src/vs/platform/theme/common/colors/editorColors.ts'], read), /ENOENT/);
 });
 
 test('registry inventory is lazy and retains truthful defaults, ANSI entries, and coverage discrepancies', async () => {

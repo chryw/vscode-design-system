@@ -10,9 +10,26 @@ import path from 'node:path';
 import { bookId } from './book.mjs';
 import { validateState } from './view-state.mjs';
 import { readRepository } from '../adapters/vscode/repository.mjs';
+import { UnknownTopicError } from '../model/catalog.mjs';
 
 export class StateStorageError extends Error {
 	constructor(code, message, cause) { super(message, { cause }); this.code = code; }
+}
+
+/**
+ * Records written before saved catalogs were recorded were valid when saved, so a
+ * well-formed topic the current book can no longer resolve is a retired topic.
+ */
+function retiredTopics(state, repository) {
+	const scope = state?.scope;
+	const ids = [...(Array.isArray(scope?.topics) ? scope.topics : []), scope?.active,
+		...(state?.views && typeof state.views === 'object' && !Array.isArray(state.views) ? Object.keys(state.views) : [])];
+	return [...new Set(ids)].filter(id => typeof id === 'string' && /^[a-z][a-z0-9-]*$/.test(id) && !resolves(id, repository));
+}
+
+function resolves(id, repository) {
+	try { repository.getTopic(id); return true; }
+	catch (error) { if (error instanceof UnknownTopicError) { return false; } throw error; }
 }
 
 export function copilotHome() {
@@ -52,8 +69,9 @@ export class ViewStateStorage {
 			if (record.catalog !== undefined && (!Array.isArray(record.catalog) || record.catalog.length > 1000
 				|| record.catalog.some(id => typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id))
 				|| new Set(record.catalog).size !== record.catalog.length)) { throw new Error('Invalid saved topic catalog'); }
-			const unavailableTopics = (record.catalog ?? []).filter(id => !this.repository.catalog.some(topic => topic.id === id));
-			return { ...record, unavailableTopics, state: validateState(record.state, this.repository, { previousTopics: record.catalog }) };
+			const previousTopics = record.catalog ?? retiredTopics(record.state, this.repository);
+			const unavailableTopics = previousTopics.filter(id => !this.repository.catalog.some(topic => topic.id === id));
+			return { ...record, unavailableTopics, state: validateState(record.state, this.repository, { previousTopics }) };
 		} catch (error) {
 			throw new StateStorageError('STATE_READ_FAILED', `Couldn't restore saved design-system state at ${this.file}. Preserve or move that file before retrying: ${error.message}`, error);
 		}

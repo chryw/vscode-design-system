@@ -137,11 +137,11 @@ export function mountReference(root, props, host) {
 					void loader.refresh({ contentOnly: true });
 				},
 			}, signal);
-			const presentation = typeof result === 'number' ? { count: result } : result;
+			const { guidanceBefore, ...presentation } = typeof result === 'number' ? { count: result } : result ?? {};
 			composeChapter(stage, system, host.documentResource);
 			if (system.sourceSections?.length) {
 				stage.classList.add('article-flow');
-				renderSourceSections(stage, system.sourceSections, host.documentResource);
+				renderSourceSections(stage, system.sourceSections, host.documentResource, guidanceBefore);
 			}
 			const labels = new Map(pageJumps(props, system.page).map(({ anchor, label }) => [anchor, label]));
 			const sections = [...stage.querySelectorAll('h2')].filter(heading =>
@@ -238,8 +238,8 @@ export function mountReference(root, props, host) {
 			if (metadata) { context.before(metadata); }
 			const topic = getTopic(topicId(props));
 			heading.textContent = system.library?.document?.title ?? topic.title;
-			maturity.hidden = topic.status !== 'draft';
-			maturity.textContent = topic.status === 'draft' ? 'Draft guidance' : '';
+			maturity.hidden = !topic.isDraft;
+			maturity.textContent = topic.isDraft ? 'Draft guidance' : '';
 			const documentTitle = system.library?.document?.headings.find(item => item.level === 1);
 			heading.id = documentTitle ? `document-${documentTitle.id}` : '';
 			guidance.replaceChildren(...(introduction ? [introduction] : []));

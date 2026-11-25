@@ -21,7 +21,7 @@ test('token guidance leads into a page-scrolling reference with working domain d
 		const article = page.locator('[data-topic="tokens"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const outline = article.getByRole('navigation', { name: 'On this page', exact: true });
-		await expect(outline.getByRole('link').first()).toHaveText('Using tokens');
+		await expect(outline.getByRole('link').first()).toHaveText('Find the owning foundation');
 		await outline.getByRole('link', { name: 'Spacing', exact: true }).focus();
 		await page.keyboard.press('Enter');
 		await expect(article.locator('#tokens-spacing')).toBeFocused();
@@ -48,17 +48,17 @@ test('token guidance leads into a page-scrolling reference with working domain d
 			}
 		}
 		const url = new URL(page.url());
-		url.hash = 'tokens-motion';
+		url.hash = 'tokens-elevation';
 		await page.goto(url.href);
-		await expect(article.locator('#tokens-motion')).toBeFocused();
-		await expect(article.locator('#tokens-motion')).toHaveAttribute('open', '');
-		await expect(article.locator('#tokens-motion .token-reference-row').last()).toBeAttached();
+		await expect(article.locator('#tokens-elevation')).toBeFocused();
+		await expect(article.locator('#tokens-elevation')).toHaveAttribute('open', '');
+		await expect(article.locator('#tokens-elevation .token-reference-row').last()).toBeAttached();
 		const search = article.getByRole('searchbox', { name: 'Search tokens', exact: true });
 		await search.fill('spacing.size80');
 		await expect(search).toBeFocused();
 		await expect(article.locator('.token-reference-row')).toHaveCount(1);
 		await search.fill('');
-		await expect(article.locator('#tokens-motion')).toHaveAttribute('open', '');
+		await expect(article.locator('#tokens-elevation')).toHaveAttribute('open', '');
 	} finally {
 		await browser?.close();
 		await panel.close();
@@ -80,8 +80,10 @@ test('the curated token reference explains choices and keeps implementation inve
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready', { timeout: 30000 });
 		await expect(article.locator('.token-reference-table')).toHaveCount(0);
 		await expect(article.locator('#tokens-legacy')).not.toHaveAttribute('open');
+		const data = panel.store.topics.get('tokens').envelope.data;
+		const hasMotion = data.designTokens.some(token => token.group === 'motion');
 		assert.deepEqual(await article.locator('.token-source-group > summary').allTextContents(), [
-			'Spacing', 'Typography', 'Corner radius', 'Icon size', 'Stroke', 'Color roles', 'Elevation', 'Motion', 'Scoped layout tokens', 'Deprecated aliases',
+			'Typography', 'Colors', 'Layout', 'Spacing', 'Shape', 'Stroke', 'Elevation', 'Iconography', ...(hasMotion ? ['Motion'] : []), 'Deprecated aliases',
 		]);
 		await article.locator('#tokens-spacing > summary').focus();
 		await page.keyboard.press('Enter');
@@ -106,22 +108,26 @@ test('the curated token reference explains choices and keeps implementation inve
 		await page.keyboard.press('Enter');
 		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'var(--vscode-spacing-size80)');
 		await expect(copy.locator('.copy-feedback')).toHaveText('Copied');
-		await search.fill('color.background.accent');
-		await expect(article.locator('.token-reference-row')).toContainText('Strong emphasis for a leading action');
-		await expect(article.locator('.token-reference-row')).toContainText('#0E639C');
-		await search.fill('motion.state.change.duration');
-		await expect(article.locator('#tokens-motion h3')).toHaveText('Feedback');
 		const tokenRow = id => article.locator('.token-reference-row').filter({
 			has: page.getByRole('button', { name: `Copy ${id} CSS variable --vscode-${id.replaceAll('.', '-')}`, exact: true }),
 		});
-		const controlDuration = panel.store.topics.get('tokens').envelope.data.designTokens.find(token => token.id === 'motion.state.change.duration');
-		await expect(tokenRow('motion.state.change.duration')).toHaveCount(1);
-		await expect(tokenRow('motion.state.change.duration').locator('td').first()).toHaveText(controlDuration.value);
-		await expect(tokenRow('motion.state.change.duration')).not.toContainText('Alias of');
-		await expect(tokenRow('motion.state.change.duration').locator('td').first()).toHaveText('120ms');
-		await search.fill('motion.progress.cycle.duration');
-		await expect(article.locator('#tokens-motion h3')).toHaveText('Activity');
-		await expect(tokenRow('motion.progress.cycle.duration')).toContainText('4000ms');
+		const color = data.designTokens.find(token => token.id === 'color.background.accent') ?? data.designTokens.find(token => token.id === 'foreground');
+		await search.fill(color.id);
+		await expect(tokenRow(color.id)).toContainText(color.value);
+		await expect(tokenRow(color.id)).toContainText(color.purpose);
+		await search.fill('motion.state.change.duration');
+		if (hasMotion) {
+			await expect(article.locator('#tokens-motion h3')).toHaveText('Feedback');
+			const controlDuration = data.designTokens.find(token => token.id === 'motion.state.change.duration');
+			await expect(tokenRow('motion.state.change.duration')).toHaveCount(1);
+			await expect(tokenRow('motion.state.change.duration').locator('td').first()).toHaveText(controlDuration.value);
+			await expect(tokenRow('motion.state.change.duration')).not.toContainText('Alias of');
+			await search.fill('motion.progress.cycle.duration');
+			await expect(article.locator('#tokens-motion h3')).toHaveText('Activity');
+			await expect(tokenRow('motion.progress.cycle.duration')).toContainText('4000ms');
+		} else {
+			await expect(article.getByText('No matching foundation tokens', { exact: true })).toBeVisible();
+		}
 		await search.fill('agents.fontSize.heading1');
 		await expect(article.locator('.token-reference-row')).toContainText('Use fontSize.heading1');
 		for (const width of [320, 390, 800, 1440]) {
@@ -131,7 +137,7 @@ test('the curated token reference explains choices and keeps implementation inve
 		await expect(article.locator('.token-list a')).toHaveCount(0);
 		await expect(article.getByRole('link', { name: 'Read full specification', exact: true })).toHaveCount(0);
 		await page.getByRole('searchbox', { name: 'Search topics', exact: true }).fill('Iconography');
-		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'Iconography', exact: true }).click();
+		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: /^Iconography(?: Draft)?$/ }).click();
 		await expect(page.locator('[data-topic="iconography"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		assert.equal(panel.state.scope.mode, 'all');
 		assert.equal(requests.includes('/api/fixtures'), false);

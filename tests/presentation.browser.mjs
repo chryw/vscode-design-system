@@ -13,9 +13,9 @@ import { corePaletteThemes } from '../view/token-lookup.mjs';
 import { mockFixtureControl, mockFixtureRenderer } from './browser-helpers.mjs';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { readPage } from '../adapters/vscode/groups/authored.mjs';
 import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
 import { createDocumentCheckout } from './document-helpers.mjs';
+import { hasRichMotion } from './motion-helpers.mjs';
 
 const root = workspaceRoot;
 const widths = [320, 390, 500, 800, 1440];
@@ -287,33 +287,31 @@ test('Markdown tables retain shared alignment and spacing outside the prose wrap
 	} finally { await browser.close(); await panel.close(); }
 });
 
-test('source chapter composition controls order, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
-	const read = file => readFileSync(path.join(root, file), 'utf8');
-	const authored = readPage(read, 'typography').authored;
+test('authored chapter order follows the owning specification, renders complete Markdown, and preserves earlier anchors', { timeout: 60000 }, async () => {
 	const source = '.github/skills/design-system/foundations/typography.design.md';
-	const pageFile = '.github/skills/design-system/content/topics/typography.json';
+	const original = readFileSync(path.join(root, source), 'utf8');
+	const emphasisStart = original.indexOf('<a id="typography-emphasis"></a>');
+	const emphasisEnd = original.indexOf('## Hierarchy in practice');
+	const compositionStart = original.indexOf('<a id="typography-composition"></a>');
+	assert.ok(compositionStart >= 0 && compositionStart < emphasisStart && emphasisStart < emphasisEnd, 'Typography binds composition before emphasis');
+	const emphasis = original.slice(emphasisStart, emphasisEnd).replace('## Weight and emphasis',
+		'## Weight and emphasis\n\nAdditional **authored emphasis** with [owned typography](./typography.design.md).');
+	const reordered = original.slice(0, compositionStart) + emphasis + original.slice(compositionStart, emphasisStart) + original.slice(emphasisEnd);
 	mkdirSync(path.join(root, '.build'), { recursive: true });
 	const scratch = mkdtempSync(path.join(root, '.build/chapter-composition-'));
-	const sourceFile = path.join(scratch, 'source.md');
-	const descriptor = path.join(scratch, 'page.json');
-	const sections = Object.entries(authored.sections).map(([key, section]) => ({
-		id: `typography-${key}`, key, heading: section.title, ...(key === 'emphasis' ? { aliases: ['typography-weight-guidance'] } : {}),
-	})).reverse();
-	const candidate = { version: 1, id: 'typography', renderer: 'typography', source, sources: [],
-		content: { sampleText: authored.sampleText, baseline: authored.baseline, composition: authored.composition }, sections };
-	writeFileSync(descriptor, JSON.stringify(candidate));
-	writeFileSync(sourceFile, read(source).replace('## Weight and emphasis',
-		'## Weight and emphasis\n\nAdditional **authored emphasis** with [owned typography](./typography.design.md).'));
+	const sourceFile = path.join(scratch, 'typography.design.md');
+	writeFileSync(sourceFile, reordered);
 	const panel = await createExplorer(root, { scope: { operation: 'replace', topics: ['typography'], active: 'typography' },
-		adapter: { ...vscodeAdapter, sourcePath: (root, file, bookRoot) =>
-			file === source ? sourceFile : file === pageFile ? descriptor : vscodeAdapter.sourcePath(root, file, bookRoot) } });
+		adapter: { ...vscodeAdapter, sourcePath: (root, file, bookRoot) => file === source ? sourceFile : vscodeAdapter.sourcePath(root, file, bookRoot) } });
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 		await page.goto(`${panel.url}#typography-weight-guidance`);
 		const article = page.locator('[data-topic="typography"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		assert.deepEqual(await article.locator('.topic-content h2').allTextContents(), sections.map(section => section.heading));
+		const headings = await article.locator('.topic-content h2').allTextContents();
+		assert.equal(headings[0], 'Weight and emphasis');
+		assert.ok(headings.indexOf('Hierarchy and reading rhythm') > 0);
 		await expect(article.locator('#typography-emphasis')).toBeFocused();
 		await expect(article.locator('#typography-emphasis strong')).toHaveText('authored emphasis');
 		await expect(article.getByRole('link', { name: 'owned typography', exact: true })).toHaveAttribute('href', /documentId=.*typography\.design\.md/);
@@ -321,11 +319,9 @@ test('source chapter composition controls order, renders complete Markdown, and 
 			await page.setViewportSize({ width, height: 900 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		}
-		writeFileSync(descriptor, JSON.stringify({ ...candidate, sections: [
-			...sections, { id: 'unrendered', key: 'unrendered', heading: 'Introduction' },
-		] }));
-		await panel.refreshTopic('typography');
-		await expect(article.locator('#problem')).toContainText('Expected one rendered chapter section: unrendered');
+		writeFileSync(sourceFile, reordered.replace('<a id="typography-emphasis"></a>\n', ''));
+		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(article.locator('#problem')).toContainText('Invalid authored chapter: typography');
 		await expect(article.locator('#typography-emphasis strong')).toHaveText('authored emphasis');
 	} finally {
 		await browser.close();
@@ -347,7 +343,7 @@ test('Illustration uses the shared book frame, source sections, and keyboard out
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(article.locator('h1')).toHaveText('Illustration');
 		await expect(article.locator('.reference-empty, .guide-doc')).toHaveCount(0);
-		await expect(article.locator('.source-guidance > h2')).toHaveText(['Usage', 'Explain one idea', 'Visual style', 'Accessibility', 'Build and review']);
+		await expect(article.locator('.source-guidance > h2')).toHaveText(['Usage', 'Principles', 'Visual style', 'Accessibility', 'Build and review']);
 		const outline = article.getByRole('navigation', { name: 'On this page' });
 		await outline.getByRole('link', { name: 'Visual style', exact: true }).focus();
 		await page.keyboard.press('Enter');
@@ -562,10 +558,10 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 		await expect(page.locator('#typography-composition')).toBeFocused();
 		await page.setViewportSize({ width: 1440, height: 900 });
 		const topics = page.getByRole('navigation', { name: 'Topics', exact: true });
-		await topics.getByRole('link', { name: 'Colors', exact: true }).focus();
+		await topics.getByRole('link', { name: /^Colors(?: Draft)?$/ }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="colors"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await topics.getByRole('link', { name: 'Typography', exact: true }).focus();
+		await topics.getByRole('link', { name: /^Typography(?: Draft)?$/ }).focus();
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="typography"] h1')).toBeFocused();
 		assert.deepEqual(errors, []);
@@ -575,7 +571,7 @@ test('chapters keep a readable hierarchy and a stable left edge at every article
 	}
 });
 
-test('accessibility renders composed decisions, keyboard outline links and source references', { timeout: 60000 }, async () => {
+test('accessibility routes design decisions to the owning skill with keyboard-operable links', { timeout: 60000 }, async () => {
 	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'accessibility' } });
 	let browser;
 	try {
@@ -587,23 +583,23 @@ test('accessibility renders composed decisions, keyboard outline links and sourc
 		const article = page.locator('[data-topic="accessibility"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		assert.deepEqual(await article.locator('.topic-content h2').allTextContents(), [
-			'Keyboard and focus', 'Names and states', 'Help and readable content',
-			'Feedback and announcements', 'Visual alternatives', 'Build and review',
+			'Find the applicable guidance', 'Keep meaning across visual alternatives', 'Review a real task',
 		]);
-		await expect(article.getByRole('table')).toHaveCount(3);
-		await expect(article.locator('#accessibility-help')).toContainText('a separate Accessible View is not needed');
-		await expect(article.locator('#announcement-patterns')).toContainText('no duplicate speech');
-		await expect(article.locator('#accessibility-review')).toContainText('With a screen reader');
+		await expect(article.getByRole('table')).toHaveCount(1);
 		const outline = article.getByRole('navigation', { name: 'On this page', exact: true });
-		const help = outline.getByRole('link', { name: 'Help and readable content', exact: true });
+		const help = outline.getByRole('link', { name: 'Find the applicable guidance', exact: true });
 		await help.focus();
 		await page.keyboard.press('Enter');
-		await expect(page).toHaveURL(/#accessibility-help$/);
+		await expect(page).toHaveURL(/#accessibility-find-the-applicable-guidance$/);
 		await page.reload();
-		await expect(article.locator('#accessibility-help')).toBeInViewport();
-		const workflow = article.getByRole('link', { name: 'implementation workflow', exact: true });
+		await expect(article.locator('#accessibility-find-the-applicable-guidance')).toBeInViewport();
+		const workflow = article.getByRole('link', { name: 'Keyboard navigation and focus', exact: true });
 		await expect(workflow).toHaveAttribute('href', /documentId=.*accessibility.*SKILL.md/);
-		for (const theme of ['Light 2026', 'Dark 2026', 'High Contrast Dark', 'High Contrast Light']) {
+		await workflow.focus();
+		await page.keyboard.press('Enter');
+		await expect(page.locator('[data-topic="documentation"] .topic-content')).toContainText('6. Keyboard Navigation');
+		panel.setScope({ operation: 'all', active: 'accessibility' });
+		for (const { id: theme } of corePaletteThemes) {
 			panel.setView({ theme });
 			for (const width of [390, 1100]) {
 				await page.setViewportSize({ width, height: 900 });
@@ -634,7 +630,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			size: ['Choose a glyph size', 'Size reference'],
 			stroke: ['Use strokes to define boundaries', 'Stroke reference'],
 			layout: ['Arrange the primary task', 'Adapt to available space'],
-			elevation: ['Choose the surface relationship', 'Apply elevation to real tasks', 'What makes elevation',
+			elevation: ['Choose the surface relationship', 'What makes elevation', 'Apply elevation to real tasks',
 				'Use the existing shadow scale', 'Compose a reusable surface', 'Keep surfaces accessible and responsive'],
 			theming: ['Keep meaning in high contrast', 'Theme comparisons'],
 			spacing: ['Make relationships visible', 'Give each interval one owner', 'Choose a spacing pattern', 'Spacing between controls', 'When space gets tight', 'Spacing ramp'],
@@ -656,13 +652,15 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 				.map(heading => ({ title: heading.textContent, sourceGuidance: Boolean(heading.closest('.source-guidance')) })));
 			const majorHeadings = headingEntries.map(heading => heading.title);
 			const data = panel.store.topics.get(panel.state.scope.active).envelope.data;
-			const sequence = id === 'motion'
+			const sequence = id === 'motion' && data.motionDocumentation
 				? data.motionDocumentation.page.sections.map(section => section.title ?? data.motionDocumentation.sections[section.heading].title)
 				: sequences[id];
 			if (sequence) {
 				assert.deepEqual(headingEntries.filter(heading => !heading.sourceGuidance && heading.title !== 'Reading metrics')
 					.map(heading => heading.title), sequence, id);
 			}
+			// The Tokens chapter teaches its owning guidance before the reference it explains.
+			const defaultBefore = id === 'tokens' ? 'tokens-reference' : undefined;
 			for (const section of data.sourceSections ?? []) {
 				await expect(article.locator(`#${section.sectionId} > h2`)).toHaveText(section.title);
 				assert.equal(await article.evaluate((article, section) => {
@@ -670,7 +668,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 					let next = guide.nextElementSibling;
 					while (next?.classList.contains('source-guidance')) { next = next.nextElementSibling; }
 					return section.before ? next?.id === section.before : next === null;
-				}, { sectionId: section.sectionId, before: section.before }), true, `${id}: ${section.sectionId} placement`);
+				}, { sectionId: section.sectionId, before: section.before ?? defaultBefore }), true, `${id}: ${section.sectionId} placement`);
 			}
 			if (id === 'shape') {
 				assert.deepEqual(await article.locator('.radius-scale figure').evaluateAll(items => items.map(item => ({
@@ -736,8 +734,9 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 					corePaletteThemes.map(theme => theme.id));
 			}
 			if (id === 'component-menu') {
-				await expect(article.getByText('Documentation and examples are not available yet.', { exact: true })).toBeVisible();
-				await expect(article.getByRole('link', { name: 'View Figma specification', exact: true })).toBeVisible();
+				await expect(article.getByRole('heading', { name: 'Usage', level: 2, exact: true })).toBeVisible();
+				await expect(article.getByRole('link', { name: 'View Figma specification', exact: true }))
+					.toHaveCount(controls.find(control => control.id === 'menu').designReference ? 1 : 0);
 			}
 			if (id === 'component-button') {
 				await expect(article.locator('.control-stage')).toHaveAttribute('data-preview-state', 'ready');
@@ -752,7 +751,7 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 				await expect(article.locator('.token-reference-row')).toHaveCount(14);
 				await expect(article.locator('.token-list a')).toHaveCount(0);
 			}
-			if (id === 'motion') {
+			if (id === 'motion' && data.motionDocumentation) {
 				assert.deepEqual(await article.locator('.motion-doc > section').evaluateAll(sections => sections.map(section => section.id)),
 					data.motionDocumentation.page.sections.map(section => `motion-${section.id}`));
 			}
@@ -764,7 +763,8 @@ test('reader-facing articles share useful navigation and omit audit scaffolding'
 			if (id === 'iconography') {
 				await article.getByRole('button', { name: 'Inspect add', exact: true }).click();
 				await expect(article.locator('#selected-icon-detail')).toBeVisible();
-				await expect(article.locator('.topic-content a')).toHaveCount(0);
+				await expect(article.locator('.icon-scroll a')).toHaveCount(0);
+				assert.equal(await article.locator('.topic-content a').evaluateAll(links => links.every(link => link.closest('.source-guidance'))), true);
 			}
 			for (const width of [390, 1440]) {
 				await page.setViewportSize({ width, height: 900 });
@@ -930,7 +930,7 @@ test('Spacing keeps concise guidance, one token ramp, and an automatic product p
 		const navigation = page.getByRole('navigation', { name: 'On this page' });
 		await navigation.getByRole('link', { name: 'Spacing tokens', exact: true }).focus();
 		await page.keyboard.press('Enter');
-		await expect(page.locator('#layout-spacing')).toBeFocused();
+		await expect(page.locator('#spacing-ramp')).toBeFocused();
 		const tokens = panel.store.topics.get('spacing').envelope.data.reference.scales.spacing;
 		assert.deepEqual(await page.locator('.spacing-token-table tbody tr').evaluateAll(rows => rows.map(row => ({
 			id: row.dataset.scaleToken, css: row.querySelector('button code').textContent,
@@ -1008,7 +1008,11 @@ test('component articles keep behavior and APIs without authoring commentary', {
 			await page.goto(panel.url);
 			const article = page.locator(`[data-topic="${panel.state.scope.active}"]`);
 			await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
-			await expect(article.locator('.control-stage')).toHaveAttribute('data-preview-state', 'ready');
+			if (controls.find(control => control.id === id).groups.length) {
+				await expect(article.locator('.control-stage')).toHaveAttribute('data-preview-state', 'ready');
+			} else {
+				await expect(article.locator('.control-stage iframe')).toHaveCount(0);
+			}
 			await expect(article.locator('.component-doc-section h2')).toHaveText(['Usage', 'Accessibility', 'API']);
 			assert.ok(await article.locator('.component-api-table tbody tr').count() > 0);
 			await expect(article).not.toContainText(/not React props|new React|newly invented|This documents|primitive tag|proposed motion standard|existing fixture/);
@@ -1104,6 +1108,14 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 		panel.setScope({ operation: 'replace', topics: ['motion'] });
 		await expect(page.locator('[data-topic="motion"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const motionCount = await page.locator('[data-motion-example]').count();
+		if (!hasRichMotion) {
+			const beforeRefresh = discoveries;
+			await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+			await expect(page.locator('[data-topic="motion"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
+			assert.deepEqual({ players: motionCount, discoveries: discoveries - beforeRefresh, errors }, { players: 0, discoveries: 0, errors: [] });
+			return;
+		}
 		const allMotionReady = async () => {
 			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 			for (const summary of await page.locator('.motion-doc-reference:not([open]) > summary').all()) {
@@ -1138,25 +1150,19 @@ test('one Refresh reloads data and fixtures, preserving visible variants and rec
 	}
 });
 
-test('the full book browses a curated component inventory without an overview page or composite previews', { timeout: 60000 }, async () => {
-	const visibleComponents = catalog.filter(item => item.section === 'components' && !item.hidden);
-	const availableIds = new Set(visibleComponents.map(item => item.controlId));
-	const undocumented = controls.filter(control => availableIds.has(control.id) && control.content === 'tbd');
-	const initial = undocumented.find(control => control.id !== 'menu');
-	assert.ok(initial, 'The availability scenario needs a visible undocumented component');
-	const initialId = `component-${initial.id}`;
-	const panel = await createExplorer(root, { scope: { operation: 'all', active: initialId } });
+test('the full book browses the spec-owned component inventory without an overview page', { timeout: 60000 }, async () => {
+	const inventory = catalog.filter(item => item.section === 'components' && !item.hidden);
+	assert.ok(inventory.some(item => item.controlId === 'menu'), 'The navigation scenario needs a documented Menu');
+	const panel = await createExplorer(root, { scope: { operation: 'all', active: 'component-button' } });
 	let browser;
 	try {
 		browser = await chromium.launch({ headless: true });
 		const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
 		const errors = [];
-		const requests = [];
 		page.on('pageerror', error => errors.push(error.message));
-		page.on('request', request => requests.push(new URL(request.url()).pathname));
-		await mockFixtureRenderer(page, root, ['button']);
+		await mockFixtureRenderer(page, root, ['button', 'menu']);
 		await page.goto(panel.url);
-		await expect(page.locator(`[data-topic="${initialId}"] .topic-content`)).toHaveAttribute('data-topic-state', 'ready');
+		await expect(page.locator('[data-topic="component-button"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		const browse = page.getByRole('button', { name: 'Browse topics', exact: true });
 		await browse.focus();
 		await page.keyboard.press('Enter');
@@ -1166,10 +1172,9 @@ test('the full book browses a curated component inventory without an overview pa
 		}
 		assert.deepEqual(
 			(await components.getByRole('link').evaluateAll(links => links.map(link => link.firstElementChild.textContent))).sort((a, b) => a.localeCompare(b, 'en')),
-			catalog.filter(item => item.group === 'Components' && !item.hidden).map(item => item.title).sort((a, b) => a.localeCompare(b, 'en')));
+			inventory.map(item => item.title).sort((a, b) => a.localeCompare(b, 'en')));
 		await expect(components.locator('h3')).toHaveCount(0);
-		await expect(page.locator('.card, iframe, [data-topic="components"]')).toHaveCount(0);
-		assert.equal(requests.includes('/api/fixtures'), false);
+		await expect(page.locator('.card, [data-topic="components"]')).toHaveCount(0);
 		for (const width of widths) {
 			await page.setViewportSize({ width, height: 900 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -1181,27 +1186,8 @@ test('the full book browses a curated component inventory without an overview pa
 		await page.keyboard.press('Enter');
 		await expect(page.locator('[data-topic="component-menu"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.getByRole('heading', { name: 'Menu', exact: true })).toBeVisible();
-		await expect(page.locator('.topic-pane:visible').getByText('Documentation and examples are not available yet.', { exact: true })).toBeVisible();
-		await expect(page.locator('.topic-pane:visible .topic-content h2')).toHaveCount(0);
-		await expect(page.getByRole('navigation', { name: 'On this page' })).toHaveCount(0);
 		await page.goBack();
-		await expect(page.locator(`[data-topic="${initialId}"] .topic-content`)).toHaveAttribute('data-topic-state', 'ready');
-		assert.equal(requests.includes('/api/fixtures'), false);
-		for (const control of undocumented) {
-			await page.goto(new URL(`/?section=components&controlId=${control.id}`, panel.url).href);
-			await expect(page.locator(`article[data-topic="component-${control.id}"] .topic-content`)).toHaveAttribute('data-topic-state', 'ready');
-			await expect(page.getByRole('heading', { name: control.name, exact: true })).toBeVisible();
-			await expect(page.locator('.topic-pane:visible').getByText('Documentation and examples are not available yet.', { exact: true })).toBeVisible();
-			await expect(page.locator('iframe, .component-api-table, .preview-status')).toHaveCount(0);
-			await expect(page.getByRole('link', { name: 'All components', exact: true })).toHaveCount(0);
-			if (control.nodeId) {
-				await expect(page.getByRole('link', { name: 'View Figma specification', exact: true })).toHaveAttribute('href', new RegExp(control.nodeId.replace(':', '-')));
-			}
-			await expect(page.getByText('Why this topic is reserved', { exact: true })).toHaveCount(0);
-			await expect(page.locator('.topic-content details')).toHaveCount(0);
-			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, control.id);
-		}
-		assert.equal(requests.includes('/api/fixtures'), false);
+		await expect(page.locator('[data-topic="component-button"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await page.goto(new URL('/?section=components', panel.url).href);
 		await expect(page.locator('[data-topic="component-button"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(browse).toBeVisible();
@@ -1275,28 +1261,35 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 		await page.goto(panel.url);
 		await ready('motion');
 
-		await t.test('focused motion has no navigation and retains working, reduced-motion-safe examples', async () => {
+		await t.test('focused Motion has no global navigation and retains source-supported content', async () => {
 			await expect(page.locator('#book-navigation nav, #scope-controls, #topic, .breadcrumbs, .page-jumps')).toHaveCount(0);
 			await expect(page.getByRole('navigation', { name: 'On this page', exact: true })).toBeVisible();
 			await expect(page.getByRole('heading', { name: 'Motion', exact: true })).toBeVisible();
 			await expect(page.locator('#checkout')).toHaveText('Reading: This session');
 			await expect(page.locator('#checkout')).toHaveAttribute('title', root);
-			assert.deepEqual(Object.keys(panel.store.metrics.parses).sort(), ['guidance', 'icons', 'motion', 'motionAppearance', 'sizes', 'sourceDocuments', 'themes', 'typography']);
+			assert.deepEqual(Object.keys(panel.store.metrics.parses).sort(), hasRichMotion
+				? ['guidance', 'icons', 'motion', 'motionAppearance', 'sizes', 'sourceDocuments', 'themes', 'typography']
+				: ['guidance', 'sourceDocuments']);
 			assert.equal(Object.keys(panel.store.metrics.reads).includes('extensions/theme-abyss/themes/abyss-color-theme.json'), false);
 			for (const width of widths) {
 				await page.setViewportSize({ width, height: 900 });
 				await noOverflow();
 			}
-			const reducedExample = page.locator('[data-motion-example="selection"]');
-			await reducedExample.evaluate(element => element.scrollIntoView());
-			await expect(reducedExample.locator('.control-stage')).toHaveAttribute('data-preview-state', 'ready');
-			await reducedExample.getByRole('checkbox', { name: 'Reduced motion', exact: true }).check();
-			await expect(reducedExample.getByRole('checkbox', { name: 'Reduced motion', exact: true })).toHaveCount(1);
-			await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
-			await expect(page.getByRole('checkbox', { name: 'Preview reduced motion' })).toHaveCount(0);
-			await expect(reducedExample.getByRole('checkbox', { name: 'Reduced motion', exact: true })).toBeChecked();
-			assert.equal(await page.evaluate(() => document.getAnimations().filter(animation => animation.playState === 'running').length), 0);
-			await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'light' });
+			if (hasRichMotion) {
+				const reducedExample = page.locator('[data-motion-example="selection"]');
+				await reducedExample.evaluate(element => element.scrollIntoView());
+				await expect(reducedExample.locator('.control-stage')).toHaveAttribute('data-preview-state', 'ready');
+				await reducedExample.getByRole('checkbox', { name: 'Reduced motion', exact: true }).check();
+				await expect(reducedExample.getByRole('checkbox', { name: 'Reduced motion', exact: true })).toHaveCount(1);
+				await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+				await expect(page.getByRole('checkbox', { name: 'Preview reduced motion' })).toHaveCount(0);
+				await expect(reducedExample.getByRole('checkbox', { name: 'Reduced motion', exact: true })).toBeChecked();
+				assert.equal(await page.evaluate(() => document.getAnimations().filter(animation => animation.playState === 'running').length), 0);
+				await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'light' });
+			} else {
+				await expect(page.locator('[data-motion-example], .motion-doc iframe')).toHaveCount(0);
+				await expect(page.locator('[data-topic="motion"] .topic-content')).toContainText('workbench.reduceMotion');
+			}
 		});
 
 		await t.test('adding topics renders ordered articles, preserves DOM, and subscribes every visible article', async () => {
@@ -1344,9 +1337,9 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.locator('#book-pagination, .book-neighbor')).toHaveCount(0);
 			await expect(page.locator('.book-panel-heading strong')).toHaveCount(0);
 			assert.deepEqual(panel.store.metrics.reads, reads);
-			await navigation.getByRole('link', { name: 'Colors', exact: true }).click();
+			await navigation.getByRole('link', { name: /^Colors(?: Draft)?$/ }).click();
 			await ready('colors');
-			await navigation.getByRole('link', { name: 'Typography', exact: true }).click();
+			await navigation.getByRole('link', { name: /^Typography(?: Draft)?$/ }).click();
 			await ready('typography');
 			await expect(page.locator('[data-topic="typography"] h1')).toBeFocused();
 			await expect(page.locator('#book-navigation select, #scope-controls, .breadcrumbs, .page-jumps')).toHaveCount(0);
@@ -1380,7 +1373,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.getByText('No matching topics', { exact: true })).toBeVisible();
 			await expect(navigation.locator('a:visible')).toHaveCount(0);
 			await filter.fill('button');
-			await expect(navigation.getByRole('link', { name: /^Button/ })).toBeVisible();
+			await expect(navigation.getByRole('link', { name: /^Button(?! bar)/ })).toBeVisible();
 			assert.deepEqual(panel.store.metrics.reads, beforeFiltering);
 			await filter.fill('');
 			await expect(page.getByText('No matching topics', { exact: true })).not.toBeVisible();
@@ -1388,28 +1381,28 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await browse.click();
 			await filter.fill('Spacing');
 			await page.keyboard.press('ArrowDown');
-			await expect(navigation.getByRole('link', { name: 'Spacing', exact: true })).toBeFocused();
+			await expect(navigation.getByRole('link', { name: /^Spacing(?: Draft)?$/ })).toBeFocused();
 			await page.keyboard.press('Escape');
 			await expect(browse).toBeFocused();
 			await expect(navigation).not.toBeVisible();
 			await browse.click();
-			const spacing = navigation.getByRole('link', { name: 'Spacing', exact: true });
+			const spacing = navigation.getByRole('link', { name: /^Spacing(?: Draft)?$/ });
 			const link = await spacing.elementHandle();
 			await spacing.focus();
 			await page.keyboard.press('Enter');
 			await ready('spacing');
-			await expect(page.locator('.book-panel a[aria-current="page"]')).toHaveText('Spacing');
+			await expect(page.locator('.book-panel a[aria-current="page"] > span').first()).toHaveText('Spacing');
 			await expect(page.locator('.book-current')).toHaveCount(0);
 			await expect(page.locator('.site-navigation').getByRole('button', { name: 'Browse topics', exact: true })).toBeVisible();
 			await expect(navigation).not.toBeVisible();
 			assert.equal(await page.evaluate(() => document.activeElement.closest('.topic-pane')?.dataset.topic), 'spacing');
-			assert.equal(await link.evaluate(element => element === [...document.querySelectorAll('nav a')].find(item => item.textContent === 'Spacing')), true);
+			assert.equal(await link.evaluate(element => element === [...document.querySelectorAll('nav a')].find(item => item.firstElementChild?.textContent === 'Spacing')), true);
 			assert.deepEqual([...panel.store.subscribed], ['spacing']);
 			await expect(page.locator('#book-navigation .book-topics')).toHaveCount(1);
 			assert.equal((await (await fetch(new URL('/api/metrics', panel.url))).json()).fixtureRequests, 0);
 			await browse.click();
 			await expect(filter).toHaveValue('');
-			await navigation.getByRole('link', { name: 'Design tokens', exact: true }).click();
+			await navigation.getByRole('link', { name: /^Design tokens(?: Draft)?$/ }).click();
 			await ready('tokens');
 			assert.equal(panel.state.scope.mode, 'all');
 			await expect(browse).toBeVisible();
@@ -1421,7 +1414,7 @@ test('article-first presentation and reusable book contents', { timeout: 120000 
 			await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
 			await expect(search).toHaveValue('spacing.size160');
 			await ready('tokens');
-			await expect(page.locator('.book-panel a[aria-current="page"]')).toHaveText('Design tokens');
+			await expect(page.locator('.book-panel a[aria-current="page"] > span').first()).toHaveText('Design tokens');
 			await noOverflow();
 			await page.emulateMedia({ forcedColors: 'active' });
 			await browse.focus();

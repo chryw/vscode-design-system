@@ -21,7 +21,8 @@ function navigationCheckout(t) {
 	mkdirSync(path.join(fixture.bookRoot, 'patterns'), { recursive: true });
 	const ids = ['first', 'second', 'third'];
 	const specification = id => `.github/skills/design-system/foundations/${id}.design.md`;
-	fixture.write('src/vs/feature/shared.md', '# Shared guidance\n\n## Shared\n\nOne document can contribute to multiple topics.\n');
+	// Each specification owns its chapter; the cross-document link opens an ordinary product document.
+	fixture.write('src/vs/feature/notes.md', '# Feature notes\n\n## Finish\n\nEnd of the linked document.\n');
 	const saveBook = (visibleIds, titleOverrides = {}) => {
 		for (const [index, id] of ids.entries()) {
 			const specFile = path.join(fixture.root, specification(id));
@@ -30,19 +31,39 @@ function navigationCheckout(t) {
 				continue;
 			}
 			const title = titleOverrides[id] ?? `${id} topic`;
-			fixture.write(specification(id), `---\ntitle: "${title}"\nkind: foundation\nstatus: stable\norder: ${index}\n---\n# ${title}\n`);
-			const source = `src/vs/feature/${id}.md`;
-			fixture.write(source, `# ${title}\n\n## Introduction\n\nA short overview that scrolls away.\n\n## Start\n\n${'Reading content. '.repeat(400)}\n\n## Continue\n\n[Next topic](./second.md#finish)\n\n${'More guidance. '.repeat(100)}\n\n## Finish\n\nEnd of this topic.\n`);
-			fixture.write(`.github/skills/design-system/content/topics/${id}.json`, JSON.stringify({
-				version: 1, id, renderer: 'guidance', source, content: {},
-				sections: ['Start', 'Continue', 'Finish'].map(title => ({ id: `${id}-${title.toLowerCase()}`, key: title.toLowerCase(), heading: title })),
-				guidance: [{ id: `${id}-shared`, file: 'src/vs/feature/shared.md', heading: 'Shared' }],
-			}));
+			fixture.write(specification(id), `---\ntitle: "${title}"\nkind: foundation\norder: ${index}\n---\n# ${title}\n\n`
+				+ `## Introduction\n\nA short overview that scrolls away.\n\n## Start\n\n${'Reading content. '.repeat(400)}\n\n`
+				+ `## Continue\n\n[Next topic](../../../../src/vs/feature/notes.md#finish)\n\n${'More guidance. '.repeat(100)}\n\n## Finish\n\nEnd of this topic.\n`);
 		}
 	};
 	saveBook(['first', 'second']);
-	return { ...fixture, saveBook };
+	return { ...fixture, saveBook, specification };
 }
+
+test('guidance-only foundations render their heading and contributor source without runtime definitions', { timeout: 30000 }, async t => {
+	const fixture = navigationCheckout(t);
+	const topics = [['motion', 'Motion'], ['colors', 'Colors'], ['tokens', 'Tokens']];
+	for (const [id, title] of topics) {
+		fixture.write(fixture.specification(id), `---\ntitle: "${title}"\nkind: foundation\nisDraft: true\n---\n# ${title}\n\n## Choose deliberately\nKeep the guidance independent of runtime examples.\n`);
+	}
+	const panel = await createExplorer(fixture.root, { watchCheckout: false, scope: { operation: 'all', active: 'motion' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage();
+		await page.goto(panel.url);
+		for (const [id, title] of topics) {
+			await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: `${title} Draft`, exact: true }).click();
+			const article = page.locator(`[data-topic="${id}"]`);
+			await expect(article.locator('h1')).toHaveText(title);
+			await expect(article.locator('.topic-status')).toHaveText('Draft guidance');
+			await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+			await expect(article).toContainText('Keep the guidance independent of runtime examples.');
+			await article.locator('.contributor-resources > summary').click();
+			await expect(article.locator('.contributor-resources a').first()).toHaveAttribute('href', new RegExp(encodeURIComponent(fixture.specification(id))));
+			await expect(page.getByRole('alert').filter({ hasText: /Couldn't refresh/ })).toHaveCount(0);
+		}
+	} finally { await browser.close(); await panel.close(); }
+});
 
 test('canvas Back and Forward restore cross-topic anchors and reading position without a document reload', { timeout: 30000 }, async t => {
 	const fixture = navigationCheckout(t);
@@ -124,15 +145,15 @@ test('compact reading headers exclude overview and repository controls while ret
 				await page.keyboard.press('Enter');
 				await page.keyboard.press('Tab');
 				await expect(article.locator('.contributor-resources a').first()).toBeFocused();
-				await expect(article.locator('.contributor-resources a').first()).toHaveAttribute('href', /\/source\?file=src%2Fvs%2Ffeature%2Ffirst.md/);
-				assert.deepEqual(await article.locator('.contributor-resources .repository-path').allTextContents(), ['src/vs/feature/first.md', 'src/vs/feature/shared.md']);
+				await expect(article.locator('.contributor-resources a').first()).toHaveAttribute('href', /\/source\?file=\.github%2Fskills%2Fdesign-system%2Ffoundations%2Ffirst\.design\.md/);
+				assert.deepEqual(await article.locator('.contributor-resources .repository-path').allTextContents(), ['.github/skills/design-system/foundations/first.design.md']);
 				await files.focus();
 				await page.keyboard.press('Space');
 				await expect(files).toBeFocused();
 			}
 		}
 		fixture.saveBook(['first', 'second', 'third']);
-		const sourceFile = 'src/vs/feature/first.md';
+		const sourceFile = fixture.specification('first');
 		fixture.write(sourceFile, readFileSync(path.join(fixture.root, sourceFile), 'utf8')
 			.replace('## Introduction\n\nA short overview that scrolls away.\n\n', ''));
 		const before = panel.state.views.first;
@@ -333,7 +354,7 @@ test('reader appearance overrides the host preference and survives navigation an
 		await expect(popup.getByRole('menuitemradio', { name: 'Light', exact: true })).toBeFocused();
 		await page.keyboard.press('Escape');
 		await expect(appearance).toBeFocused();
-		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: 'Spacing', exact: true }).click();
+		await page.getByRole('navigation', { name: 'Topics', exact: true }).getByRole('link', { name: /^Spacing(?: Draft)?$/ }).click();
 		await expect(page.locator('[data-topic="spacing"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(appearance).toHaveAttribute('aria-label', 'Appearance: Light');
 		await page.reload();

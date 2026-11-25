@@ -18,7 +18,9 @@ export async function renderFixturePreview(content, control, fixtureId, signal, 
 	example.append(status);
 	content.append(example);
 	if (!control.groups.length) {
-		status.textContent = control.docs.preview;
+		example.dataset.previewState = 'not-defined';
+		status.textContent = 'This specification has no live example in the selected checkout.';
+		onStatus?.('not-defined');
 		return;
 	}
 	const controls = node('div');
@@ -36,13 +38,15 @@ export async function renderFixturePreview(content, control, fixtureId, signal, 
 	open.rel = 'noopener noreferrer';
 	open.hidden = true;
 	actions.append(open);
+	let viewer;
 	if (heading) {
 		const stage = node('div', undefined, 'reference-live-stage');
 		stage.append(frame);
 		const chrome = node('div');
 		chrome.append(controls);
 		if (!actionsHost) { chrome.append(actions); }
-		example.append(exampleViewer(stage, chrome));
+		viewer = exampleViewer(stage, chrome);
+		example.append(viewer);
 	} else {
 		// Headingless previews supply their own surrounding viewer and controls.
 		example.append(controls, frame);
@@ -158,6 +162,12 @@ export async function renderFixturePreview(content, control, fixtureId, signal, 
 		connecting = (async () => {
 			const next = await request(`/api/fixtures${refresh ? '?refresh=true' : ''}`, { signal });
 			if (signal.aborted || version !== generation) { return; }
+			if (next.availability === 'source-only') {
+				if (viewer) { viewer.hidden = true; }
+				message('source-only', next.reason);
+				return;
+			}
+			if (viewer) { viewer.hidden = false; }
 			catalog = next;
 			const variants = catalog.controls.find(item => item.id === control.id)?.variants ?? [];
 			selected = fixtureId ? variants.find(variant => variant.id === fixtureId) : preferredTheme ? variants.find(variant => variant.variant === preferredTheme) : variants[0];
@@ -254,9 +264,9 @@ export async function renderFixturePreview(content, control, fixtureId, signal, 
 export async function renderComponents(content, system, fixtureId, signal, onView, resolveResource) {
 	const control = system.controls.find(control => control.id === system.view.controlId);
 	let specification;
-	if (control.nodeId) {
+	if (control.designReference || control.nodeId) {
 		specification = node('a', 'View Figma specification');
-		specification.href = specificationUrl(control.nodeId);
+		specification.href = control.designReference ?? specificationUrl(control.nodeId);
 		specification.target = '_blank';
 		specification.rel = 'noopener noreferrer';
 	}

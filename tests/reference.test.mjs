@@ -6,21 +6,21 @@
 
 import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import { catalog, sections, controls, curateFixtures, foundationSections } from './repository-helpers.mjs';
+import { catalog, sections, controls, curateFixtures, foundationSections, legacySystem, readRepository, repository } from './repository-helpers.mjs';
 import { parseJsonc } from '../adapters/vscode/jsonc.mjs';
 import { TopicStore } from '../runtime/store.mjs';
-import { toolkitSpecifications, specificationUrl } from '../view/component-specs.mjs';
 import { pageJumps, topicPresentation } from '../view/navigation-model.mjs';
 import { findTokens, lookupEntries, visualTokens, corePaletteThemes, designTokenGroups, definitionEntries } from '../view/token-lookup.mjs';
-import { readPage } from '../adapters/vscode/groups/authored.mjs';
+import { readSpecification } from '../adapters/vscode/groups/authored.mjs';
 import { ansiRegistryFile, readAnsiColors } from '../adapters/vscode/ansi-colors.mjs';
 import { parseProvenance, readProvenance } from '../adapters/vscode/provenance.mjs';
 import { selectFixtureSession } from '../adapters/vscode/fixtures.mjs';
 import { createReferenceModel } from '../adapters/vscode/reference-model.mjs';
 import { iconRowEnd } from '../view/icons.mjs';
 import path from 'node:path';
+import { createDocumentCheckout } from './document-helpers.mjs';
 
 const root = workspaceRoot;
 const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026' };
@@ -153,30 +153,36 @@ test('component references validate real APIs while reserved topics expose no in
 	assert.equal((await read('components')).controls[0].id, 'button');
 });
 
-test('toolkit evidence is retained without promoting every specification to primary navigation', () => {
-	assert.equal(toolkitSpecifications.length, 118);
-	assert.equal(new Set(toolkitSpecifications.map(specification => specification.id)).size, toolkitSpecifications.length);
+test('component specifications own design references without a toolkit inventory or primary-navigation promotion', t => {
+	const fixture = createDocumentCheckout(t);
+	const file = 'src/vs/base/browser/ui/button/button.design.md';
+	fixture.write(file, readFileSync(path.join(root, file), 'utf8')
+		.replace(/^  designReference:.*\r?\n/gm, '')
+		.replace('component:\n', 'component:\n  designReference: "https://www.figma.com/design/Example01/Button"\n'));
+	const { catalog, controls, toolkitSpecifications } = readRepository(fixture.root);
+	assert.deepEqual(toolkitSpecifications, [], 'authored checkouts do not maintain a toolkit node inventory');
 	assert.deepEqual(controls.map(control => control.name), controls.map(control => control.name).sort((a, b) => a.localeCompare(b, 'en')));
-	for (const specification of toolkitSpecifications) {
-		const control = controls.find(control => control.id === specification.id);
-		assert.equal(control.nodeId, specification.nodeId);
-		assert.match(specificationUrl(control.nodeId), /^https:\/\/www\.figma\.com\/design\/AJnTgc00iEI0KTVdyoN997\/\?node-id=\d+-\d+$/);
+	assert.ok(controls.some(control => control.designReference));
+	for (const control of controls.filter(control => control.designReference)) {
+		assert.match(control.designReference, /^https:\/\/www\.figma\.com\/(?:design|file)\/[A-Za-z0-9]+\//, control.id);
 	}
-	assert.equal(controls.filter(control => control.content === 'ready').length, 15);
 	assert.equal(catalog.some(topic => topic.id === 'components'), false);
 	for (const control of controls) {
 		const topic = catalog.find(topic => topic.controlId === control.id);
 		assert.equal('family' in control, false);
-		assert.equal('subgroup' in topic, control.kind === 'primitive' || control.kind === 'composite');
+		assert.equal(topic.design, control.specPath);
+		assert.equal(topic.subgroup, undefined);
 		assert.deepEqual({ content: topic.content, fixture: topic.fixture, hidden: topic.hidden },
-			{ content: control.content, fixture: control.content === 'ready', hidden: control.hidden });
+			{ content: control.content, fixture: control.groups.length > 0, hidden: control.hidden });
 	}
 });
 
-test('chapter introductions and navigation come from authored pages', () => {
-	assert.deepEqual(sections.filter(section => !['motion', 'patterns'].includes(section.id))
-		.filter(section => !readPage(file => readFileSync(`${root}/${file}`, 'utf8'), section.id).authored.intro).map(section => section.id), []);
-	assert.deepEqual(pageJumps({ section: 'components' }, readPage(file => readFileSync(`${root}/${file}`, 'utf8'), 'components').page), []);
+test('chapter introductions and navigation come from owning specifications', async t => {
+	const specified = sections.filter(section => section.id !== 'motion' && repository.projection.designSpecs.some(spec => spec.id === section.id));
+	assert.ok(specified.length > 10);
+	assert.deepEqual(specified.filter(section => !readSpecification(file => readFileSync(`${root}/${file}`, 'utf8'), section.id, repository).authored.intro)
+		.map(section => section.id), []);
+	assert.deepEqual(pageJumps({ section: 'components' }, (await reader(t)('components')).page), []);
 });
 
 test('foundation source actions and presentation policy use only the selected topic', async t => {
@@ -194,8 +200,12 @@ test('foundation source actions and presentation policy use only the selected to
 test('lookup uses central registrations, real identity and values, with canonical tokens before aliases', async t => {
 	const system = await reader(t)('tokens');
 	const entries = definitionEntries(system);
-	assert.ok(entries.some(entry => entry.source.file === 'src/vs/platform/theme/common/motionRegistry.ts'));
-	assert.ok(entries.some(entry => entry.source.file === 'src/vs/platform/theme/common/colors/semanticColors.ts'));
+	for (const source of ['src/vs/platform/theme/common/motionRegistry.ts', 'src/vs/platform/theme/common/colors/semanticColors.ts']) {
+		assert.equal(entries.some(entry => entry.source.file === source), existsSync(path.join(root, source)), source);
+	}
+	if (!existsSync(path.join(root, 'src/vs/platform/theme/common/colors/semanticColors.ts'))) {
+		assert.ok(entries.some(entry => entry.source.file === 'src/vs/platform/theme/common/colors/baseColors.ts'));
+	}
 	for (const query of ['fontSize.body1', '--vscode-fontSize-body1', 'var(--vscode-fontSize-body1)']) {
 		assert.equal(findTokens(system.sizes, query)[0].id, 'fontSize.body1');
 	}
@@ -217,16 +227,18 @@ test('visual scales and scoped coverage reflect source changes rather than hardc
 	for (const section of ['spacing', 'shape']) {
 		const system = await read(section);
 		assert.deepEqual(new Set(visualTokens(system, section).map(token => token.id)), new Set(system.sizes.filter(token => !token.deprecated).map(token => token.id)));
-		assert.ok(system.reference.topics[section].every(item => item.scope.length && item.scope.every(file => system.sourceFiles.includes(file))));
+		assert.deepEqual(system.reference.topics, {}, 'authored checkouts carry readiness in specification front matter');
+		const legacy = legacySystem(system);
+		assert.ok(createReferenceModel(legacy, [section]).topics[section].every(item => item.scope.length && item.scope.every(file => legacy.sourceFiles.includes(file))));
 	}
-	const spacing = await read('spacing');
-	assert.equal(spacing.reference.topics.spacing.find(item => item.expected === 'Named semantic spacing roles').status, 'not-defined-in-covered-sources');
+	const spacing = legacySystem(await read('spacing'));
+	assert.equal(createReferenceModel(spacing, ['spacing']).topics.spacing.find(item => item.expected === 'Named semantic spacing roles').status, 'not-defined-in-covered-sources');
 	const future = { ...spacing, sizes: [...spacing.sizes, { ...spacing.sizes[0], id: 'spacing.group', deprecated: false }] };
 	assert.equal(createReferenceModel(future, ['spacing']).topics.spacing.find(item => item.expected === 'Named semantic spacing roles').status, 'source-defined');
-	const typography = await read('typography');
+	const typography = legacySystem(await read('typography'));
 	assert.deepEqual(typography.reference.scales.typeRoles.map(token => token.id),
 		typography.typography.tokens.filter(token => token.id.startsWith('fontSize.') && !token.deprecated).map(token => token.id));
-	assert.equal(typography.reference.topics.typography[1].status, 'implementation-only');
+	assert.equal(createReferenceModel(typography, ['typography']).topics.typography[1].status, 'implementation-only');
 	const metrics = { ...typography, sizes: [...typography.sizes, { ...typography.sizes[0], id: 'lineHeight.body1', deprecated: false }] };
 	assert.equal(createReferenceModel(metrics, ['typography']).topics.typography[2].status, 'source-defined');
 	assert.throws(() => createReferenceModel({ ...spacing, documents: {} }, ['shape']), /needs the covered source/);
@@ -259,10 +271,12 @@ test('elevation reads live tier guidance, registered radii, and actual shadow so
 	]);
 	assert.deepEqual(system.reference.scales.shadows.map(token => token.css), ['--vscode-shadow-sm', '--vscode-shadow-md', '--vscode-shadow-lg', '--vscode-shadow-xl']);
 	for (const token of system.reference.scales.shadows) { assert.ok(sourceLine(token.source).includes(token.value)); }
-	assert.equal(system.reference.topics.elevation[0].status, 'source-defined');
-	assert.equal(createReferenceModel({ ...system, elevation: { ...system.elevation, shadowUsage: [] } }, ['elevation']).topics.elevation[2].status, 'not-assessed');
+	assert.deepEqual(system.reference.topics, {});
+	const legacy = legacySystem(system);
+	assert.equal(createReferenceModel(legacy, ['elevation']).topics.elevation[0].status, 'source-defined');
+	assert.equal(createReferenceModel({ ...legacy, elevation: { ...system.elevation, shadowUsage: [] } }, ['elevation']).topics.elevation[2].status, 'not-assessed');
 	const relocated = 'src/vs/platform/theme/common/elevation-guide.md';
-	const relocatedSystem = { ...system, authored: { ...system.authored, markdownSource: relocated }, sourceFiles: [...system.sourceFiles, relocated] };
+	const relocatedSystem = { ...legacy, authored: { ...system.authored, markdownSource: relocated }, sourceFiles: [...legacy.sourceFiles, relocated] };
 	assert.deepEqual(createReferenceModel(relocatedSystem, ['elevation']).topics.elevation[1].scope, [relocated]);
 	const themes = await reader(t)('theming');
 	assert.deepEqual(system.elevation.palettes.map(palette => ({
@@ -278,6 +292,13 @@ test('elevation reads live tier guidance, registered radii, and actual shadow so
 
 test('motion distinguishes explanatory topics, implementation observations, and product tokens', async t => {
 	const system = await reader(t)('motion');
+	if (system.genericGuidance) {
+		assert.deepEqual({
+			renderer: system.page.renderer, sections: system.sourceSections.length > 0,
+			definitions: system.resources.definitions, motionDocumentation: system.motionDocumentation,
+		}, { renderer: 'guidance', sections: true, definitions: [], motionDocumentation: undefined });
+		return;
+	}
 	for (const sample of system.motion) {
 		for (const declaration of sample.declarations) {
 			const line = sourceLine(declaration.source);

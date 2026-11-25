@@ -10,10 +10,23 @@ import test from 'node:test';
 import { TopicStore } from '../runtime/store.mjs';
 import { createReferenceModel } from '../adapters/vscode/reference-model.mjs';
 import { load as readPhilosophy } from '../adapters/vscode/groups/philosophy.mjs';
+import { legacySystem } from './repository-helpers.mjs';
 
 const root = workspaceRoot;
 
-test('source coverage distinguishes missing geometry from the authored elevation specification', async () => {
+test('authored checkouts expose specification readiness rather than viewer coverage notes', async () => {
+	const store = new TopicStore(root);
+	try {
+		const result = [];
+		for (const topic of ['size', 'stroke', 'layout', 'elevation']) {
+			const read = await store.read(topic, { theme: 'Dark 2026' });
+			result.push([topic, read.coverage.length, Object.keys(read.data.reference.topics).length, read.data.referenceNotes]);
+		}
+		assert.deepEqual(result, [['size', 0, 0, undefined], ['stroke', 0, 0, undefined], ['layout', 0, 0, undefined], ['elevation', 0, 0, undefined]]);
+	} finally { store.close(); }
+});
+
+test('legacy source coverage distinguishes missing geometry from the authored elevation specification', async () => {
 	const store = new TopicStore(root);
 	try {
 		const result = [];
@@ -21,9 +34,9 @@ test('source coverage distinguishes missing geometry from the authored elevation
 			['size', 'Product control geometry'], ['stroke', 'Boundary and scrollbar recipes'],
 			['layout', 'Named composition recipes'], ['elevation', 'Shadow-tier usage guidance'],
 		]) {
-			const data = (await store.read(topic, { theme: 'Dark 2026' })).data;
-			const entry = data.reference.topics[topic].find(entry => entry.expected === expected);
-			result.push([topic, entry.status, entry.scope.every(file => data.sourceFiles.includes(file))]);
+			const system = legacySystem((await store.read(topic, { theme: 'Dark 2026' })).data);
+			const entry = createReferenceModel(system, [topic]).topics[topic].find(entry => entry.expected === expected);
+			result.push([topic, entry.status, entry.scope.every(file => system.sourceFiles.includes(file))]);
 		}
 		assert.deepEqual(result, [
 			['size', 'not-assessed', true], ['stroke', 'not-assessed', true],
@@ -32,15 +45,14 @@ test('source coverage distinguishes missing geometry from the authored elevation
 	} finally { store.close(); }
 });
 
-test('defined coverage and authored annotations require actual covered inputs', async () => {
+test('legacy defined coverage and annotations require actual covered inputs', async () => {
 	const store = new TopicStore(root);
 	try {
 		const data = (await store.read('shape', { theme: 'Dark 2026' })).data;
-		assert.throws(() => createReferenceModel({ ...data, sourceFiles: [] }, ['shape']), /needs the covered source/);
-		assert.throws(() => createReferenceModel({ ...data, referenceNotes: {} }, ['shape']), /Missing source coverage note/);
-		const notes = structuredClone(data.referenceNotes);
-		notes.shape['Radius scale']['source-defined'] = 'Changed coverage annotation.';
-		assert.equal(createReferenceModel({ ...data, referenceNotes: notes }, ['shape']).topics.shape[0].summary, 'Changed coverage annotation.');
+		assert.throws(() => createReferenceModel({ ...legacySystem(data), sourceFiles: [] }, ['shape']), /needs the covered source/);
+		assert.throws(() => createReferenceModel(legacySystem(data, {}), ['shape']), /Missing source coverage note/);
+		const notes = { shape: { 'Radius scale': { 'source-defined': 'Changed coverage annotation.' }, 'Surface-role guidance': { 'source-defined': 'Guidance.' } } };
+		assert.equal(createReferenceModel(legacySystem(data, notes), ['shape']).topics.shape[0].summary, 'Changed coverage annotation.');
 	} finally { store.close(); }
 });
 

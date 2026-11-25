@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import { node, tokenButton, disclosureSummary } from '../ui.mjs';
-import { definitionEntries, designTokenGroups } from '../token-lookup.mjs';
+import { definitionEntries, designTokenGroups, undeclaredTokenGroups } from '../token-lookup.mjs';
 import { motionTokenGroups } from '../motion-reference.mjs';
 
 function tokenRow(token) {
@@ -33,6 +33,9 @@ export function render(target, data, host, signal) {
 	const reference = node('section', undefined, 'article-section');
 	reference.id = 'tokens-reference';
 	reference.setAttribute('aria-label', 'Token reference');
+	if (data.unavailableTokenSources?.length) {
+		reference.append(node('p', `Unavailable sources in this checkout: ${data.unavailableTokenSources.join(', ')}. Only available registrations are shown.`, 'muted'));
+	}
 	const label = node('label', 'Search tokens');
 	const search = node('input', undefined, 'chrome-input');
 	search.type = 'search';
@@ -41,6 +44,10 @@ export function render(target, data, host, signal) {
 	search.addEventListener('input', () => host.onSearch(search.value), { signal });
 	label.append(search);
 	reference.append(label);
+	const undeclared = undeclaredTokenGroups(tokens);
+	if (undeclared.length) {
+		reference.append(node('p', `Tokens without a declared domain are not listed: ${undeclared.join(', ')}. Declare tokenDomain in the owning specification.`, 'muted'));
+	}
 	const list = node('div', undefined, 'token-list');
 	for (const [id, values] of designTokenGroups(tokens)) {
 		const guidance = data.tokenGuidance.find(domain => domain.id === id);
@@ -88,5 +95,5 @@ export function render(target, data, host, signal) {
 	reference.append(list);
 	if (!tokens.length) { reference.append(node('p', 'No matching foundation tokens')); }
 	target.append(reference);
-	return tokens.length;
+	return { count: tokens.length, guidanceBefore: reference.id };
 }

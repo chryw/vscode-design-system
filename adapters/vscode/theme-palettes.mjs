@@ -27,6 +27,23 @@ const registrations = {
 };
 const aliases = { colorText: 'color.text', colorBackgroundCanvas: 'color.background.canvas', colorBackgroundRaised: 'color.background.raised', colorBorderFocus: 'color.border.focus', colorBorderContrast: 'color.border.contrast' };
 
+export const themeDefaultsFile = 'src/vs/workbench/services/themes/common/workbenchThemeService.ts';
+
+export function readDefaultPalettes(text) {
+	const declaration = text.match(/^export namespace ThemeSettingDefaults\s*\{(?<body>[\s\S]*?)^\}/m);
+	if (!declaration) { throw new Error('Cannot read the product default theme settings'); }
+	const entries = [...declaration.groups.body.matchAll(/\bexport const COLOR_THEME_(?<scheme>LIGHT|DARK|HC_DARK|HC_LIGHT)\s*=\s*['"](?<id>[^'"]+)['"]\s*;/g)];
+	const schemes = ['LIGHT', 'DARK', 'HC_DARK', 'HC_LIGHT'];
+	if (entries.length !== schemes.length || new Set(entries.map(entry => entry.groups.scheme)).size !== schemes.length) {
+		throw new Error('The product default theme settings changed; update the source adapter');
+	}
+	return schemes.map(scheme => ({
+		id: entries.find(entry => entry.groups.scheme === scheme).groups.id,
+		label: scheme.startsWith('HC_') ? `High contrast ${scheme.slice(3).toLowerCase()}`
+			: scheme[0] + scheme.slice(1).toLowerCase(),
+	}));
+}
+
 export function createThemePaletteReader(read) {
 	const defaults = new Map();
 	function defaultColor(id, scheme, colors) {

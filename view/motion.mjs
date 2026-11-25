@@ -133,14 +133,18 @@ export async function renderMotion(content, system, signal, presentation) {
 	};
 	const guidance = (parent, heading, level = 3, description, title) => {
 		const authored = motionSection(model, heading);
-		parent.append(node(`h${level}`, title ?? authored.title));
+		const headingNode = node(`h${level}`, title ?? authored.title);
+		parent.append(headingNode);
 		appendMarkdown(parent, description ?? authored.markdown);
+		return headingNode;
 	};
 	const renderBlock = (parent, block) => {
 		switch (block.type) {
-			case 'guidance':
-				guidance(parent, block.heading, block.level, block.description, block.title);
+			case 'guidance': {
+				const heading = guidance(parent, block.heading, block.level, block.description, block.title);
+				if (block.id) { heading.id = `motion-${block.id}`; }
 				break;
+			}
 			case 'group': {
 				const group = section(block.id, motionSection(model, block.heading).title, 'h3');
 				appendMarkdown(group, block.description ?? motionSection(model, block.heading).markdown);
@@ -201,7 +205,7 @@ export async function renderMotion(content, system, signal, presentation) {
 				break;
 			}
 			case 'recipe':
-				renderRecipe(parent, block.id, 3);
+				renderRecipe(parent, block.id, block.level ?? 3);
 				break;
 			case 'examples': {
 				const group = section(block.id, motionSection(model, block.heading).title, 'h3');

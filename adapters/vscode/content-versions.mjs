@@ -106,7 +106,7 @@ export class ContentVersions {
 			'-c', `core.hooksPath=${hooks}`, '-c', 'core.fsmonitor=false', ...(cwd === repository ? ['--git-dir', repository] : []), ...args,
 		], {
 			cwd, encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true,
-			env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, signal,
+			env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_LFS_SKIP_SMUDGE: '1' }, signal,
 		})).stdout.trim();
 		try {
 			mkdirSync(hooks, { recursive: true });

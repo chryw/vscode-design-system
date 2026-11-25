@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-import { readContent, readPage } from './authored.mjs';
+import { withoutPresentationData } from '../../../model/documents.mjs';
+import { readContent, readPage, readSpecification } from './authored.mjs';
 export const files = {
 	principles: ['principles'],
 	typography: ['typography', 'design-tokens'],
@@ -24,6 +25,9 @@ export const files = {
 	components: [],
 };
 export function load({ read, repository }, topic) {
+	if (repository.projection.mode === 'authored') {
+		return topic === 'documentation' ? {} : readSpecification(read, topic, repository);
+	}
 	const page = topic !== 'motion' ? readPage(read, topic, repository.projection.book) : {};
 	const documents = (files[topic] ?? []).map(name => {
 		const file = ['principles', 'typography', 'spacing', 'shape', 'size', 'elevation', 'iconography', 'motion'].includes(name)
@@ -31,8 +35,7 @@ export function load({ read, repository }, topic) {
 			: name === 'design-tokens' || name === 'coding-guidelines'
 				? `.github/instructions/${name}.instructions.md`
 				: `.github/skills/${name}/SKILL.md`;
-		const text = read(file);
-		return { file, text };
+		return { file, text: withoutPresentationData(read(file)) };
 	});
 	return {
 		documents: { [topic]: documents },

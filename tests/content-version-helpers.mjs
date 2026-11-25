@@ -41,6 +41,7 @@ export function createVersionCheckout(t) {
 	writeFileSync(path.join(root, document), '# Session edit\n\nUncommitted session guidance.\n');
 	return {
 		root, directory, remote, home: path.join(directory, 'private-home'), document,
+		write: source.write,
 		read: checkout => readFileSync(path.join(checkout, document), 'utf8'),
 		git: args => git(root, args),
 		publish(branch, markdown) {

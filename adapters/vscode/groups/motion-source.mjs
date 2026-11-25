@@ -7,10 +7,10 @@
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { headingId, parseDocument } from '../../../model/documents.mjs';
 import { motionTokenCategory } from '../../../view/motion-reference.mjs';
-import { bookRoot, contentPath, resolveContent, sourcePath } from './authored.mjs';
-
-export const motionPageFile = '.github/skills/design-system/content/topics/motion.json';
+import { bookRoot, contentPath, currentSpecification, resolveContent, sourcePath } from './authored.mjs';
+import { workspaceRoot } from '../../../runtime/paths.mjs';
 
 export const motionDefinitionFiles = [
 	'src/vs/platform/theme/common/motionRegistry.ts',
@@ -106,8 +106,8 @@ export function parseMotionDefinitions(ts, registryText, recipeText, source, res
 	return projectMotionDefinitions(tokens, recipes, responses);
 }
 
-export function readMotionData({ root, read }, file, names) {
-	const ts = createRequire(path.join(root, 'package.json'))('typescript');
+export function readMotionData({ read }, file, names) {
+	const ts = createRequire(path.join(workspaceRoot, 'package.json'))('typescript');
 	const parsed = motionModule(ts, read(file), file);
 	return Object.fromEntries(names.map(name => [name, parsed.literal(parsed.constants.get(name))]));
 }
@@ -243,7 +243,7 @@ export function projectMotionDefinitions(tokens, recipes, responses = []) {
 	};
 }
 
-export function readMotionDefinitions({ root, read, source }) {
+export function readMotionDefinitions({ read, source }) {
 	const definitionTexts = motionDefinitionFiles.map(file => {
 		try { return read(file); }
 		catch (error) { if (error.code === 'ENOENT') { return null; } throw error; }
@@ -252,12 +252,12 @@ export function readMotionDefinitions({ root, read, source }) {
 		if (definitionTexts[1] !== null) { throw new Error('Motion recipes exist without their token catalog'); }
 		return { status: 'absent', tokens: [], recipes: [], responses: [], durations: [], easings: [], scope: motionSourceFiles };
 	}
-	const require = createRequire(path.join(root, 'package.json'));
+	const require = createRequire(path.join(workspaceRoot, 'package.json'));
 	let ts;
 	try { ts = require('typescript'); }
 	catch (error) {
 		if (error.code !== 'MODULE_NOT_FOUND') { throw error; }
-		throw new Error('Reading typed motion definitions needs this checkout’s TypeScript dependency; restore its repository dependencies');
+		throw new Error("Reading typed motion definitions needs the session workspace's TypeScript dependency; restore its repository dependencies");
 	}
 	const registry = motionModule(ts, definitionTexts[0], motionDefinitionFiles[0]);
 	const declaration = registry.constants.get('motionTokenRegistry');
@@ -285,12 +285,82 @@ export function readMotionDefinitions({ root, read, source }) {
 	};
 }
 
+/**
+ * Current chapters follow selected Markdown headings; specimens only bind visual examples to those headings.
+ * Older checkouts can still supply their separate page descriptor.
+ */
+function readMotionDescriptor(context) {
+	const projection = context.repository.projection;
+	const binding = projection.book.topics.find(topic => topic.id === 'motion')?.page;
+	if (!binding) { throw new Error('Missing Motion source composition'); }
+	if (projection.mode !== 'authored') {
+		const pageFile = contentPath(binding);
+		return { pageFile, descriptor: JSON.parse(context.read(pageFile)) };
+	}
+	const spec = currentSpecification(context.read, 'motion', context.repository);
+	if (spec.path !== binding || spec.presentation !== 'motion' || !spec.specimens) {
+		throw new Error(`Missing Motion composition in ${binding}`);
+	}
+	// The owning specification is the design source; specimens cannot relocate it or replace the chapter identity.
+	const reserved = ['version', 'id', 'renderer', 'source', 'sections', 'composition'].filter(key => Object.hasOwn(spec.specimens, key));
+	if (reserved.length) { throw new Error(`${spec.path}: Motion specimens must not redefine ${reserved.join(', ')}`); }
+	const { bindings = {}, examples, ...specimens } = spec.specimens;
+	if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) { throw new Error('Invalid Motion specimen bindings'); }
+	const document = parseDocument(context.read(spec.path), { id: spec.path });
+	const sections = [];
+	const selected = new Set();
+	const copy = spec.sectionCopy ?? {};
+	let section;
+	for (const heading of document.headings) {
+		const anchors = heading.aliases.filter(alias => alias.startsWith('motion-'));
+		if (!anchors.length) {
+			if (heading.level <= 2) { section = undefined; }
+			continue;
+		}
+		const id = anchors[0].slice('motion-'.length);
+		if (anchors.length !== 1 || selected.has(id)) { throw new Error(`Ambiguous Motion chapter anchor: ${id}`); }
+		selected.add(id);
+		const description = resolveContent(copy[id] ?? {}, context.read, { source: specimens.textSource ?? spec.path });
+		if (!description || typeof description !== 'object' || Array.isArray(description)
+			|| Object.keys(description).some(key => key !== 'description')) {
+			throw new Error(`Motion section copy can only supply description: ${id}`);
+		}
+		if (heading.level === 2) {
+			section = { id, heading: heading.id, ...description, blocks: [] };
+			sections.push(section);
+			if (bindings[id]) { throw new Error(`Bind Motion specimens to a subheading: ${id}`); }
+		} else {
+			if (!section || heading.level < 3) { throw new Error(`Motion subheading has no chapter section: ${id}`); }
+			const binding = bindings[id] ?? {};
+			if (!binding || typeof binding !== 'object' || Array.isArray(binding)
+				|| Object.keys(binding).some(key => !['type', 'id', 'examples', 'recipes'].includes(key))
+				|| Object.hasOwn(bindings, id) && !['duration', 'easing', 'responses', 'properties', 'transitions', 'recipe', 'examples', 'example'].includes(binding.type)) {
+				throw new Error(`Unsupported Motion specimen binding: ${id}`);
+			}
+			section.blocks.push({ type: 'guidance', id, heading: heading.id, level: heading.level, ...binding, ...description });
+		}
+	}
+	for (const id of [...Object.keys(bindings), ...Object.keys(copy)]) {
+		if (!selected.has(id)) { throw new Error(`Missing Motion chapter anchor: motion-${id}`); }
+	}
+	return {
+		pageFile: spec.path,
+		descriptor: {
+			version: 1, id: 'motion', renderer: 'motion', source: spec.path, ...specimens, sections,
+			...(examples === undefined ? {} : { examples: Array.isArray(examples)
+				? examples.map(example => {
+					if (!example || typeof example !== 'object') { return example; }
+					const { fixture, file, label, ...rest } = example;
+					return rest;
+				})
+				: examples }),
+		},
+	};
+}
+
 /** Resolve the Motion page's heading references without executing authored content. */
 export function readMotionPage(context, definitions, presetBindingIds) {
-	const binding = context.repository.projection.book.topics.find(topic => topic.id === 'motion')?.page;
-	if (!binding) { throw new Error('Missing Motion source composition'); }
-	const pageFile = contentPath(binding);
-	const descriptor = JSON.parse(context.read(pageFile));
+	const { pageFile, descriptor } = readMotionDescriptor(context);
 	const page = resolveContent(descriptor, context.read, { source: descriptor.textSource });
 	if (page.version !== 1 || page.id !== 'motion' || page.renderer !== 'motion' || typeof page.source !== 'string'
 		|| page.sources !== undefined && (!Array.isArray(page.sources) || page.sources.length > 12
@@ -315,7 +385,7 @@ export function readMotionPage(context, definitions, presetBindingIds) {
 				const heading = line.match(/^(?<marks>#{1,6})\s+(?<title>.+?)\s*#*\s*$/);
 				if (heading) {
 					const title = heading.groups.title;
-					const id = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+					const id = headingId(title);
 					if (sections[id] || headings.some(heading => heading.id === id)) {
 						throw new Error(`Ambiguous Motion heading: ${id} in ${file}`);
 					}
@@ -328,7 +398,8 @@ export function readMotionPage(context, definitions, presetBindingIds) {
 		for (const [index, heading] of headings.entries()) {
 			sections[heading.id] = {
 				title: heading.title, level: heading.level,
-				markdown: text.slice(heading.start, headings[index + 1]?.offset ?? text.length).replace(/\r\n/g, '\n').trim(),
+				markdown: text.slice(heading.start, headings[index + 1]?.offset ?? text.length).replace(/\r\n/g, '\n')
+					.replace(/^\s*<a\s+id=["'][\w:-]+["']\s*>\s*(?:<\/a>)?\s*$/gm, '').trim(),
 				source: context.source(file, heading.offset),
 			};
 		}

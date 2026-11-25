@@ -9,19 +9,19 @@ import { workspaceRoot } from '../runtime/paths.mjs';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { motionDefinitionFiles, motionPageFile, motionResponseFiles, motionSourceFiles, parseMotionDefinitions, projectMotionDefinitions, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
+import { motionDefinitionFiles, motionResponseFiles, motionSourceFiles, parseMotionDefinitions, projectMotionDefinitions, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
 import { load } from '../adapters/vscode/groups/motion.mjs';
 import { pageJumps } from '../view/navigation-model.mjs';
 import { motionRecipeExamples, motionExample } from '../view/motion-recipes.mjs';
 import { motionPresetBindingFiles, readMotionPresetBindings } from '../adapters/vscode/groups/motion-preset-bindings.mjs';
+import { hasRichMotion, legacyMotionDescriptor, legacyMotionPageFile, legacyMotionProjection, motionComposition, motionGuidanceFile, motionImplementationFile, motionProjection, motionTextFile, moveMotionStylesFirst, withMotionComposition } from './motion-helpers.mjs';
 
 const root = workspaceRoot;
-const motionPage = JSON.parse(readFileSync(`${root}/${motionPageFile}`, 'utf8'));
-const motionGuidanceFile = motionPage.source;
-const motionImplementationFile = motionPage.sources[0].file;
-const motionBook = { topics: [{ id: 'motion', page: 'content/topics/motion.json' }] };
 const ts = createRequire(`${root}/package.json`)('typescript');
 const source = (file, offset) => ({ file, line: offset + 1 });
+const guidance = () => readFileSync(`${root}/${motionGuidanceFile}`, 'utf8');
+const composed = mutate => ({ [motionGuidanceFile]: withMotionComposition(guidance(), mutate) });
+const motionTest = (name, run) => test(name, { skip: hasRichMotion ? false : 'The selected checkout declares guidance-only Motion' }, run);
 
 function fixture(duration = 100) {
 	const tokens = [
@@ -122,37 +122,44 @@ test('token-only checkouts do not invent published recipes', () => {
 	assert.deepEqual({ status: model.status, recipes: model.recipes, sources: model.sources }, { status: 'partial', recipes: [], sources: [motionDefinitionFiles[0]] });
 });
 
-test('motion navigation follows the system hierarchy', () => {
+motionTest('motion navigation follows the system hierarchy', () => {
 	const jumps = pageJumps({ section: 'motion' }, load(context()).page);
 	assert.deepEqual(jumps, [
-		{ anchor: 'motion-principles', label: 'Purpose and restraint' },
-		{ anchor: 'motion-practices', label: 'Product patterns' },
-		{ anchor: 'motion-foundations', label: 'Timing and properties' },
-		{ anchor: 'motion-implementation', label: 'Presets and tokens' },
+		{ anchor: 'motion-principles', label: 'Choose by intent' },
+		{ anchor: 'motion-foundations', label: 'Foundations' },
+		{ anchor: 'motion-implementation', label: 'Motion presets' },
+		{ anchor: 'motion-practices', label: 'Product usage' },
 		{ anchor: 'motion-accessibility', label: 'Accessibility' },
-		{ anchor: 'motion-review', label: 'Evaluate and improve' },
+		{ anchor: 'motion-review', label: 'Authoring and validation' },
 	]);
 });
 
-function context(overrides = {}, reads = new Set()) {
+function context(overrides = {}, reads = new Set(), projection = motionProjection) {
 	return {
-		root, source, repository: { projection: { book: motionBook } },
+		root, source, repository: { projection },
 		read: file => { reads.add(file); return overrides[file] ?? readFileSync(`${root}/${file}`, 'utf8'); },
 	};
 }
 
-test('Motion composition and guidance are tracked source dependencies, not renderer prose', () => {
+/** Older checkouts bind a page descriptor; these contexts supply it in memory from the owning specification. */
+function legacyContext(overrides = {}, reads = new Set()) {
+	return context({ [legacyMotionPageFile]: JSON.stringify(legacyMotionDescriptor(guidance())), ...overrides }, reads, legacyMotionProjection);
+}
+
+motionTest('Motion composition and guidance are tracked source dependencies, not renderer prose', () => {
 	const reads = new Set();
 	const { motionDocumentation: model } = load(context({}, reads));
 	const examples = motionRecipeExamples(model);
 	assert.deepEqual({
-		dependencies: [motionPageFile, motionGuidanceFile, motionImplementationFile].map(file => reads.has(file)),
+		dependencies: [motionGuidanceFile, motionImplementationFile, motionTextFile].map(file => reads.has(file)),
+		pageFile: model.pageFile,
 		sections: model.page.sections.map(section => [section.id, section.title ?? model.sections[section.heading].title]),
 		recipeSources: [...new Set(examples.map(recipe => recipe.source.file))],
 		css: examples.map(recipe => [recipe.id, Boolean(recipe.code)]),
 	}, {
 		dependencies: [true, true, true],
-		sections: [['principles', 'Purpose and restraint'], ['practices', 'Product patterns'], ['foundations', 'Timing and properties'], ['implementation', 'Presets and tokens'], ['accessibility', 'Accessibility'], ['review', 'Evaluate and improve']],
+		pageFile: motionGuidanceFile,
+		sections: [['principles', 'Choose by intent'], ['foundations', 'Foundations'], ['implementation', 'Motion presets'], ['practices', 'Product usage'], ['accessibility', 'Accessibility'], ['review', 'Authoring and validation']],
 		recipeSources: [motionImplementationFile],
 		css: [['surface', true], ['layout', true], ['content', true], ['feedback', true]],
 	});
@@ -160,7 +167,7 @@ test('Motion composition and guidance are tracked source dependencies, not rende
 	assert.doesNotMatch(readFileSync(`${root}/${motionGuidanceFile}`, 'utf8'), /canvas recipe reference|motion-recipes\.mjs/);
 });
 
-test('chapter copy is curated while specifications and timing remain source-backed', () => {
+motionTest('chapter copy is curated while specifications and timing remain source-backed', () => {
 	const file = '.github/skills/design-system/foundations/motion/examples.md';
 	const original = context();
 	const reads = new Set();
@@ -171,7 +178,7 @@ test('chapter copy is curated while specifications and timing remain source-back
 	}));
 	assert.deepEqual({
 		tracked: reads.has(file),
-		copyChanged: after.page.sections.find(section => section.id === 'foundations').blocks[0].blocks[0].description.startsWith('Feedback acknowledges input promptly,'),
+		copyChanged: after.page.sections.find(section => section.id === 'foundations').blocks.find(block => block.type === 'duration').description.startsWith('Feedback acknowledges input promptly,'),
 		captionChanged: motionExample(after, 'selection').caption.startsWith('Example-only caption.'),
 		guidanceUnchanged: after.page.properties.find(property => property.id === 'position').description === before.page.properties.find(property => property.id === 'position').description,
 		timingUnchanged: after.responses.map(response => response.durationMs),
@@ -186,50 +193,55 @@ test('chapter copy is curated while specifications and timing remain source-back
 	}), readMotionDefinitions(original)), /Expected one section "Duration"/);
 });
 
-test('saved Markdown, CSS examples, and declarative composition refresh without a product rebuild', () => {
+motionTest('saved Markdown owns Motion heading titles, order, and additions without a registration edit', () => {
 	const original = context();
-	const spec = original.read(motionGuidanceFile)
+	const spec = moveMotionStylesFirst(original.read(motionGuidanceFile)
+		.replace('## Choose by intent', '## Choose deliberately')
 		.replace('Name what becomes easier to recognize or follow.', 'Clarify meaningful change.')
-		.replace('Use a small cue beside a stable status label', 'Use one compact cue beside a stable status label');
+		.replace('Use a small cue beside a stable status label', 'Use one compact cue beside a stable status label'))
+		.replace('<a id="motion-foundations"></a>', '<a id="motion-new-guidance"></a>\n\n### New guidance\n\nA new source section.\n\n<a id="motion-foundations"></a>');
 	const implementation = original.read(motionImplementationFile).replace('.surface {', '.surface.test-change {');
-	const page = JSON.parse(original.read(motionPageFile));
-	page.sections[0].blocks.reverse();
 	const { motionDocumentation: changed } = load(context({
-		[motionGuidanceFile]: spec, [motionImplementationFile]: implementation, [motionPageFile]: JSON.stringify(page),
+		[motionGuidanceFile]: spec, [motionImplementationFile]: implementation,
 	}));
 	assert.deepEqual({
 		principle: changed.sections.purposeful.markdown.startsWith('Clarify meaningful change.'),
+		title: changed.sections[changed.page.sections[0].heading].title,
 		order: changed.page.sections[0].blocks.map(block => block.heading),
 		example: changed.sections['compact-activity'].markdown.split('\n\n')[0],
 		cssChanged: motionRecipeExamples(changed)[0].code.startsWith('.surface.test-change {'),
 	}, {
 		principle: true,
-		order: ['principles', 'motion-styles', 'when-to-use-motion'],
+		title: 'Choose deliberately',
+		order: ['motion-styles', 'when-to-use-motion', 'choosing-no-motion', 'principles', 'new-guidance'],
 		example: 'Use one compact cue beside a stable status label when the amount of work is unknown.',
 		cssChanged: true,
 	});
 });
 
-test('broken heading, block, example, and token references fail rather than publishing empty guidance', () => {
+motionTest('broken heading, block, example, and token references fail rather than publishing empty guidance', () => {
 	const definitions = readMotionDefinitions(context());
 	for (const [mutate, error] of [
-		[page => { page.sections[0].blocks[0].heading = 'missing'; }, /Missing Motion heading/],
-		[page => { page.sections[0].blocks[0].type = 'executable'; }, /Unsupported Motion block/],
+		[page => { page.bindings.missing = { type: 'duration' }; }, /Missing Motion chapter anchor/],
+		[page => { page.bindings.duration.type = 'executable'; }, /Unsupported Motion specimen binding/],
+		[page => { page.composition = []; }, /Motion specimens must not redefine composition/],
 		[page => { page.recipes[0].examples = ['missing']; }, /Missing Motion examples/],
 		[page => { page.recipes[0].tokens = ['motion.missing']; }, /Missing Motion token/],
 		[page => { delete page.durationIntro; }, /Missing Motion duration comparisons/],
 		[page => { page.durations[0].exampleId = 'control'; }, /Motion duration studies need/],
 		[page => { page.durations[0].tokens = ['motion.easing.linear']; }, /Missing Motion duration token/],
-		[page => { page.source = '../outside.md'; }, /Invalid book source reference/],
+		[page => { page.source = '../outside.md'; }, /Motion specimens must not redefine source/],
 		[page => { page.examples.push(page.examples[0]); }, /duplicate Motion examples/],
 		[page => { page.responses = [{ id: 'missing' }]; }, /Missing Motion response/],
-		[page => { page.sections[1].blocks.push({ type: 'responses', heading: 'duration' }); }, /Missing Motion response specimens/],
+		[page => { page.bindings.duration.type = 'responses'; }, /Missing Motion response specimens/],
+		[page => { page.textSource = '../outside.md'; }, /Invalid book source reference/],
 	]) {
-		const page = JSON.parse(context().read(motionPageFile));
-		mutate(page);
-		assert.throws(() => readMotionPage(context({ [motionPageFile]: JSON.stringify(page) }), definitions), error);
+		assert.throws(() => readMotionPage(context(composed(mutate)), definitions), error);
 	}
 	const spec = context().read(motionGuidanceFile);
+	assert.throws(() => readMotionPage(context({
+		[motionGuidanceFile]: spec.replace('shared-principles:\n    description:\n      $text: "Principles in practice"', 'shared-principles: 1'),
+	}), definitions), /Motion section copy can only supply description/);
 	assert.throws(() => readMotionPage(context({ [motionGuidanceFile]: `${spec}\n### Purposeful\nDuplicate` }), definitions), /Ambiguous Motion heading/);
 	const implementation = context().read(motionImplementationFile);
 	assert.throws(() => readMotionPage(context({ [motionImplementationFile]: implementation.replace('```css', '```text') }), definitions), /Expected one CSS example/);
@@ -237,43 +249,51 @@ test('broken heading, block, example, and token references fail rather than publ
 	assert.throws(() => readMotionPage(context({ [motionImplementationFile]: implementation.replace('var(--vscode-motion-surface-exit-duration', 'var(--vscode-motion-missing') }), definitions), /Missing Motion CSS variable/);
 });
 
-test('Motion binds relocated design and technical sources while retaining single-source books', () => {
-	const original = context();
+motionTest('older checkouts bind relocated design and technical sources through a page descriptor', () => {
+	const original = legacyContext();
 	const definitions = readMotionDefinitions(original);
 	const relocated = 'src/vs/platform/theme/common/motion/relocated.design.md';
-	const page = JSON.parse(original.read(motionPageFile));
-	page.source = relocated;
-	const current = readMotionPage(context({
-		[motionPageFile]: JSON.stringify(page),
+	const page = { ...legacyMotionDescriptor(guidance()), source: relocated };
+	const current = readMotionPage(legacyContext({
+		[legacyMotionPageFile]: JSON.stringify(page),
 		[relocated]: original.read(motionGuidanceFile),
 	}), definitions);
 	const legacyPage = { ...page, source: motionImplementationFile };
 	delete legacyPage.sources;
-	const legacy = readMotionPage(context({
-		[motionPageFile]: JSON.stringify(legacyPage),
+	const legacy = readMotionPage(legacyContext({
+		[legacyMotionPageFile]: JSON.stringify(legacyPage),
 		[motionImplementationFile]: `${original.read(motionGuidanceFile)}\n${original.read(motionImplementationFile)}`,
 	}), definitions);
 	assert.deepEqual({
+		pageFile: current.pageFile,
 		design: current.sections.purposeful.source.file,
 		recipe: current.sections['overlay-surface-composition'].source.file,
 		singleSourceContent: Object.entries(current.sections).every(([id, section]) => section.markdown === legacy.sections[id].markdown),
-	}, { design: relocated, recipe: motionImplementationFile, singleSourceContent: true });
+	}, { pageFile: legacyMotionPageFile, design: relocated, recipe: motionImplementationFile, singleSourceContent: true });
 	assert.throws(() => readMotionPage(context({
 		[motionImplementationFile]: `${original.read(motionImplementationFile)}\n## Purposeful\nDuplicate.\n`,
 	}), definitions), /Ambiguous Motion heading/);
+	const authored = context();
 	assert.throws(() => readMotionPage({
-		...original,
+		...authored,
 		read: file => {
 			if (file === motionImplementationFile) { throw new Error('Technical source unavailable'); }
-			return original.read(file);
+			return authored.read(file);
 		},
 	}, definitions), /Technical source unavailable/);
 });
 
-test('Motion scoped chapter copy preserves explicit composition and source-derived definitions', () => {
+motionTest('the owning specification and an older page descriptor compose the same Motion chapter', () => {
+	const { motionDocumentation: authored } = load(context());
+	const { motionDocumentation: legacy } = load(legacyContext());
+	assert.deepEqual({ authored: authored.pageFile, legacy: legacy.pageFile }, { authored: motionGuidanceFile, legacy: legacyMotionPageFile });
+	assert.deepEqual({ ...authored, pageFile: undefined }, { ...legacy, pageFile: undefined });
+});
+
+motionTest('Motion scoped chapter copy preserves explicit composition and source-derived definitions', () => {
 	const original = context();
-	const file = '.github/skills/design-system/foundations/motion/examples.md';
-	const descriptor = JSON.parse(original.read(motionPageFile));
+	const file = motionTextFile;
+	const descriptor = motionComposition(guidance());
 	const references = (value, compact) => {
 		if (Array.isArray(value)) { return value.map(item => references(item, compact)); }
 		if (!value || typeof value !== 'object') { return value; }
@@ -284,32 +304,32 @@ test('Motion scoped chapter copy preserves explicit composition and source-deriv
 		return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, references(child, compact)]));
 	};
 	const explicit = references(descriptor, false);
-	delete explicit.textSource;
 	const scoped = { ...references(descriptor, true), textSource: file };
+	const saved = page => ({ [motionGuidanceFile]: withMotionComposition(guidance(), page) });
 	const definitions = readMotionDefinitions(original);
-	const before = readMotionPage(context({ [motionPageFile]: JSON.stringify(explicit) }), definitions);
-	const after = readMotionPage(context({ [motionPageFile]: JSON.stringify(scoped) }), definitions);
-	const { textSource, ...page } = after.page;
-	assert.deepEqual({ page, pageFile: after.pageFile, sections: after.sections, intro: after.intro }, before);
+	// The composition is saved in the guidance front matter, so guidance heading offsets differ by its length.
+	const withoutGuidanceOffsets = model => ({ ...model, sections: Object.fromEntries(Object.entries(model.sections).map(([id, section]) =>
+		[id, section.source.file === motionGuidanceFile ? { ...section, source: { file: section.source.file } } : section])) });
+	const before = readMotionPage(context(saved(explicit)), definitions);
+	const after = readMotionPage(context(saved(scoped)), definitions);
+	assert.deepEqual(withoutGuidanceOffsets(after), withoutGuidanceOffsets(before));
 	const edited = readMotionPage(context({
-		[motionPageFile]: JSON.stringify(scoped),
+		...saved(scoped),
 		[file]: original.read(file).replace('Duration is how long the visual change takes,', 'Changed authored pacing guidance,'),
 	}), definitions);
-	assert.ok(edited.page.sections.find(section => section.id === 'foundations').blocks[0].blocks[0].description.startsWith('Changed authored pacing guidance,'));
-	assert.throws(() => readMotionPage(context({
-		[motionPageFile]: JSON.stringify({ ...scoped, textSource: '../outside.md' }),
-	}), definitions), /Invalid book source reference/);
+	assert.ok(edited.page.sections.find(section => section.id === 'foundations').blocks.find(block => block.type === 'duration').description.startsWith('Changed authored pacing guidance,'));
+	assert.throws(() => readMotionPage(context(saved({ ...scoped, textSource: '../outside.md' })), definitions), /Invalid book source reference/);
 	assert.throws(() => readMotionPage({
 		...original,
 		read: requested => {
-			if (requested === motionPageFile) { return JSON.stringify(scoped); }
+			if (requested === motionGuidanceFile) { return saved(scoped)[motionGuidanceFile]; }
 			if (requested === file) { throw new Error('Chapter copy unavailable'); }
 			return original.read(requested);
 		},
 	}, definitions), /Chapter copy unavailable/);
 });
 
-test('authoring candidates are digest-checked but are absent from shared product tokens', () => {
+motionTest('authoring candidates are digest-checked but are absent from shared product tokens', () => {
 	const original = context();
 	const definitions = readMotionDefinitions(original);
 	const responses = new Map(definitions.responses.map(response => [response.id, response]));
@@ -335,7 +355,7 @@ test('authoring candidates are digest-checked but are absent from shared product
 	}), /response sources are incomplete/);
 });
 
-test('CRLF motion sources match LF exports and still reject changed parameters', () => {
+motionTest('CRLF motion sources match LF exports and still reject changed parameters', () => {
 	const original = context();
 	const parameters = original.read(motionResponseFiles[0]).replace(/\r\n/g, '\n');
 	const generated = original.read(motionResponseFiles[1]).replace(/\r\n/g, '\n');
@@ -358,7 +378,7 @@ test('CRLF motion sources match LF exports and still reject changed parameters',
 	}
 });
 
-test('canonical presets project product token bindings from actual source defaults', () => {
+motionTest('canonical presets project product token bindings from actual source defaults', () => {
 	const original = context();
 	const definitions = readMotionDefinitions(original);
 	const model = readMotionPresetBindings(original, definitions);
@@ -380,7 +400,7 @@ test('canonical presets project product token bindings from actual source defaul
 	});
 });
 
-test('missing responses, incompatible defaults, and incomplete preset bindings fail explicitly', () => {
+motionTest('missing responses, incompatible defaults, and incomplete preset bindings fail explicitly', () => {
 	const original = context();
 	const definitions = readMotionDefinitions(original);
 	const bindings = original.read(motionPresetBindingFiles[1]);
@@ -395,7 +415,7 @@ test('missing responses, incompatible defaults, and incomplete preset bindings f
 	assert.throws(() => readMotionPresetBindings(context({ [motionPresetBindingFiles[0]]: presets }), definitions), /Missing or invalid Motion response/);
 });
 
-test('missing preset support is distinct from an incomplete or unreadable source foundation', () => {
+motionTest('missing preset support is distinct from an incomplete or unreadable source foundation', () => {
 	const original = context();
 	const definitions = readMotionDefinitions(original);
 	const missing = () => { const error = new Error('Missing'); error.code = 'ENOENT'; throw error; };
@@ -404,11 +424,12 @@ test('missing preset support is distinct from an incomplete or unreadable source
 	assert.throws(() => readMotionPresetBindings({ ...original, read: () => { const error = new Error('Denied'); error.code = 'EACCES'; throw error; } }, definitions), /Denied/);
 });
 
-test('analysis examples bind existing product recipes and real example identities', () => {
+motionTest('analysis examples bind existing product recipes and real example identities', () => {
 	const original = context();
-	const page = JSON.parse(original.read(motionPageFile));
+	const page = motionComposition(guidance());
 	const definitions = readMotionDefinitions(original);
-	const read = () => readMotionPage(context({ [motionPageFile]: JSON.stringify(page) }), definitions);
+	const saved = () => context({ [motionGuidanceFile]: withMotionComposition(guidance(), page) });
+	const read = () => readMotionPage(saved(), definitions);
 	assert.deepEqual(read().page.analyses, page.analyses);
 	page.analyses.at(-1).recipeId = 'missing';
 	assert.throws(read, /Missing Motion analysis recipe/);
@@ -420,10 +441,10 @@ test('analysis examples bind existing product recipes and real example identitie
 	assert.throws(read, /Duplicate Motion analysis example/);
 	page.analyses.pop();
 	page.examples.find(example => example.id === 'anchored-menu').presetBindingId = 'missing';
-	assert.throws(() => load(context({ [motionPageFile]: JSON.stringify(page) })), /Missing Motion preset binding/);
+	assert.throws(() => load(saved()), /Missing Motion preset binding/);
 });
 
-test('analysis follows saved source timing and groups only tracks with shared parameters', () => {
+motionTest('analysis follows saved source timing and groups only tracks with shared parameters', () => {
 	const original = context();
 	const before = load(original).motionDocumentation;
 	const duration = before.tokens.find(token => token.id === 'motion.duration.short').number;
@@ -451,7 +472,7 @@ test('analysis follows saved source timing and groups only tracks with shared pa
 	});
 });
 
-test('unsupported response analysis never invents measurements', () => {
+motionTest('unsupported response analysis never invents measurements', () => {
 	for (const recipe of load(context()).motionDocumentation.analyses) {
 		for (const track of recipe.tracks) {
 			const result = track.analysis;
@@ -478,7 +499,7 @@ test('unsupported response analysis never invents measurements', () => {
 	}
 });
 
-test('fenced heading-like text is code, and CRLF source headings retain their authored text', () => {
+motionTest('fenced heading-like text is code, and CRLF source headings retain their authored text', () => {
 	const spec = context().read(motionGuidanceFile).replaceAll('\n', '\r\n');
 	const implementation = context().read(motionImplementationFile).replace('.surface {', '# not-a-guidance-heading\n.surface {').replaceAll('\n', '\r\n');
 	const model = readMotionPage({

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- The canvas reads product styles without a build. */
-import { colorDefinitions, createColorResolver } from '../color-catalog.mjs';
+import { createColorResolver, readColorDefinitionFiles } from '../color-catalog.mjs';
 
 export function load({ read, root }, darkTheme, darkColors, lightTheme, lightColors) {
 	const fixtures = read('src/vs/workbench/test/browser/componentFixtures/fixtureUtils.ts');
@@ -12,10 +12,7 @@ export function load({ read, root }, darkTheme, darkColors, lightTheme, lightCol
 		if (match?.groups.file !== `/${theme.file}`) { throw new Error(`The fixture ${name} changed; update the motion palette mapping`); }
 	}
 	const files = ['baseColors', 'editorColors', 'inputColors', 'semanticColors'];
-	const definitions = files.flatMap(name => {
-		const file = `src/vs/platform/theme/common/colors/${name}.ts`;
-		return colorDefinitions(read(file), file, root);
-	});
+	const definitions = readColorDefinitionFiles(files.map(name => `src/vs/platform/theme/common/colors/${name}.ts`), read, root);
 	const byId = new Map(definitions.map(definition => [definition.id, definition]));
 	const symbols = new Map(definitions.filter(definition => definition.symbol).map(definition => [definition.symbol, definition.id]));
 	const ids = [

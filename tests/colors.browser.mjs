@@ -10,6 +10,7 @@ import test from 'node:test';
 import { chromium, expect } from './playwright.mjs';
 import { createExplorer } from '../runtime/server.mjs';
 import { mockFixtureRenderer } from './browser-helpers.mjs';
+import { controls } from './repository-helpers.mjs';
 
 const root = workspaceRoot;
 
@@ -26,7 +27,9 @@ test('Colors keeps guidance visible and compares usage colors in one simple tabl
 		await mockFixtureRenderer(page, root, ['icon-label', 'button', 'input', 'radio']);
 		await page.goto(panel.url);
 		await expect(page.locator('[data-topic="colors"] .topic-content')).toHaveAttribute('data-topic-state', 'ready');
-		await expect(page.locator('.control-stage[data-preview-state="ready"]')).toHaveCount(4);
+		const data = panel.store.topics.get('colors').envelope.data;
+		const availablePreviews = Object.values(data.authored.previews).filter(([id]) => controls.find(control => control.id === id).groups.length);
+		await expect(page.locator('.control-stage[data-preview-state="ready"]')).toHaveCount(availablePreviews.length);
 		await expect(page.getByRole('button', { name: /^Load / })).toHaveCount(0);
 		await expect(page.locator('.color-guide h2')).toHaveText([
 			'Choose color by purpose', 'Let neutrals establish hierarchy', 'Reserve accent for the leading action',
@@ -40,9 +43,9 @@ test('Colors keeps guidance visible and compares usage colors in one simple tabl
 		await expect(page.getByText('Sources and design judgment', { exact: true })).toHaveCount(0);
 		await expect(page.getByRole('combobox', { name: 'Token family' })).toHaveCount(0);
 		await expect(page.locator('.color-matrix thead th')).toHaveText(['Token', 'Light', 'Dark', 'High contrast dark', 'High contrast light']);
-		const data = panel.store.topics.get('colors').envelope.data;
-		const foundations = data.colorCatalog.filter(token => token.definitionSource.file.endsWith('/semanticColors.ts'));
-		assert.equal(foundations.length, 23);
+		const hasColorRoles = data.colorCatalog.some(token => token.definitionSource.file.endsWith('/semanticColors.ts'));
+		const foundations = data.colorCatalog.filter(token => token.definitionSource.file.endsWith(hasColorRoles ? '/semanticColors.ts' : '/baseColors.ts'));
+		assert.ok(foundations.length > 0);
 		assert.deepEqual(await page.locator('.color-matrix tbody tr').evaluateAll(rows => rows.map(row => ({
 			id: row.dataset.color, values: [...row.querySelectorAll('.color-value-chip code')].map(code => code.textContent),
 		}))), foundations.map(token => ({ id: token.id, values: data.colorPalettes.map(palette => token.values[palette.id].value) })));
@@ -57,16 +60,19 @@ test('Colors keeps guidance visible and compares usage colors in one simple tabl
 		await expect(page.locator('.color-matrix tbody tr')).toHaveCount(0);
 		await page.getByRole('checkbox', { name: 'Include component aliases' }).check();
 		await expect(page.locator('.color-matrix tbody tr').first()).toHaveAttribute('data-color', 'button.background');
-		await search.fill('var(--vscode-color-background-accent)');
+		const selected = hasColorRoles ? { id: 'color.background.accent', css: '--vscode-color-background-accent' }
+			: { id: 'focusBorder', css: '--vscode-focusBorder' };
+		const query = `var(${selected.css})`;
+		await search.fill(query);
 		await expect(search).toBeFocused();
 		await expect(page.locator('.color-matrix tbody tr')).toHaveCount(1);
-		const copy = page.getByRole('button', { name: 'Copy color.background.accent CSS variable --vscode-color-background-accent', exact: true });
+		const copy = page.getByRole('button', { name: `Copy ${selected.id} CSS variable ${selected.css}`, exact: true });
 		await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 		await copy.focus();
 		await page.keyboard.press('Enter');
-		await expect(page.locator('[data-topic="colors"] #status')).toHaveText('Copied var(--vscode-color-background-accent)');
+		await expect(page.locator('[data-topic="colors"] #status')).toHaveText(`Copied ${query}`);
 		await expect(copy.locator('.copy-feedback')).toHaveText('Copied');
-		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'var(--vscode-color-background-accent)');
+		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), query);
 		assert.equal(await article.evaluate(element => element.isConnected), true);
 		assert.equal(await table.evaluate(element => element.isConnected), true);
 		assert.equal(requests.filter(path => path === '/api/topic').length, reads);
@@ -87,7 +93,7 @@ test('Colors keeps guidance visible and compares usage colors in one simple tabl
 		await page.emulateMedia({ forcedColors: 'none' });
 		await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
-		await expect(page.getByRole('searchbox', { name: 'Search colors' })).toHaveValue('var(--vscode-color-background-accent)');
+		await expect(page.getByRole('searchbox', { name: 'Search colors' })).toHaveValue(query);
 		await expect(page.getByRole('checkbox', { name: 'Include component aliases' })).toBeChecked();
 		await expect(page.locator('.color-matrix tbody tr')).toHaveCount(1);
 		await page.getByRole('navigation', { name: 'On this page' }).getByRole('link', { name: 'Semantic feedback' }).click();

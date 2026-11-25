@@ -10,6 +10,8 @@ function definitions(data) {
 	let groups;
 	switch (data.view.section) {
 		case 'motion':
+			// Guidance-only Motion chapters have no runtime definitions to project.
+			if (!data.motionDocumentation) { groups = []; break; }
 			groups = [
 				group('motion-token', data.motionDocumentation.tokens),
 				group('motion-recipe', data.motionDocumentation.recipes),

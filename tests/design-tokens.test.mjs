@@ -5,17 +5,19 @@
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
 import assert from 'node:assert/strict';
 import { workspaceRoot } from '../runtime/paths.mjs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import './repository-helpers.mjs';
 import { TopicStore } from '../runtime/store.mjs';
-import { definitionEntries, designTokenGroups } from '../view/token-lookup.mjs';
+import { definitionEntries, designTokenGroups, tokenDomains, undeclaredTokenGroups } from '../view/token-lookup.mjs';
 import { readSizeTokens } from '../adapters/vscode/typography.mjs';
 import { readMotionDefinitions } from '../adapters/vscode/groups/motion-source.mjs';
 import { motionTokenGroups } from '../view/motion-reference.mjs';
 
 const root = workspaceRoot;
 const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026', query: '' };
+const hasMotionTokens = existsSync(`${root}/src/vs/platform/theme/common/motionRegistry.ts`);
+const hasColorRoles = existsSync(`${root}/src/vs/platform/theme/common/colors/semanticColors.ts`);
 
 test('motion lookup exposes compact product pairs, not sampled candidates or local choreography', async () => {
 	const store = new TopicStore(root);
@@ -23,6 +25,10 @@ test('motion lookup exposes compact product pairs, not sampled candidates or loc
 		const { data } = await store.read('tokens', settings);
 		const tokens = definitionEntries(data).filter(token => token.group === 'motion');
 		const groups = motionTokenGroups(tokens);
+		if (!hasMotionTokens) {
+			assert.deepEqual({ tokens, groups: [...groups] }, { tokens: [], groups: [] });
+			return;
+		}
 		assert.deepEqual({
 			groups: [...groups.keys()],
 			baseOnly: groups.get('Duration scale').every(token => token.id.startsWith('motion.duration.')),
@@ -53,16 +59,23 @@ test('the index qualifies documented design decisions rather than styling implem
 		const control = motion.tokens.find(token => token.id === 'motion.state.change.duration');
 		assert.deepEqual([
 			'spacing.size80', 'fontSize.body1', 'fontWeight.semiBold', 'cornerRadius.medium',
-			'codiconFontSize.compact', 'strokeThickness', 'motion.state.change.duration', 'agents.layout.floatingPanelGap',
+			'codiconFontSize.compact', 'strokeThickness', 'agents.layout.floatingPanelGap',
 		].map(id => [id, get(id).value]), [
 			['spacing.size80', '8px'], ['fontSize.body1', '13px'], ['fontWeight.semiBold', '600'], ['cornerRadius.medium', '6px'],
-			['codiconFontSize.compact', '12px'], ['strokeThickness', '1px'], ['motion.state.change.duration', control.value], ['agents.layout.floatingPanelGap', '4px'],
+			['codiconFontSize.compact', '12px'], ['strokeThickness', '1px'], ['agents.layout.floatingPanelGap', '4px'],
 		]);
-		assert.equal(get('motion.state.change.duration').alias, control.alias);
-		assert.deepEqual(['motion.duration.medium', 'motion.state.change.duration', 'motion.progress.cycle.duration'].map(id => get(id).category),
-			['ramp', 'purpose', 'purpose']);
-		assert.equal(get('motion.state.change.duration').deprecated, undefined);
-		assert.equal(get('color.background.accent').purpose, 'Strong emphasis for a leading action. Do not use it to imply success or selection.');
+		if (hasMotionTokens) {
+			assert.deepEqual({ value: get('motion.state.change.duration').value, alias: get('motion.state.change.duration').alias },
+				{ value: control.value, alias: control.alias });
+			assert.deepEqual(['motion.duration.medium', 'motion.state.change.duration', 'motion.progress.cycle.duration'].map(id => get(id).category),
+				['ramp', 'purpose', 'purpose']);
+			assert.equal(get('motion.state.change.duration').deprecated, undefined);
+		} else {
+			assert.equal(entries.some(token => token.group === 'motion'), false);
+		}
+		if (hasColorRoles) {
+			assert.equal(get('color.background.accent').purpose, 'Strong emphasis for a leading action. Do not use it to imply success or selection.');
+		}
 		assert.equal(get('--vscode-shadow-sm').value, '0 0 4px rgba(0, 0, 0, 0.08)');
 		assert.equal(get('agents.layout.floatingPanelGap').scope, 'Agents window');
 		assert.deepEqual([
@@ -74,8 +87,11 @@ test('the index qualifies documented design decisions rather than styling implem
 		].filter(id => get(id)), []);
 		assert.equal(entries.every(entry => entry.css.startsWith('--')), true);
 		assert.deepEqual([...designTokenGroups(entries).keys()], [
-			'spacing', 'typography', 'shape', 'iconography', 'stroke', 'colors', 'elevation', 'motion', 'layout', 'legacy',
-		]);
+			'typography', 'colors', 'layout', 'spacing', 'shape', 'stroke', 'elevation', 'iconography',
+			...(hasMotionTokens ? ['motion'] : []), 'legacy',
+		], 'token groups follow the Foundations navigation order of specifications declaring tokenDomain');
+		assert.equal([...designTokenGroups(entries).values()].flat().length, entries.length, 'every qualified token has a declared domain');
+		assert.deepEqual(undeclaredTokenGroups(entries, tokenDomains.filter(domain => domain.id !== 'motion')), hasMotionTokens ? ['motion'] : []);
 		assert.deepEqual(designTokenGroups(entries).get('spacing').map(token => token.value), [
 			'0px', '2px', '4px', '6px', '8px', '10px', '12px', '16px', '20px', '24px', '28px', '32px', '36px', '40px',
 		]);
@@ -103,6 +119,20 @@ test('qualified color roles preserve theme-dependent, unset, and referenced defa
 		const dark = await colors('Dark 2026');
 		const light = await colors('Light 2026');
 		const contrast = await colors('Default High Contrast');
+		if (!hasColorRoles) {
+			assert.deepEqual({
+				darkText: dark.find(token => token.id === 'foreground').value.toUpperCase(),
+				lightText: light.find(token => token.id === 'foreground').value.toUpperCase(),
+				darkContrast: dark.find(token => token.id === 'contrastBorder').value,
+				contrast: contrast.find(token => token.id === 'contrastBorder').value,
+				owners: [...new Set(dark.map(token => token.source.file))],
+				inventedRoles: dark.some(token => token.id.startsWith('color.')),
+			}, {
+				darkText: '#BFBFBF', lightText: '#202020', darkContrast: 'Unset', contrast: '#6FC3DF',
+				owners: ['src/vs/platform/theme/common/colors/baseColors.ts'], inventedRoles: false,
+			});
+			return;
+		}
 		assert.equal(dark.find(token => token.id === 'color.border.contrast').value, 'Unset');
 		assert.equal(dark.find(token => token.id === 'color.text').value.toUpperCase(), '#CCCCCC');
 		assert.equal(light.find(token => token.id === 'color.text').value.toUpperCase(), '#616161');

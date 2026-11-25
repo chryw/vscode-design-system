@@ -13,6 +13,11 @@ const sectionRenderers = {
 	theming: ['theming'], icons: ['iconography'], motion: ['motion'], tokens: ['tokens'],
 	components: ['components'], documents: ['documentation'],
 };
+function isPage(value) {
+	return typeof value === 'string' && !value.split('/').includes('..')
+		&& (/^(?:pages|content\/topics)\/[a-z][a-z0-9-]*\.json$/.test(value)
+			|| /^(?:\.github\/skills\/design-system|src\/vs)\/[\w/.-]+\.md$/.test(value));
+}
 
 export class UnknownTopicError extends Error { }
 
@@ -54,13 +59,14 @@ export function validateBook(book) {
 		|| !book.topics.some(topic => topic.id === book.defaultTopic && !topic.hidden)
 		|| components !== undefined && (!components || typeof components !== 'object' || Array.isArray(components)
 			|| Object.keys(components).some(key => !['after', 'page'].includes(key))
-			|| !/^(?:pages|content\/topics)\/[a-z][a-z0-9-]*\.json$/.test(components.page)
+			|| components.page !== undefined && !isPage(components.page)
 			|| !book.topics.some(topic => topic.id === components.after)
 			|| book.topics.some(topic => topic.section === 'components'))) {
 		throw new Error('Invalid design-system book manifest');
 	}
 	const references = validateReferences(book);
 	return book.topics.map(topic => {
+		const isDraft = topic.isDraft ?? topic.status === 'draft';
 		if (!topic || typeof topic.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(topic.id)
 			|| typeof topic.title !== 'string' || !topic.title || typeof topic.section !== 'string'
 			|| !['Foundations', 'Patterns', 'Components', 'Guidance'].includes(topic.group) || !Object.hasOwn(renderers, topic.renderer)
@@ -69,23 +75,27 @@ export function validateBook(book) {
 			|| typeof topic.compare !== 'boolean' || typeof topic.fixture !== 'boolean'
 			|| topic.hidden !== undefined && typeof topic.hidden !== 'boolean'
 			|| topic.navigation !== undefined && !['topic', 'utility'].includes(topic.navigation)
-			|| topic.page !== undefined && !/^(?:pages|content\/topics)\/[a-z][a-z0-9-]*\.json$/.test(topic.page)
+			|| topic.page !== undefined && !isPage(topic.page)
 			|| topic.kind !== undefined && !['foundation', 'component', 'primitive', 'composite', 'pattern'].includes(topic.kind)
 			|| topic.design !== undefined && (typeof topic.design !== 'string'
 				|| !/^(?:\.github\/(?:design-system|skills\/design-system)|src\/vs)\/[\w/.-]+\.design\.md$/.test(topic.design)
 				|| topic.design.split('/').includes('..'))
 			|| topic.status !== undefined && !['draft', 'stable', 'deprecated'].includes(topic.status)
-			|| topic.status === 'deprecated' && (typeof topic.replacedBy !== 'string' || !/^[a-z][a-z0-9-]*$/.test(topic.replacedBy))
-			|| topic.status === 'deprecated' && !book.topics.some(entry => entry.id === topic.replacedBy && entry.status !== 'deprecated')
+			|| topic.isDraft !== undefined && (typeof topic.isDraft !== 'boolean' || topic.status !== undefined)
+			|| topic.status === 'deprecated' && topic.replacedBy === undefined
+			|| topic.replacedBy !== undefined && (isDraft || typeof topic.replacedBy !== 'string' || !/^[a-z][a-z0-9-]*$/.test(topic.replacedBy))
+			// Component topics are expanded from `components` later and validated again then.
+			|| topic.replacedBy !== undefined && !(components !== undefined && topic.replacedBy.startsWith('component-'))
+				&& !book.topics.some(entry => entry.id === topic.replacedBy && !entry.replacedBy && entry.status !== 'deprecated')
 			|| topic.status !== undefined && topic.status !== 'deprecated' && topic.replacedBy !== undefined
 			|| topic.section !== 'components' && topic.section !== topic.id
 			|| topic.renderer !== 'guidance' && !sectionRenderers[topic.renderer]?.includes(topic.section)
-			|| topic.renderer === 'guidance' && Object.values(sectionRenderers).some(sections => sections.includes(topic.section))
 			|| topic.section === 'components' && (topic.id !== `component-${topic.controlId}` || !['ready', 'tbd'].includes(topic.content))) {
 			throw new Error(`Invalid book topic: ${topic?.id}`);
 		}
-		return { ...topic, references: Object.hasOwn(references, topic.id) ? references[topic.id] : [],
-			hidden: topic.status === 'deprecated' || topic.hidden === true,
+		const { status, ...current } = topic;
+		return { ...current, isDraft, references: Object.hasOwn(references, topic.id) ? references[topic.id] : [],
+			hidden: Boolean(topic.replacedBy) || topic.hidden === true,
 			rendererKind: topic.renderer, renderer: renderers[topic.renderer] };
 	});
 }
@@ -102,8 +112,8 @@ export function createCatalog(manifest, componentAliases) {
 	const catalog = validateBook(manifest);
 	const aliases = new Map(componentAliases);
 	for (const topic of catalog.filter(topic => topic.section !== 'components')) {
-		const target = topic.status === 'deprecated' ? topic.replacedBy : topic.id;
-		if (topic.status === 'deprecated') {
+		const target = topic.replacedBy ?? topic.id;
+		if (topic.replacedBy) {
 			aliases.set(topic.id, target);
 		}
 		for (const alias of topic.aliases) {

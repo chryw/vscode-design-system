@@ -6,12 +6,63 @@
 
 import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { curateFixtures } from '../../model/components.mjs';
+import { contained, workspaceRoot } from '../../runtime/paths.mjs';
 
 const runFile = promisify(execFile);
+
+/**
+ * Resolves the fixture modules that declare the given Component Explorer groups. A module's group root follows
+ * Component Explorer: its basename, `path` + basename when `path` ends in `/`, or `path` itself otherwise.
+ */
+export function fixtureFilesFor(root, controls) {
+	let ts;
+	const files = [];
+	const visit = relative => {
+		for (const entry of readdirSync(contained(root, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+			const file = `${relative}/${entry.name}`;
+			if (entry.isDirectory() && !entry.isSymbolicLink()) { visit(file); }
+			else if (entry.isFile() && entry.name.endsWith('.fixture.ts')) { files.push(file); }
+		}
+	};
+	visit('src');
+	const roots = files.map(file => {
+		const base = path.posix.basename(file, '.fixture.ts');
+		const text = readFileSync(contained(root, file), 'utf8');
+		let declared = [...text.matchAll(/define(?:Themed)?FixtureGroup\(\s*\{\s*path:\s*(?<quote>['"])(?<path>[^'"\\\r\n]*)\k<quote>/g)].map(match => match.groups.path);
+		const calls = [...text.matchAll(/define(?:Themed)?FixtureGroup\(\s*\{/g)].length;
+		// Avoid parsing whole render functions for the common path-first declaration or modules with no path.
+		if (declared.length !== calls && /\bpath['"]?\s*:/.test(text)) {
+			ts ??= createRequire(path.join(workspaceRoot, 'package.json'))('typescript');
+			const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+			declared = [];
+			const visit = node => {
+				if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+					&& ['defineFixtureGroup', 'defineThemedFixtureGroup'].includes(node.expression.text)
+					&& node.arguments.length === 2 && ts.isObjectLiteralExpression(node.arguments[0])) {
+					const value = node.arguments[0].properties.find(property => ts.isPropertyAssignment(property) && property.name?.text === 'path')?.initializer;
+					if (value && ts.isStringLiteral(value)) { declared.push(value.text); }
+				}
+				ts.forEachChild(node, visit);
+			};
+			visit(ast);
+		}
+		return { file, roots: declared.length ? declared.map(value => value.endsWith('/') ? `${value}${base}` : value) : [base] };
+	});
+	const result = new Set();
+	for (const control of controls) {
+		if (control.file) { result.add(control.file); continue; }
+		for (const group of control.groups) {
+			const matches = roots.filter(entry => entry.roots.some(value => group === value || group.startsWith(`${value}/`) || value.startsWith(`${group}/`)));
+			if (!matches.length) { throw new Error(`No fixture module declares ${group} for ${control.id}`); }
+			for (const match of matches) { result.add(match.file); }
+		}
+	}
+	return [...result];
+}
 
 function readResult(result) {
 	const text = result.content?.filter(item => item.type === 'text').map(item => item.text) ?? [];

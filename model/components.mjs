@@ -3,6 +3,55 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
+export function componentMetadata(value = {}) {
+	const fields = ['implementation', 'relatedSources', 'api', 'fixtures', 'designReference'];
+	const strings = key => value[key] === undefined || Array.isArray(value[key])
+		&& value[key].every(item => typeof item === 'string' && item.trim())
+		&& new Set(value[key]).size === value[key].length;
+	const source = file => typeof file === 'string' && /^src\/[\w/.-]+\.ts$/.test(file) && !file.split('/').includes('..');
+	if (!value || typeof value !== 'object' || Array.isArray(value)
+		|| Object.keys(value).some(key => !fields.includes(key))
+		|| !['relatedSources', 'api', 'fixtures'].every(strings)
+		|| value.implementation !== undefined && !source(value.implementation)
+		|| value.relatedSources?.some(file => !source(file))
+		|| value.api?.some(member => !/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?$/.test(member))
+		|| value.api?.length && !value.implementation
+		|| value.designReference !== undefined && (typeof value.designReference !== 'string'
+			|| !/^https:\/\/www\.figma\.com\/(?:design|file)\/[A-Za-z0-9]+\/[^#\s]*$/.test(value.designReference))) {
+		throw new Error('Invalid component specification bindings');
+	}
+	return value;
+}
+
+/** Returns the book topic that presents a specification; component topics are prefixed, shared guidance keeps its id. */
+export function specTopicId(id, specifications) {
+	const kind = specifications.find(specification => specification.id === id)?.kind;
+	return kind === 'foundation' || kind === 'pattern' ? id : `component-${id}`;
+}
+
+export function createSpecControls(specifications) {
+	const specs = specifications.filter(spec => ['component', 'primitive', 'composite'].includes(spec.kind));
+	const controls = specs.map(spec => {
+		const binding = componentMetadata(spec.component);
+		return {
+			id: spec.id, name: spec.title, kind: 'component', isDraft: spec.isDraft ?? spec.status === 'draft',
+			primitive: true,
+			hidden: spec.hidden === true || Boolean(spec.replacedBy),
+			replacedBy: spec.replacedBy, aliases: spec.aliases, content: 'ready',
+			design: spec.path, specPath: spec.path, reason: '',
+			owner: binding.implementation, relatedOwners: binding.relatedSources ?? [],
+			api: binding.api ?? [], groups: binding.fixtures ?? [], designReference: binding.designReference,
+		};
+	}).sort((a, b) => a.name.localeCompare(b.name, 'en'));
+	const aliases = new Map();
+	for (const spec of specs) {
+		const target = spec.replacedBy ? specTopicId(spec.replacedBy, specifications) : `component-${spec.id}`;
+		aliases.set(`component-${spec.id}`, target);
+		for (const alias of spec.aliases) { aliases.set(`component-${alias}`, target); }
+	}
+	return { controls, aliases };
+}
+
 export function createControls(input, specifications, designSpecs = []) {
 	const object = value => value && typeof value === 'object' && !Array.isArray(value);
 	const words = value => Array.isArray(value) && value.every(item => typeof item === 'string' && item);
@@ -36,7 +85,7 @@ export function createControls(input, specifications, designSpecs = []) {
 		...specifications.filter(specification => !input.productControls.some(control => control.id === specification.id))
 			.map(specification => [specification.id, { ...specification, groups: [] }]),
 	]);
-	const authoredSpecs = new Map(designSpecs.filter(specification => specification.kind === 'primitive' || specification.kind === 'composite')
+	const authoredSpecs = new Map(designSpecs.filter(specification => ['component', 'primitive', 'composite'].includes(specification.kind))
 		.map(specification => [specification.id, specification]));
 	const specFor = control => authoredSpecs.get(control.id)
 		?? [...authoredSpecs.values()].find(specification => control.aliases?.includes(specification.id) || specification.aliases.includes(control.id));
@@ -50,8 +99,8 @@ export function createControls(input, specifications, designSpecs = []) {
 	].map(control => ({
 		primitive: true, hidden: false, content: control.groups.length ? 'ready' : 'tbd', ...control,
 		...(specFor(control) ? {
-			kind: specFor(control).kind, status: specFor(control).status, specPath: specFor(control).path,
-			replacedBy: specFor(control).replacedBy, hidden: control.hidden || specFor(control).status === 'deprecated',
+			kind: 'component', isDraft: specFor(control).isDraft ?? specFor(control).status === 'draft', specPath: specFor(control).path,
+			replacedBy: specFor(control).replacedBy, hidden: control.hidden || Boolean(specFor(control).replacedBy),
 		} : {}),
 		nodeId: control.nodeId ?? specifications.find(specification => specification.id === control.id)?.nodeId
 			?? specifications.find(specification => control.aliases?.includes(specification.id))?.nodeId,
@@ -62,9 +111,9 @@ export function createControls(input, specifications, designSpecs = []) {
 		...['status-icon', 'file-icon', 'suggest-icon'].map(id => [`component-${id}`, 'iconography']),
 	]);
 	for (const specification of authoredSpecs.values()) {
-		const target = specification.status === 'deprecated' ? specification.replacedBy : specification.id;
-		aliases.set(`component-${specification.id}`, `component-${target}`);
-		for (const alias of specification.aliases) { aliases.set(`component-${alias}`, `component-${target}`); }
+		const target = specification.replacedBy ? specTopicId(specification.replacedBy, designSpecs) : `component-${specification.id}`;
+		aliases.set(`component-${specification.id}`, target);
+		for (const alias of specification.aliases) { aliases.set(`component-${alias}`, target); }
 	}
 	const canonicalIds = new Set(canonical.map(control => control.id));
 	const result = [
@@ -72,7 +121,7 @@ export function createControls(input, specifications, designSpecs = []) {
 		...[...historical.values()].filter(control => !canonicalIds.has(control.id)).map(control => ({
 			...control, primitive: false, hidden: true, archived: !aliases.has(`component-${control.id}`),
 			...(specFor(control) ? {
-				kind: specFor(control).kind, status: specFor(control).status, specPath: specFor(control).path,
+				kind: 'component', isDraft: specFor(control).isDraft ?? specFor(control).status === 'draft', specPath: specFor(control).path,
 				replacedBy: specFor(control).replacedBy,
 			} : {}),
 			content: control.groups.length ? 'ready' : 'tbd',
@@ -84,13 +133,20 @@ export function createControls(input, specifications, designSpecs = []) {
 		typeof control.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(control.id) || typeof control.name !== 'string'
 		|| !Array.isArray(control.groups) || control.groups.some(group => typeof group !== 'string')
 		|| control.aliases && (!Array.isArray(control.aliases) || control.aliases.some(alias => typeof alias !== 'string'))
-		|| control.kind !== undefined && !['primitive', 'composite'].includes(control.kind)
+		|| control.kind !== undefined && !['component', 'primitive', 'composite'].includes(control.kind)
+		|| control.isDraft !== undefined && typeof control.isDraft !== 'boolean'
 		|| control.status !== undefined && !['draft', 'stable', 'deprecated'].includes(control.status)
 		|| !['ready', 'tbd'].includes(control.content) || typeof control.reason !== 'string'
 		|| !definition(control))) {
 		throw new Error('Invalid component definition');
 	}
 	return { controls: result, aliases };
+}
+
+/** Secondary fixture groups are labelled from their registered group name, e.g. `ButtonBar` becomes `Button bar`. */
+function fixtureGroupLabel(segment) {
+	const words = segment.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function curateFixtures(fixtures, inventory) {
@@ -108,7 +164,8 @@ export function curateFixtures(fixtures, inventory) {
 				return {
 					id: fixture.fixtureId,
 					name: control.previewTheme ? control.groupLabels[fixture.groupPath.join('/')] : `${fixture.groupPath.at(-1) === 'KeyboardFocusedToggle' ? 'Keyboard focus · '
-						: control.groupLabels?.[fixture.groupPath.join('/')] ? `${control.groupLabels[fixture.groupPath.join('/')]} · ` : ''}${fixture.fixtureName}`,
+						: control.groupLabels?.[fixture.groupPath.join('/')] ? `${control.groupLabels[fixture.groupPath.join('/')]} · `
+							: control.groups.indexOf(fixture.groupPath.join('/')) > 0 ? `${fixtureGroupLabel(fixture.groupPath.at(-1))} · ` : ''}${fixture.fixtureName}`,
 					group: fixture.groupPath.join('/'),
 					variant: fixture.fixtureName,
 					background: fixture.background,

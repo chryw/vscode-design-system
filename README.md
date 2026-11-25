@@ -13,15 +13,17 @@ Explore VS Code's design guidance alongside the tokens, APIs, and examples it de
    copilot plugin install vscode-design-system@vscode-design-system
    ```
 
-2. **Open your VS Code worktree.** The in-progress design-system content lives on [`chryw/design-system-exploration`](https://github.com/microsoft/vscode/tree/chryw/design-system-exploration). Use a worktree that already has that content, or [get the exploration checkout](docs/setup.md#prepare-the-exploration-checkout).
+2. **Open the docs reference.** Start a Copilot session in a [prepared VS Code checkout](docs/setup.md#component-apis-and-live-examples) using **Open Agents Window**. Ask: “Open the Visual Studio Code Design System canvas using the shared branch https://github.com/microsoft/vscode/tree/chryw/design-system-docs-pr.”
 
-3. **Open the book.** Run **Open Agents Window** from the VS Code Command Palette. In a Copilot session for the worktree, ask: “Open the Visual Studio Code Design System canvas for this workspace.”
+3. **Check the content version.** The reference currently follows the docs-only [microsoft/vscode#350445](https://github.com/microsoft/vscode/pull/350445), not experimental product changes. In an existing canvas, use the chevron beside **Refresh**, choose **Shared branch…**, and paste that branch URL. Your session's Git checkout is unchanged.
+
+Guidance and source-derived APIs need no build or installation in the downloaded source checkout. For live examples, [prepare a local docs-only checkout](docs/setup.md#prepare-the-docs-only-checkout). The source documents are draft guidance, not product-wide policy.
 
 ### Set up with Copilot
 
 Share this README with Copilot or paste this prompt into a session with canvas support:
 
-> Set up the VS Code Design System Explorer from https://github.com/chryw/vscode-design-system. Follow its quick start and AGENTS.md to install the plugin and open the canvas. Use my VS Code worktree if it has the exploration content; otherwise, prepare a separate checkout of `microsoft/vscode` on `chryw/design-system-exploration`.
+> Set up the VS Code Design System Explorer from https://github.com/chryw/vscode-design-system. Follow its quick start and AGENTS.md from a VS Code session with its normal dependencies installed. Open the canvas with the shared content version https://github.com/microsoft/vscode/tree/chryw/design-system-docs-pr without switching my checkout. Reuse an existing panel through its owning chat. Prepare a separate docs-only checkout only for local authoring or live examples.
 
 ## How it works
 
@@ -55,7 +57,7 @@ Before building or reviewing UI, browse the relevant foundation, component, or p
 
 ### Change guidance or product UI in `microsoft/vscode`
 
-Edit the owning spec, code, or fixture in your VS Code worktree. Save and choose **Refresh** in the canvas to review the result. If a UI change affects its guidance, review both in the same PR. For agent-assisted work, use the [design-system skill in the VS Code repo](https://github.com/microsoft/vscode/blob/chryw/design-system-exploration/.github/skills/design-system/SKILL.md).
+Edit the owning spec, code, or fixture in your VS Code worktree. Choose **This session** to review saved local changes, then use **Refresh**. If a UI change affects existing guidance, review both in the same PR; new specifications are not required for every control. For agent-assisted work, use the [design-system skill in the docs contribution](https://github.com/microsoft/vscode/blob/chryw/design-system-docs-pr/.github/skills/design-system/SKILL.md).
 
 ### Change the explorer in this repository
 

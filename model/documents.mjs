@@ -17,8 +17,9 @@ export function isRepositoryPath(value) {
 		&& value.split('/').every(part => part && part !== '.' && part !== '..');
 }
 
+/** Matches GitHub and the VS Code Markdown preview: punctuation is removed and each space becomes a hyphen. */
 export function headingId(title) {
-	return title.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
+	return title.trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replace(/ /g, '-');
 }
 
 export function plainText(text) {
@@ -41,6 +42,7 @@ export function parseDocument(text, { id, origin = 'book' } = {}) {
 	let fence;
 	let offset = 0;
 	let aliases = [];
+	let aliasOffset;
 	for (const [index, line] of lines.slice(start).entries()) {
 		const delimiter = line.match(/^\s*(?<marker>`{3,}|~{3,})/);
 		if (delimiter) {
@@ -49,7 +51,7 @@ export function parseDocument(text, { id, origin = 'book' } = {}) {
 			else if (marker[0] === fence[0] && marker.length >= fence.length) { fence = undefined; }
 		} else if (!fence) {
 			const anchor = line.match(/^\s*<a\s+id=["'](?<id>[\w:-]+)["']\s*>\s*(?:<\/a>)?\s*$/);
-			if (anchor) { aliases.push(anchor.groups.id); }
+			if (anchor) { aliases.push(anchor.groups.id); aliasOffset ??= offset; }
 			const underline = line.trim() && lines[start + index + 1]?.match(/^\s*(?<rule>={3,}|-{3,})\s*$/);
 			const match = line.match(/^(?<marks>#{1,6})\s+(?<title>.+?)\s*#*\s*$/)
 				?? (underline ? { groups: { marks: underline.groups.rule[0] === '=' ? '#' : '##', title: line.trim() } } : undefined);
@@ -60,11 +62,13 @@ export function parseDocument(text, { id, origin = 'book' } = {}) {
 				counts.set(base, count + 1);
 				headings.push({
 					id: count ? `${base}-${count}` : base, title, rawTitle: match.groups.title, aliases,
-					level: match.groups.marks.length, line: start + index + 1, offset,
+					level: match.groups.marks.length, line: start + index + 1, offset, startOffset: aliasOffset ?? offset,
 					bodyOffset: offset + line.length + 1 + (underline ? lines[start + index + 1].length + 1 : 0), underline: Boolean(underline),
 				});
 				aliases = [];
+				aliasOffset = undefined;
 			}
+			else if (line.trim() && !anchor) { aliases = []; aliasOffset = undefined; }
 			for (const reference of line.matchAll(/`[^`]*`|(?<image>!)?\[(?<label>[^\]]*)\]\((?<target><[^>]+>|[^\s)]+)(?:\s+["'][^"']*["'])?\)/g)) {
 				if (!reference.groups.target) { continue; }
 				references.push({ target: reference.groups.target.replace(/^<|>$/g, ''), image: Boolean(reference.groups.image) });
@@ -79,6 +83,25 @@ export function parseDocument(text, { id, origin = 'book' } = {}) {
 		markdown, headings, references, source: { file: id, line: start + 1 } };
 }
 
+/**
+ * Blanks presentation-only front matter (`specimens`, `sectionCopy`) so guidance payloads and bounded agent reads spend
+ * their budget on prose. Line numbers stay stable for source links; chapters read those values from the specification.
+ */
+export function withoutPresentationData(text) {
+	const lines = text.split('\n');
+	if (lines[0].replace(/^\uFEFF/, '').trimEnd() !== '---') { return text; }
+	const end = lines.findIndex((line, index) => index > 0 && line.trimEnd() === '---');
+	let omitting = false;
+	for (let index = 1; index < end; index++) {
+		if (/^\S/.test(lines[index])) {
+			const key = lines[index].match(/^(?<key>specimens|sectionCopy):/)?.groups.key;
+			omitting = Boolean(key);
+			if (key) { lines[index] = `# ${key}: presentation data omitted; read the source file`; }
+		} else if (omitting) { lines[index] = ''; }
+	}
+	return lines.join('\n');
+}
+
 export function documentSection(document, { heading, anchor } = {}) {
 	if (heading === undefined && anchor === undefined) { return document; }
 	if (typeof (heading ?? anchor) !== 'string' || !(heading ?? anchor).trim() || heading !== undefined && anchor !== undefined) {
@@ -88,7 +111,7 @@ export function documentSection(document, { heading, anchor } = {}) {
 		? item.title === heading || item.rawTitle === heading : item.id === anchor || item.aliases.includes(anchor));
 	if (matches.length !== 1) { throw new DocumentError('DOCUMENT_SECTION_INVALID', `Expected one section "${heading ?? anchor}" in ${document.id}; found ${matches.length}`); }
 	const selected = matches[0];
-	const end = document.headings.find(item => item.offset > selected.offset && item.level <= selected.level)?.offset ?? document.markdown.length;
+	const end = document.headings.find(item => item.offset > selected.offset && item.level <= selected.level)?.startOffset ?? document.markdown.length;
 	return {
 		...document,
 		title: selected.title,

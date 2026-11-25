@@ -19,10 +19,10 @@ export function colorDefinitions(text, file, root = workspaceRoot) {
 	if (cached?.text === text) {
 		return cached.definitions;
 	}
-	const require = createRequire(path.join(root, 'package.json'));
+	const require = createRequire(path.join(workspaceRoot, 'package.json'));
 	let ts;
 	try { ts = require('typescript'); }
-	catch (error) { throw new Error(`Color parsing needs the selected checkout's TypeScript dependency. Restore its dependencies: ${error.message}`); }
+	catch (error) { throw new Error(`Color parsing needs the session workspace's TypeScript dependency. Restore its dependencies: ${error.message}`); }
 	const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
 	if (ast.parseDiagnostics.length) {
 		throw new Error(`Color registration source has syntax problems: ${file}`);
@@ -61,6 +61,21 @@ export function colorDefinitions(text, file, root = workspaceRoot) {
 	visit(ast);
 	parsedFiles.set(key, { text, definitions });
 	return definitions;
+}
+
+// Shared semantic color roles are optional: checkouts without them still resolve their registered colors.
+const optionalColorFiles = new Set(['src/vs/platform/theme/common/colors/semanticColors.ts']);
+
+export function readColorDefinitionFiles(files, read, root = workspaceRoot) {
+	return files.flatMap(file => {
+		let text;
+		try { text = read(file); }
+		catch (error) {
+			if (error.code === 'ENOENT' && optionalColorFiles.has(file)) { return []; }
+			throw error;
+		}
+		return colorDefinitions(text, file, root);
+	});
 }
 
 export function createColorResolver(definitions, symbols, declarations, ansi, theme) {

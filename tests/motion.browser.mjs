@@ -9,17 +9,49 @@ import test from 'node:test';
 import { motionControls, repository } from './repository-helpers.mjs';
 import { chromium, expect } from './playwright.mjs';
 import { createBrowserHost } from './explorer-browser-host.mjs';
+import { createExplorer } from '../runtime/server.mjs';
 import { mockFixtureRenderer } from './browser-helpers.mjs';
 import { motionRecipeExamples } from '../view/motion-recipes.mjs';
-import { motionPageFile, readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
+import { readMotionDefinitions, readMotionPage } from '../adapters/vscode/groups/motion-source.mjs';
+import { hasRichMotion, motionGuidanceFile, motionImplementationFile, motionProjection, motionTextFile, moveMotionStylesFirst } from './motion-helpers.mjs';
 import { readFileSync } from 'node:fs';
+import { createDocumentCheckout } from './document-helpers.mjs';
 
 const root = workspaceRoot;
-const motionPage = JSON.parse(readFileSync(`${root}/${motionPageFile}`, 'utf8'));
-const motionGuidanceFile = motionPage.source;
-const motionImplementationFile = motionPage.sources[0].file;
+const motionTest = (name, options, run) => test(name, {
+	...options, skip: hasRichMotion ? false : 'The selected checkout declares guidance-only Motion',
+}, run);
 
-test('playback and reduced motion remain directly accessible without restarting the player', { timeout: 30000 }, async () => {
+test('guidance-only Motion renders its complete article without experimental definitions or players', { timeout: 30000 }, async t => {
+	const fixture = createDocumentCheckout(t);
+	const source = readFileSync(`${root}/${motionGuidanceFile}`, 'utf8');
+	fixture.write(motionGuidanceFile, source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,
+		'---\ntitle: "Motion"\nkind: "foundation"\nisDraft: true\n---\n'));
+	const panel = await createExplorer(fixture.root, { scope: { operation: 'all', active: 'motion' } });
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage();
+		const errors = [];
+		const fixtures = [];
+		page.on('pageerror', error => errors.push(error.message));
+		page.on('request', request => { if (new URL(request.url()).pathname === '/api/fixtures') { fixtures.push(request.url()); } });
+		await page.goto(panel.url);
+		const article = page.locator('[data-topic="motion"]');
+		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
+		await expect(article.getByRole('heading', { name: 'Motion', level: 1, exact: true })).toBeVisible();
+		await expect(article.getByRole('heading', { name: 'Choose by intent', level: 2, exact: true })).toBeVisible();
+		await expect(article.getByRole('heading', { name: 'Accessibility', level: 2, exact: true })).toBeAttached();
+		assert.deepEqual({
+			players: await article.locator('[data-motion-example], iframe').count(),
+			fixtures, errors,
+		}, { players: 0, fixtures: [], errors: [] });
+	} finally {
+		await browser.close();
+		await panel.close();
+	}
+});
+
+motionTest('playback and reduced motion remain directly accessible without restarting the player', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -52,7 +84,7 @@ test('playback and reduced motion remain directly accessible without restarting 
 	}
 });
 
-test('direct product interaction finishes the player and stale or reset messages cannot restart it', { timeout: 30000 }, async () => {
+motionTest('direct product interaction finishes the player and stale or reset messages cannot restart it', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -85,19 +117,16 @@ test('direct product interaction finishes the player and stale or reset messages
 	}
 });
 
-test('Motion renders source guidance and composition without implementation clutter', { timeout: 30000 }, async () => {
+motionTest('Motion renders source guidance and composition without implementation clutter', { timeout: 30000 }, async () => {
 	const read = file => readFileSync(`${root}/${file}`, 'utf8');
-	const spec = read(motionGuidanceFile)
+	const spec = moveMotionStylesFirst(read(motionGuidanceFile))
 		.replace('Help people understand a change', 'Motion explains a meaningful change');
 	const implementation = read(motionImplementationFile).replace('.surface {', '.surface.updated-reference {');
-	const exampleFile = '.github/skills/design-system/foundations/motion/examples.md';
-	const examples = read(exampleFile).replace('owns the principles.', 'Clarify meaningful change.');
-	const composition = JSON.parse(read(motionPageFile));
-	composition.sections[0].blocks.reverse();
+	const examples = read(motionTextFile).replace('Duration is how long the visual change takes,', 'Clarify meaningful change.');
 	const context = {
-		root, repository, source: file => ({ file, line: 1 }),
+		root, repository: { ...repository, projection: motionProjection }, source: file => ({ file, line: 1 }),
 		read: file => file === motionGuidanceFile ? spec : file === motionImplementationFile ? implementation
-			: file === exampleFile ? examples : file === motionPageFile ? JSON.stringify(composition) : read(file),
+			: file === motionTextFile ? examples : read(file),
 	};
 	const authored = readMotionPage(context, readMotionDefinitions(context));
 	const panel = await createBrowserHost(root, { scope: { operation: 'replace', topics: ['motion'], active: 'motion', layout: 'single' } });
@@ -114,12 +143,12 @@ test('Motion renders source guidance and composition without implementation clut
 		await page.goto(panel.url);
 		await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.locator('.topic-intro')).toContainText('Motion explains a meaningful change');
-		assert.deepEqual(await page.locator('#motion-principles > h3').allTextContents(), ['Apply shared principles', 'Motion styles', 'When to use motion']);
-		await expect(page.locator('#motion-principles')).toContainText('Clarify meaningful change.');
+		assert.deepEqual(await page.locator('#motion-principles > h3').allTextContents(), ['Motion styles', 'When to use motion', 'Choosing no motion', 'Principles']);
+		await expect(page.locator('#motion-foundations')).toContainText('Clarify meaningful change.');
 		await expect(page.locator('#motion-principles')).not.toContainText('Keep attention on the task, not on the transition.');
 		await expect(page.locator('#motion-principles')).toContainText('Ask whether the change would be harder to understand without motion.');
 		await expect(page.locator('#motion-practices')).toContainText('These boundaries guide scenario validation');
-		await expect(page.locator('#motion-review')).toContainText('Pause decorative updates when hidden or offscreen');
+		await expect(page.locator('#motion-practices')).toContainText('Pause decorative updates when hidden or offscreen');
 		await expect(page.locator('#motion-accessibility')).toContainText('Do not force a streaming surface back to the latest output');
 		await expect(page.locator('#motion-review')).toContainText('normal and reduced motion');
 		assert.match(motionRecipeExamples(authored).find(recipe => recipe.id === 'surface').code, /^\.surface\.updated-reference \{/);
@@ -130,7 +159,7 @@ test('Motion renders source guidance and composition without implementation clut
 	}
 });
 
-test('Motion players use a consistent viewport without width or speed controls', { timeout: 30000 }, async () => {
+motionTest('Motion players use a consistent viewport without width or speed controls', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -166,7 +195,7 @@ test('Motion players use a consistent viewport without width or speed controls',
 	}
 });
 
-test('duration studies isolate source timing, compare together, and keep product patterns separate', { timeout: 30000 }, async () => {
+motionTest('duration studies isolate source timing, compare together, and keep product patterns separate', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -232,7 +261,7 @@ test('duration studies isolate source timing, compare together, and keep product
 	}
 });
 
-test('ongoing activity keeps the matrix and reduced-motion controls without the retired ring option', { timeout: 30000 }, async () => {
+motionTest('ongoing activity keeps the matrix and reduced-motion controls without the retired ring option', { timeout: 30000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -258,7 +287,7 @@ test('ongoing activity keeps the matrix and reduced-motion controls without the 
 	}
 });
 
-test('motion explains intent with canvas-owned independent playback and one token reference', { timeout: 60000 }, async () => {
+motionTest('motion explains intent with canvas-owned independent playback and one token reference', { timeout: 60000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'all', active: 'motion', layout: 'single' } });
 	let browser;
 	try {
@@ -271,14 +300,13 @@ test('motion explains intent with canvas-owned independent playback and one toke
 		const article = page.locator('[data-topic="motion"]');
 		await expect(article.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 		await expect(page.getByRole('navigation', { name: 'Topics', exact: true })).toBeVisible();
-		assert.deepEqual(await article.locator('.motion-doc > section > h2').allTextContents(), ['Purpose and restraint', 'Product patterns', 'Timing and properties', 'Presets and tokens', 'Accessibility', 'Evaluate and improve']);
+		assert.deepEqual(await article.locator('.motion-doc > section > h2').allTextContents(), ['Choose by intent', 'Foundations', 'Motion presets', 'Product usage', 'Accessibility', 'Authoring and validation']);
 		assert.deepEqual(await article.locator('.motion-doc > section').evaluateAll(sections => sections.map(section => section.id)),
-			['motion-principles', 'motion-practices', 'motion-foundations', 'motion-implementation', 'motion-accessibility', 'motion-review']);
+			['motion-principles', 'motion-foundations', 'motion-implementation', 'motion-practices', 'motion-accessibility', 'motion-review']);
 		assert.equal(await article.locator('#motion-review [data-motion-example]').count(), 0);
 		await expect(article.locator('#motion-review')).toContainText('Name the benefit and the alternative.');
-		assert.deepEqual(await article.locator('#motion-timing > h4').allTextContents(), ['Duration', 'Easing']);
 		assert.equal(await article.locator('.article-outline a').evaluateAll(links => links.every(link => document.getElementById(decodeURIComponent(link.hash.slice(1))))), true);
-		const exampleIds = ['selection', 'anchored-menu', 'disclosure', 'delayed-content', 'agent-activity', 'progress', 'notification', 'completion'];
+		const exampleIds = ['selection', 'anchored-menu', 'disclosure', 'delayed-content', 'notification', 'agent-activity', 'progress', 'completion'];
 		for (const id of exampleIds) {
 			const example = article.locator(`[data-motion-example="${id}"]`);
 			await example.evaluate(element => element.scrollIntoView());
@@ -296,11 +324,11 @@ test('motion explains intent with canvas-owned independent playback and one toke
 		assert.equal(await article.locator('[data-motion-property]').count(), 0);
 		assert.equal(await article.locator('.motion-doc-property-list').count(), 0);
 		assert.equal(await article.locator('.motion-doc-property').count(), 0);
-		assert.deepEqual(await article.locator('#motion-principles > h3').allTextContents(), ['When to use motion', 'Motion styles', 'Apply shared principles']);
+		assert.deepEqual(await article.locator('#motion-principles > h3').allTextContents(), ['When to use motion', 'Choosing no motion', 'Principles', 'Motion styles']);
 		assert.equal(await article.locator('#motion-principles dl').count(), 0);
 		assert.deepEqual(await article.locator('#motion-transitions > [data-motion-recipe] > h4').allTextContents(), ['Appear and dismiss', 'Changes in layout']);
-		assert.deepEqual(await article.locator('#motion-foundations > h3').allTextContents(), ['Choose what changes']);
-		assert.equal(await article.locator('#motion-timing > h3').textContent(), 'Timing');
+		assert.deepEqual(await article.locator('#motion-foundations > h3').allTextContents(), ['Timing', 'Visual changes', 'Paired timing', 'Duration']);
+		assert.equal(await article.locator('#motion-timing').textContent(), 'Timing');
 		assert.equal(await article.locator('[data-motion-curve]').count(), 2);
 		assert.equal(await article.locator('[data-motion-diagram]').count(), 0);
 		assert.equal(await article.getByRole('heading', { name: 'State without movement' }).count(), 0);
@@ -381,7 +409,7 @@ test('motion explains intent with canvas-owned independent playback and one toke
 	}
 });
 
-test('single-button players retain their final state until an explicit non-playing reset', { timeout: 60000 }, async () => {
+motionTest('single-button players retain their final state until an explicit non-playing reset', { timeout: 60000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'replace', topics: ['motion'], active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -453,7 +481,7 @@ test('single-button players retain their final state until an explicit non-playi
 	}
 });
 
-test('published CSS recipes resolve real parameters and run their documented state changes', { timeout: 60000 }, async () => {
+motionTest('published CSS recipes resolve real parameters and run their documented state changes', { timeout: 60000 }, async () => {
 	const context = { root, repository, read: file => readFileSync(`${root}/${file}`, 'utf8'), source: file => ({ file, line: 1 }) };
 	const definitions = readMotionDefinitions(context);
 	const model = { ...definitions, ...readMotionPage(context, definitions) };
@@ -541,7 +569,7 @@ test('published CSS recipes resolve real parameters and run their documented sta
 	} finally { await browser.close(); }
 });
 
-test('motion diagrams and controls use product tokens, Codicons, and matching fixture themes', { timeout: 60000 }, async () => {
+motionTest('motion diagrams and controls use product tokens, Codicons, and matching fixture themes', { timeout: 60000 }, async () => {
 	const panel = await createBrowserHost(root, { scope: { operation: 'replace', topics: ['motion'], active: 'motion', layout: 'single' } });
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -552,7 +580,7 @@ test('motion diagrams and controls use product tokens, Codicons, and matching fi
 			await expect(page.locator('.topic-content')).toHaveAttribute('data-topic-state', 'ready');
 			const { data } = await (await page.request.get(new URL('/api/topic?id=motion', panel.url).href)).json();
 			assert.deepEqual(data.motionAppearance.themes, { dark: 'Dark 2026', light: 'Light Modern' });
-			const headingSizes = await page.locator('.topic-heading h1, #motion-foundations > h2, #motion-timing > h3, #motion-timing > h4:first-of-type').evaluateAll(elements => elements.map(element => getComputedStyle(element).fontSize));
+			const headingSizes = await page.locator('.topic-heading h1, #motion-foundations > h2, #motion-timing, #motion-transitions [data-motion-recipe="surface"] > h4').evaluateAll(elements => elements.map(element => getComputedStyle(element).fontSize));
 			assert.equal(headingSizes.every((size, index) => !index || Number.parseFloat(size) < Number.parseFloat(headingSizes[index - 1])), true);
 			assert.equal(await page.locator('.motion-doc :is(h2,h3,h4,h5,h6)').evaluateAll(elements => {
 				let previous = 1;

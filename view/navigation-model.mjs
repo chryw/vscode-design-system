@@ -11,9 +11,11 @@ import { catalog } from './topics/catalog.mjs';
 export function topicPresentation(system, view) {
 	const foundationSections = (system.catalog ?? catalog).filter(topic => topic.group === 'Foundations').map(topic => topic.id);
 	const references = system.repositoryReferences;
+	const control = view.section === 'components' ? system.controls.find(control => control.id === view.controlId) : undefined;
 	const source = view.section === 'documentation' ? system.library.document?.source
+		: system.genericGuidance ? { file: system.page.source }
 		: view.section === 'components'
-		? { file: (view.controlId && system.controls.find(control => control.id === view.controlId).owner) || references?.components || primitiveReference }
+		? { file: control?.owner || control?.specPath || references?.components || primitiveReference }
 		: view.section === 'tokens' ? { file: references?.foundations || foundationReference }
 		: view.section === 'motion' ? { file: system.motionDocumentation.page.source }
 		: ['typography', 'spacing', 'shape', 'size', 'stroke'].includes(view.section)

@@ -3,14 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-import { readContent } from './authored.mjs';
+import { documentSection, parseDocument } from '../../../model/documents.mjs';
+import { currentSpecification, readContent, resolveContent } from './authored.mjs';
 
-export function load({ read, source }) {
+export function load({ read, source, repository }) {
 	read('src/vs/workbench/test/browser/componentFixtures/baseUI.fixture.ts');
 	read('src/vs/base/browser/ui/button/button.ts');
 	read('src/vs/base/browser/ui/button/button.css');
-	const definition = readContent(read, 'content/foundations/spacing-patterns.json');
-	if (!Array.isArray(definition.patterns) || !definition.patterns.length || !Array.isArray(definition.responsive)) {
+	const authored = repository.projection.mode === 'authored';
+	const spec = authored ? currentSpecification(read, 'spacing', repository) : undefined;
+	const definition = authored
+		? resolveContent(spec.specimens?.spacing, read, { source: spec.path })
+		: readContent(read, 'content/foundations/spacing-patterns.json');
+	if (!definition || !Array.isArray(definition.patterns) || !definition.patterns.length || !Array.isArray(definition.responsive)) {
 		throw new Error('Invalid spacing pattern content');
 	}
 	const rule = ({ file, selector, properties }) => {
@@ -38,7 +43,9 @@ export function load({ read, source }) {
 	};
 	return {
 		spacing: {
-			patterns: definition.patterns.map(pattern => {
+			patterns: definition.patterns.map(binding => {
+				const section = authored ? documentSection(parseDocument(read(spec.path), { id: spec.path }), { heading: binding.heading }) : undefined;
+				const pattern = section ? { ...binding, title: section.title, guidance: section.markdown } : binding;
 				if (!pattern || !['id', 'title', 'guidance', 'context'].every(key => typeof pattern[key] === 'string')
 					|| !Array.isArray(pattern.rules) || !pattern.rules.length) {
 					throw new Error('Invalid spacing pattern');

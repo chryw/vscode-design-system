@@ -6,13 +6,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EventEmitter } from 'node:events';
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { documentExcerpt, documentSection, documentView, parseDocument, resolveDocumentReference, selectDocuments } from '../model/documents.mjs';
 import { initialView, readViewURL, validateViewFields, viewProperties, writeViewURL } from '../model/view-state.mjs';
 import { DocumentLibrary } from '../runtime/documents.mjs';
 import { createExplorer } from '../runtime/server.mjs';
-import { readPage } from '../adapters/vscode/groups/authored.mjs';
+import { readPage, readSpecification, resolveContent } from '../adapters/vscode/groups/authored.mjs';
+import { repository } from './repository-helpers.mjs';
 import { canvasRoot as packageRoot, checkoutRoot as root, createDocumentCheckout as checkout } from './document-helpers.mjs';
 
 test('documents preserve source metadata, scoped headings, fences, and stable duplicate anchors', () => {
@@ -31,6 +32,19 @@ test('documents preserve source metadata, scoped headings, fences, and stable du
 	assert.throws(() => documentSection(document, { heading: 'Choosing' }), /Expected one section/);
 	assert.throws(() => documentSection(document, { anchor: 'missing' }), /Expected one section/);
 	assert.equal(parseDocument('---\n\nOrdinary Markdown.\n', { id: 'plain.md' }).markdown.includes('Ordinary Markdown'), true);
+});
+
+test('a heading owns its preceding anchors, not the previous section', () => {
+	const document = parseDocument('# Guide\n\n## First\n\nFirst body.\n\n<a id="stable-second"></a>\n\n## Second\n\nSecond body.\n', { id: 'guide.md' });
+	assert.deepEqual([
+		documentSection(document, { anchor: 'first' }).markdown,
+		documentSection(document, { anchor: 'stable-second' }).markdown,
+	], ['First body.', 'Second body.']);
+});
+
+test('heading identifiers match GitHub links to the same Markdown', () => {
+	const document = parseDocument('# Guide\n\n## 9. Text overflow & ellipsis\n\n## Signals, sounds & `announcements`\n', { id: 'guide.md' });
+	assert.deepEqual(document.headings.map(heading => heading.id), ['guide', '9-text-overflow--ellipsis', 'signals-sounds--announcements']);
 });
 
 test('discovery and search locate ordinary Markdown by content, path, and metadata without a chapter mapping', t => {
@@ -116,6 +130,7 @@ test('older checkouts that map renamed documents keep bookmarks without duplicat
 	const canonical = 'src/vs/feature/feature.design.md';
 	fixture.write(canonical, '---\ntitle: Feature design bookmark sentinel\nkind: composite\nstatus: draft\n---\n# Feature design bookmark sentinel\n\n## Usage\n\nKeep the original intent.\n');
 	const file = path.join(fixture.bookRoot, 'content/legacy-document-paths.json');
+	mkdirSync(path.dirname(file), { recursive: true });
 	writeFileSync(file, JSON.stringify({ [old]: canonical }));
 	const library = new DocumentLibrary(fixture.root, { bookRoot: fixture.bookRoot });
 	try {
@@ -196,17 +211,38 @@ test('oversized documents are explicit diagnostics, and bounded reads retain pro
 	} finally { library.close(); }
 });
 
-test('source-section composition reads the canonical document and rejects broken references', () => {
+test('authored chapters reread their owning specification and reject broken section references', () => {
+	const spec = '.github/skills/design-system/foundations/tokens.design.md';
+	const file = '.github/instructions/design-tokens.instructions.md';
+	const original = readFileSync(path.join(root, spec), 'utf8');
+	const read = key => key === spec ? original.replace('| Decision | Guidance owner |', '| Decision | Current guidance owner |') : readFileSync(path.join(root, key), 'utf8');
+	const chapter = readSpecification(read, 'tokens', repository);
+	const section = chapter.sourceSections.find(item => item.title === 'Find the owning foundation');
+	const reference = { $text: { file, heading: 'Choose by role' } };
+	assert.deepEqual({
+		source: section.source.file,
+		changed: section.markdown.includes('Current guidance owner'),
+		referenced: resolveContent(reference, read).length > 0,
+	}, { source: spec, changed: true, referenced: true });
+	assert.throws(() => resolveContent(reference, key => key === file ? read(key).replace('## Choose by role', '## Renamed guidance') : read(key)), /Choose by role/);
+});
+
+test('older checkouts compose chapters from source sections of the canonical document', () => {
 	const file = '.github/instructions/design-tokens.instructions.md';
 	const original = readFileSync(path.join(root, file), 'utf8');
-	const read = key => key === file ? original.replace('Use the token variable', 'Use the current source-backed variable') : readFileSync(path.join(root, key), 'utf8');
-	const page = readPage(read, 'tokens');
+	const book = { version: 1, topics: [{ section: 'tokens', page: 'content/topics/tokens.json', renderer: 'tokens' }] };
+	const page = JSON.stringify({
+		version: 1, id: 'tokens', renderer: 'tokens', source: '.github/skills/design-system/foundations/tokens.design.md', content: {}, sources: [{ file }],
+		guidance: [{ file, id: 'tokens-usage', title: 'Using tokens', anchor: 'choose-by-role', before: 'tokens-reference' }],
+	});
+	const reader = text => key => key.endsWith('content/topics/tokens.json') ? page : key === file ? text : readFileSync(path.join(root, key), 'utf8');
+	const composed = readPage(reader(original.replace('Use the token variable', 'Use the current source-backed variable')), 'tokens', book);
 	assert.deepEqual({
-		source: page.sourceSections[0].source.file,
-		anchor: page.sourceSections[0].anchor,
-		changed: page.sourceSections[0].markdown.includes('Use the current source-backed variable'),
+		source: composed.sourceSections[0].source.file,
+		anchor: composed.sourceSections[0].anchor,
+		changed: composed.sourceSections[0].markdown.includes('Use the current source-backed variable'),
 	}, { source: file, anchor: 'choose-by-role', changed: true });
-	assert.throws(() => readPage(key => key === file ? original.replace('## Choose by role', '## Renamed guidance') : read(key), 'tokens'), /Expected one section/);
+	assert.throws(() => readPage(reader(original.replace('## Choose by role', '## Renamed guidance')), 'tokens', book), /Expected one section/);
 });
 
 test('view fields round-trip document selection, scope and pagination without exposing private renderer addresses', () => {

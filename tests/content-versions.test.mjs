@@ -7,6 +7,9 @@ import test from 'node:test';
 import { ContentVersions } from '../adapters/vscode/content-versions.mjs';
 import { createBookRuntime } from '../runtime/lifecycle.mjs';
 import { createVersionCheckout } from './content-version-helpers.mjs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 test('remote versions fetch current main and unlisted shared branches without changing the session checkout', async t => {
 	const fixture = createVersionCheckout(t);
@@ -34,6 +37,26 @@ test('remote versions fetch current main and unlisted shared branches without ch
 		initial: '# Remote main\n\nPublished main guidance.\n', updated: '# Updated main\n\nNew remote guidance.\n', currentCommit: nextCommit,
 		shared: '# Shared guidance\n\nA teammate branch.\n', session: fixture.root, unchanged: before,
 	});
+});
+
+test('source-only remote versions leave unrelated LFS assets as pointers without fetching them', async t => {
+	const fixture = createVersionCheckout(t);
+	const versions = new ContentVersions(fixture.root, { home: fixture.home });
+	const initial = await versions.resolve({ kind: 'latest' });
+	const repository = path.resolve(initial.root, '../../repository.git');
+	const configure = (key, value) => execFileSync('git', ['--git-dir', repository, 'config', key, value]);
+	configure('filter.docs-lfs-test.smudge', `${JSON.stringify(process.execPath)} -e ${JSON.stringify("if (!process.env.GIT_LFS_SKIP_SMUDGE) process.exit(7); process.stdin.pipe(process.stdout);")}`);
+	configure('filter.docs-lfs-test.clean', `${JSON.stringify(process.execPath)} -e ${JSON.stringify('process.stdin.pipe(process.stdout);')}`);
+	configure('filter.docs-lfs-test.required', 'true');
+	fixture.write('src/.gitattributes', 'unrelated-asset filter=docs-lfs-test\n');
+	const pointer = 'version https://git-lfs.github.com/spec/v1\noid sha256:' + 'a'.repeat(64) + '\nsize 100\n';
+	fixture.write('src/unrelated-asset', pointer);
+	fixture.publish('main', '# Main with an unrelated large asset\n');
+	const selected = await versions.resolve({ kind: 'latest' });
+	assert.deepEqual({
+		markdown: fixture.read(selected.root),
+		asset: readFileSync(path.join(selected.root, 'src/unrelated-asset'), 'utf8'),
+	}, { markdown: '# Main with an unrelated large asset\n', asset: pointer });
 });
 
 test('shared URLs retain slash-containing and encoded branch names while invalid sources fail before fetching', async t => {
@@ -66,6 +89,8 @@ test('the panel switches content versions transactionally and restores its sessi
 	});
 	const response = await post({ kind: 'shared', branch: 'design/shared-guidance' });
 	assert.equal(response.status, 200);
+	const font = await fetch(new URL('/codicon.ttf', panel.url));
+	assert.equal(font.status, 200, 'a dependency-free content checkout retains the viewer icon font');
 	const selected = panel.root;
 	panel.setView({ theme: 'Light 2026' });
 	const failed = await post({ kind: 'shared', branch: 'missing-branch' });

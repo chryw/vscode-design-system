@@ -8,7 +8,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { validateBook as validateCatalogBook } from '../model/catalog.mjs';
 import { contained, workspaceRoot } from './paths.mjs';
-import { basicBook } from '../adapters/vscode/basic-book.mjs';
+import { authoredDocumentSources, basicBook } from '../adapters/vscode/basic-book.mjs';
+import { componentMetadata, specTopicId } from '../model/components.mjs';
 
 export const bookTitle = 'Visual Studio Code Design System';
 export const bookId = 'vscode-design-system';
@@ -29,23 +30,34 @@ function checkoutForBookDirectory(root) {
 function readSpecMetadata(root, file, expectedKind) {
 	const target = contained(root, file);
 	if (statSync(target).size > 1024 * 1024) { throw new Error(`Design specification is too large: ${file}`); }
-	const text = readFileSync(target, 'utf8');
+	return parseSpecMetadata(readFileSync(target, 'utf8'), file, expectedKind);
+}
+
+/** Parses and validates an owning specification's front matter; `expectedKind` is `foundation`, `pattern`, or `component`. */
+export function parseSpecMetadata(text, file, expectedKind) {
 	const match = /^(?:\uFEFF)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
 	if (!match || Buffer.byteLength(match[1]) > 64 * 1024) { throw new Error(`${file}: missing or oversized YAML front matter`); }
 	const { load } = createRequire(path.join(workspaceRoot, 'package.json'))('js-yaml');
 	const metadata = load(match[1]);
 	const id = metadata?.id ?? path.posix.basename(file, '.design.md');
-	const allowedKinds = expectedKind === 'component' ? ['primitive', 'composite'] : [expectedKind];
+	const allowedKinds = expectedKind === 'component' && metadata?.status !== undefined ? ['component', 'primitive', 'composite'] : [expectedKind];
+	const isDraft = metadata?.isDraft ?? metadata?.status === 'draft';
 	if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)
 		|| typeof id !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)
 		|| typeof metadata.title !== 'string' || !metadata.title.trim()
 		|| !allowedKinds.includes(metadata.kind)
-		|| !['draft', 'stable', 'deprecated'].includes(metadata.status)
+		|| metadata.isDraft !== undefined && typeof metadata.isDraft !== 'boolean'
+		|| metadata.status !== undefined && (!['draft', 'stable', 'deprecated'].includes(metadata.status) || metadata.isDraft !== undefined)
 		|| metadata.order !== undefined && (!Number.isInteger(metadata.order) || metadata.order < 0)
 		|| metadata.hidden !== undefined && typeof metadata.hidden !== 'boolean'
 		|| metadata.replacedBy !== undefined && (typeof metadata.replacedBy !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(metadata.replacedBy))
 		|| metadata.status === 'deprecated' && metadata.replacedBy === undefined
-		|| metadata.status !== 'deprecated' && metadata.replacedBy !== undefined
+		|| metadata.replacedBy !== undefined && (isDraft || metadata.status !== undefined && metadata.status !== 'deprecated')
+		|| metadata.component !== undefined && expectedKind !== 'component'
+		|| metadata.presentation !== undefined && !['guidance', 'typography', 'foundations', 'theming', 'icons', 'motion', 'tokens'].includes(metadata.presentation)
+		|| metadata.specimens !== undefined && (!metadata.specimens || typeof metadata.specimens !== 'object' || Array.isArray(metadata.specimens))
+		|| metadata.sectionCopy !== undefined && (!metadata.sectionCopy || typeof metadata.sectionCopy !== 'object' || Array.isArray(metadata.sectionCopy))
+		|| metadata.tokenDomain !== undefined && typeof metadata.tokenDomain !== 'boolean'
 		|| metadata.references !== undefined && !Array.isArray(metadata.references)
 		|| ['aliases', 'legacyPaths'].some(key => metadata[key] !== undefined
 			&& (!Array.isArray(metadata[key]) || metadata[key].some(value => typeof value !== 'string' || !value.trim())
@@ -53,14 +65,18 @@ function readSpecMetadata(root, file, expectedKind) {
 		throw new Error(`${file}: invalid design specification metadata`);
 	}
 	return {
-		id, path: file, title: metadata.title.trim(), kind: metadata.kind, status: metadata.status,
+		id, path: file, title: metadata.title.trim(), kind: expectedKind === 'component' ? 'component' : metadata.kind, isDraft,
 		aliases: metadata.aliases ?? [], legacyPaths: metadata.legacyPaths ?? [], replacedBy: metadata.replacedBy,
 		order: metadata.order, hidden: metadata.hidden, references: metadata.references ?? [],
+		...(metadata.component === undefined ? {} : { component: componentMetadata(metadata.component) }),
+		presentation: metadata.presentation, specimens: metadata.specimens,
+		sectionCopy: metadata.sectionCopy,
+		tokenDomain: metadata.tokenDomain,
 	};
 }
 
 function compareSpecs(a, b) {
-	const order = { foundation: 0, pattern: 1, primitive: 2, composite: 3 };
+	const order = { foundation: 0, pattern: 1, component: 2 };
 	return order[a.kind] - order[b.kind] || (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER)
 		|| a.title.localeCompare(b.title) || a.path.localeCompare(b.path);
 }
@@ -101,7 +117,7 @@ export function discoverDesignSpecs(root) {
 		}
 	}
 	for (const spec of specs) {
-		if (spec.replacedBy && (!ids.has(spec.replacedBy) || ids.get(spec.replacedBy).status === 'deprecated')) {
+		if (spec.replacedBy && (!ids.has(spec.replacedBy) || ids.get(spec.replacedBy).replacedBy)) {
 			throw new Error(`${spec.path}: replacement '${spec.replacedBy}' must identify a nondeprecated specification`);
 		}
 	}
@@ -109,7 +125,7 @@ export function discoverDesignSpecs(root) {
 }
 
 function rendererFor(spec) {
-	if (spec.kind === 'primitive' || spec.kind === 'composite') { return 'components'; }
+	if (spec.kind === 'component') { return 'components'; }
 	return {
 		typography: 'typography', layout: 'foundations', spacing: 'foundations',
 		shape: 'foundations', size: 'foundations', stroke: 'foundations', colors: 'foundations',
@@ -129,19 +145,19 @@ export function readGeneratedBook(root) {
 	const json = file => JSON.parse(read(`${repositoryDirectory}/${file}`));
 	const specs = discoverDesignSpecs(root);
 	if (!specs.length) { return undefined; }
+	const legacy = existsSync(path.join(root, repositoryDirectory, 'content/components/curation.json'));
 	const byId = new Map(specs.map(spec => [spec.id, spec]));
 	const shared = specs.filter(spec => spec.kind === 'foundation' || spec.kind === 'pattern');
 	const topics = shared.map(spec => ({
 		id: spec.id, title: spec.title, group: spec.kind === 'foundation' ? 'Foundations' : 'Patterns',
-		section: spec.id, renderer: rendererFor(spec), aliases: [...spec.aliases, ...spec.legacyPaths],
-		compare: spec.status !== 'deprecated', fixture: liveExampleChapters.has(spec.id),
-		hidden: spec.status === 'deprecated' || spec.hidden === true, kind: spec.kind,
-		status: spec.status, ...(spec.replacedBy ? { replacedBy: spec.replacedBy } : {}),
-		page: `content/topics/${spec.id}.json`, references: spec.references,
+		section: spec.id, renderer: legacy ? rendererFor(spec) : spec.presentation ?? 'guidance', aliases: [...spec.aliases, ...spec.legacyPaths],
+		compare: !spec.replacedBy, fixture: liveExampleChapters.has(spec.id) && (legacy || spec.presentation !== undefined && spec.presentation !== 'guidance'),
+		hidden: Boolean(spec.replacedBy) || spec.hidden === true, kind: spec.kind,
+		isDraft: spec.isDraft, ...(spec.replacedBy ? { replacedBy: specTopicId(spec.replacedBy, specs) } : {}),
+		page: legacy ? `content/topics/${spec.id}.json` : spec.path, references: spec.references,
 	}));
-	const components = json('content/topics/components.json');
-	const documentation = json('content/topics/documentation.json');
-	const documentSources = json('content/document-sources.json');
+	const documentation = legacy ? json('content/topics/documentation.json') : basicBook().topics[0];
+	const documentSources = legacy ? json('content/document-sources.json') : authoredDocumentSources(repositoryDirectory);
 	// Current guidance updates inbound links when a document moves. Older checkouts may still declare moved paths in
 	// specification `legacyPaths` or this optional file; honor them so those checkouts' saved document links resolve.
 	let documentAliases = {};
@@ -151,7 +167,7 @@ export function readGeneratedBook(root) {
 		throw new Error('Invalid document aliases; use direct repository Markdown paths');
 	}
 	for (const spec of specs) {
-		const replacement = spec.status === 'deprecated' ? byId.get(spec.replacedBy) : spec;
+		const replacement = spec.replacedBy ? byId.get(spec.replacedBy) : spec;
 		for (const legacyPath of spec.legacyPaths) {
 			if (legacyPath.endsWith('.md')) { documentAliases[legacyPath] = replacement.path; }
 		}
@@ -160,19 +176,20 @@ export function readGeneratedBook(root) {
 		id: documentation.id, title: documentation.title ?? 'Source library', group: 'Guidance',
 		section: documentation.id, renderer: documentation.renderer, aliases: documentation.aliases ?? [],
 		compare: documentation.compare ?? false, fixture: false, navigation: 'utility',
-		page: 'content/topics/documentation.json',
+		...(legacy ? { page: 'content/topics/documentation.json' } : {}),
 	});
 	const visible = topics.filter(topic => !topic.hidden);
 	const lastPattern = visible.filter(topic => topic.group === 'Patterns').at(-1) ?? visible.at(-1);
 	return {
 		book: validateBook({
 			version: 1, id: bookId, title: bookTitle,
-			defaultTopic: shared.find(spec => spec.kind === 'foundation' && spec.status !== 'deprecated')?.id ?? documentation.id,
-			topics, components: { after: lastPattern?.id ?? documentation.id, page: 'content/topics/components.json' },
+			defaultTopic: shared.find(spec => spec.kind === 'foundation' && !spec.replacedBy)?.id ?? documentation.id,
+			topics, components: { after: lastPattern?.id ?? documentation.id,
+				...(legacy ? { page: 'content/topics/components.json' } : {}) },
 			documentSources, documentAliases,
 			references: Object.fromEntries(shared.filter(spec => spec.references.length).map(spec => [spec.id, spec.references])),
 		}),
-		specs,
+		specs, mode: legacy ? 'curated' : 'authored',
 	};
 }
 

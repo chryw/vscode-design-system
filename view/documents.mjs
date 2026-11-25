@@ -39,14 +39,26 @@ export function documentMarkup(document, options = {}) {
 	});
 }
 
-export function renderSourceSections(target, sections = [], resolveResource) {
+/**
+ * Renders guidance sections into a chapter. A section without its own placement uses the renderer's `defaultBefore`
+ * target, so a presentation can lead with guidance; older anchors stay reachable as hidden aliases.
+ */
+export function renderSourceSections(target, sections = [], resolveResource, defaultBefore) {
 	for (const document of sections) {
 		const section = node('section', undefined, 'article-section source-guidance');
 		section.id = document.sectionId;
+		for (const alias of document.aliases ?? []) {
+			const anchor = node('span');
+			anchor.id = alias;
+			anchor.hidden = true;
+			anchor.dataset.sectionAlias = 'true';
+			section.append(anchor);
+		}
 		section.append(node('h2', document.title), documentMarkup(document, { level: 3, prefix: `${document.sectionId}-`, resolveResource }));
-		if (document.before) {
-			const next = target.querySelector(`#${CSS.escape(document.before)}`);
-			if (!next) { throw new Error(`Missing guidance placement target: ${document.before}`); }
+		const before = document.before ?? defaultBefore;
+		if (before) {
+			const next = target.querySelector(`#${CSS.escape(before)}`);
+			if (!next) { throw new Error(`Missing guidance placement target: ${before}`); }
 			next.before(section);
 		} else {
 			target.append(section);

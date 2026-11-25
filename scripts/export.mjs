@@ -11,6 +11,7 @@ import { gzipSync } from 'node:zlib';
 import { parseArgs } from 'node:util';
 import { TopicStore } from '../runtime/store.mjs';
 import { readRepository } from '../adapters/vscode/repository.mjs';
+import { fixtureFilesFor } from '../adapters/vscode/fixtures.mjs';
 import { curateFixtures } from '../model/components.mjs';
 import { DocumentError, documentView, resolveDocumentReference, selectDocuments } from '../model/documents.mjs';
 import { defaultView } from '../runtime/view-state.mjs';
@@ -81,7 +82,7 @@ try {
 	for (const topic of Object.values(topics)) {
 		topic.provenance = { commit: provenance.commit, modified: provenance.modified, kind: 'Portable snapshot', deployment: 'Frozen design-system working snapshot' };
 	}
-	const fixtureFiles = [...new Set(fixtureControls.filter(item => item.groups.length).map(item => item.file))];
+	const fixtureFiles = fixtureFilesFor(root, fixtureControls.filter(item => item.groups.length));
 	const fixtureEntry = path.join(scratch, 'fixtures.mjs');
 	await writeFile(fixtureEntry, `
 		import { ExplorerApp } from ${JSON.stringify(path.join(root, 'node_modules/@vscode/component-explorer/dist/viewer.js'))};
@@ -165,7 +166,7 @@ try {
 	browser = undefined;
 	const portable = await bundle('reference', path.join(assets, 'portable.mjs'), true);
 	let css = (await Promise.all(['canvas.css', 'shell.css', 'book-navigation.css', 'motion.css'].map(file => readFile(path.join(assets, file), 'utf8')))).join('\n');
-	const font = await readFile(path.join(root, 'node_modules/@vscode/codicons/dist/codicon.ttf'));
+	const font = await readFile(path.join(workspaceRoot, 'node_modules/@vscode/codicons/dist/codicon.ttf'));
 	css = css.replace('/codicon.ttf', `data:font/ttf;base64,${font.toString('base64')}`);
 	for (const content of [JSON.stringify(snapshot), fixtureHTML, portable.js, css]) {
 		if (content.includes(root) || content.includes(scratch)) { throw new Error('Export contains a machine-local source path'); }

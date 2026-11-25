@@ -121,7 +121,7 @@ export function createBookNavigation(container, onNavigate, toolbarHost = contai
 		const title = document.createElement('span');
 		title.textContent = item.title;
 		link.append(title);
-		if (item.status === 'draft') {
+		if (item.isDraft) {
 			const status = document.createElement('span');
 			status.className = 'book-topic-status';
 			status.textContent = 'Draft';
@@ -156,7 +156,7 @@ export function createBookNavigation(container, onNavigate, toolbarHost = contai
 		const query = search.value.trim().toLocaleLowerCase();
 		let count = 0;
 		for (const { link, item } of links.values()) {
-			link.parentElement.hidden = !`${item.title} ${item.group ?? ''} ${item.subgroup ?? ''} ${item.status ?? ''} ${(item.aliases ?? []).join(' ')}`.toLocaleLowerCase().includes(query);
+			link.parentElement.hidden = !`${item.title} ${item.group ?? ''} ${item.subgroup ?? ''} ${item.isDraft ? 'draft' : ''} ${(item.aliases ?? []).join(' ')}`.toLocaleLowerCase().includes(query);
 			if (!link.parentElement.hidden) { count++; }
 		}
 		for (const { element, list, open, wrapper } of [...groups.values()].reverse()) {
@@ -205,7 +205,7 @@ export function createBookNavigation(container, onNavigate, toolbarHost = contai
 			if (!panel.isConnected) { toolbarHost.append(toolbar); container.append(panel); }
 			label.hidden = !items.length;
 			navigation.hidden = !items.length;
-			const identity = ({ id, title, group, subgroup, kind, status, aliases }) => ({ id, title, group, subgroup, kind, status, aliases });
+			const identity = ({ id, title, group, subgroup, kind, isDraft, aliases }) => ({ id, title, group, subgroup, kind, isDraft, aliases });
 			const nextSignature = JSON.stringify([items.map(identity), tools.map(identity)]);
 			if (nextSignature !== signature) {
 				signature = nextSignature;

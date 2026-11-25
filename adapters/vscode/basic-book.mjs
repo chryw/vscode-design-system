@@ -18,6 +18,26 @@ export function basicBook(guidanceRoot = '.github/skills/design-system') {
 	};
 }
 
+/**
+ * Discovery scopes for a checkout whose specifications supply the catalog. The library groups the design-system
+ * entry, workflows, and specifications separately from other skills, and skips test and snapshot directories.
+ */
+export function authoredDocumentSources(guidanceRoot = '.github/skills/design-system') {
+	return [
+		{ id: 'product', title: 'Product documentation', root: 'src/vs', origin: 'product', excludeDirectories: ['__snapshots__', 'fixtures'] },
+		{
+			id: 'extensions', title: 'Built-in extension documentation', root: 'extensions', origin: 'product',
+			excludeDirectories: ['test', 'tests', 'fixtures', 'test-workspace', 'testWorkspace'],
+		},
+		{ id: 'instructions', title: 'Repository instructions', root: '.github/instructions', origin: 'instruction' },
+		{ id: 'skills', title: 'Authoring workflows', root: '.github/skills', origin: 'skill', excludeDirectories: [guidanceRoot.split('/').at(-1)] },
+		{ id: 'design-system-entry', title: 'Design-system skill', root: guidanceRoot, origin: 'skill', fileName: 'SKILL.md' },
+		{ id: 'design-system-references', title: 'Design-system authoring workflows', root: `${guidanceRoot}/references`, origin: 'skill' },
+		{ id: 'design-foundations', title: 'Design foundations', root: `${guidanceRoot}/foundations`, origin: 'book' },
+		{ id: 'design-patterns', title: 'Design patterns', root: `${guidanceRoot}/patterns`, origin: 'book' },
+	];
+}
+
 export function basicProjection(book = basicBook()) {
 	return {
 		format: 'vscode-design-repository', version: 1, mode: 'basic', book,

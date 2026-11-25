@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 /* eslint-disable local/code-no-new-javascript-files -- Fixed no-build canvas modules execute directly in Node or the browser. */
-import { colorDefinitions, createColorResolver } from '../color-catalog.mjs';
+import { createColorResolver, readColorDefinitionFiles } from '../color-catalog.mjs';
 
 export function load({read,source,root}, palettes = []){
 	const elevationFile = '.github/skills/design-system/foundations/elevation.design.md';
@@ -38,7 +38,7 @@ export function load({read,source,root}, palettes = []){
 		const files = ['baseColors', 'editorColors', 'quickpickColors', 'semanticColors']
 			.map(name => `src/vs/platform/theme/common/colors/${name}.ts`);
 		files.push('src/vs/workbench/common/theme.ts');
-		const definitions = files.flatMap(file => colorDefinitions(read(file), file, root));
+		const definitions = readColorDefinitionFiles(files, read, root);
 		const byId = new Map(definitions.map(definition => [definition.id, definition]));
 		const symbols = new Map(definitions.filter(definition => definition.symbol).map(definition => [definition.symbol, definition.id]));
 		const ids = [

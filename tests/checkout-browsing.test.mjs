@@ -93,7 +93,7 @@ test('checkout selection preserves the server and rejects invalid candidates wit
 	assert.equal(forbidden.status, 403);
 	panel.selectCheckout({ root: checkoutRoot });
 	assert.deepEqual({ mode: panel.store.repository.projection.mode, origin: new URL(panel.url).origin },
-		{ mode: 'curated', origin });
+		{ mode: 'authored', origin });
 });
 
 test('an externally switched branch invalidates the catalog and document watches without switching branches itself', async t => {
@@ -171,22 +171,17 @@ test('plugin packaging declares a native canvas entry without copying product co
 		name: manifest.name, extensions: manifest.extensions, version: manifest.version,
 		entry: readFileSync(new URL('extensions/vscode-design-system/extension.mjs', root), 'utf8').includes("import '../../extension.mjs'"),
 		release: marketplace.plugins[0].version,
-	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.5.0', entry: true, release: manifest.version });
+	}, { name: 'vscode-design-system', extensions: 'extensions/', version: '0.6.0', entry: true, release: manifest.version });
 });
 
 test('same-checkout catalog refresh preserves navigation, adopts additions and moves, and rejects broken candidates transactionally', async t => {
 	const fixture = createDocumentCheckout(t);
-	const specification = id => `.github/skills/design-system/foundations/${id}.design.md`;
-	const page = id => `.github/skills/design-system/content/topics/${id}.json`;
-	const writeTopic = (id, source, copy) => {
-		fixture.write(specification(id), `---\ntitle: ${id}\nkind: foundation\nstatus: stable\naliases:\n  - old-${id}\n---\n# ${id}\n`);
-		fixture.write(source, `# ${id}\n\n## Introduction\n\n${copy}\n\n## Usage\n\n${copy}\n`);
-		fixture.write(page(id), JSON.stringify({
-			version: 1, id, renderer: 'guidance', source, content: {},
-			sections: [{ id: `${id}-usage`, key: 'usage', heading: 'Usage' }],
-		}));
-	};
-	writeTopic('routing-study', 'src/vs/feature/routing.md', 'First saved source.');
+	// Each topic is owned by its specification; moving it to another kind's directory keeps its id and saved view.
+	const specification = (id, directory = 'foundations') => `.github/skills/design-system/${directory}/${id}.design.md`;
+	const writeTopic = (id, copy, directory = 'foundations', kind = 'foundation') => fixture.write(specification(id, directory),
+		`---\ntitle: ${id}\nkind: ${kind}\nstatus: stable\naliases:\n  - old-${id}\n---\n# ${id}\n\n## Introduction\n\n${copy}\n\n## Usage\n\n${copy}\n`);
+	const usage = result => result.data.sourceSections.find(section => section.sectionId.endsWith('-usage')).markdown.trim();
+	writeTopic('routing-study', 'First saved source.');
 	const storage = new ViewStateStorage(fixture.root, { home: path.join(fixture.root, 'private-home'), view: 'routing-test' });
 	const panel = await createExplorer(fixture.root, { stateStorage: storage, watchCheckout: false });
 	t.after(() => panel.close());
@@ -195,20 +190,21 @@ test('same-checkout catalog refresh preserves navigation, adopts additions and m
 	const before = panel.state;
 	const origin = new URL(panel.url).origin;
 	const first = await panel.inspectTopic('old-routing-study', true);
-	writeTopic('routing-study', 'src/vs/feature/relocated.md', 'Moved and updated source.');
-	rmSync(path.join(fixture.root, 'src/vs/feature/routing.md'));
+	writeTopic('routing-study', 'Updated source.');
 	await panel.refreshTopic();
-	const moved = await panel.inspectTopic(undefined, true);
-	writeTopic('second-study', 'src/vs/feature/second.md', 'New topic source.');
+	const updated = await panel.inspectTopic(undefined, true);
+	writeTopic('routing-study', 'Moved source.', 'patterns', 'pattern');
+	rmSync(path.join(fixture.root, specification('routing-study')));
+	writeTopic('second-study', 'New topic source.');
 	const oldStore = panel.store;
 	panel.selectCheckout({ root: fixture.root });
 	assert.deepEqual({
-		first: first.data.authored.sections.usage.description.trim(),
-		moved: moved.data.authored.sections.usage.description.trim(),
+		first: usage(first), updated: usage(updated), moved: usage(await panel.inspectTopic(undefined, true)),
 		state: panel.state, origin: new URL(panel.url).origin, oldClosed: oldStore.closed,
 		newTopic: (await panel.inspectTopic('old-second-study', true)).data.authored.intro.trim(),
 	}, {
-		first: 'First saved source.', moved: 'Moved and updated source.', state: before, origin, oldClosed: true, newTopic: 'New topic source.',
+		first: 'First saved source.', updated: 'Updated source.', moved: 'Moved source.', state: before, origin, oldClosed: true,
+		newTopic: 'New topic source.',
 	});
 	panel.setScope({ operation: 'add', topics: ['second-study'], layout: 'compare' });
 	const beforeInvalid = panel.state;
@@ -219,7 +215,7 @@ test('same-checkout catalog refresh preserves navigation, adopts additions and m
 	assert.deepEqual({ state: panel.state, sameStore: panel.store === goodStore, closed: goodStore.closed },
 		{ state: beforeInvalid, sameStore: true, closed: false });
 	fixture.write(specification('second-study'), secondSpecification);
-	rmSync(path.join(fixture.root, specification('routing-study')));
+	rmSync(path.join(fixture.root, specification('routing-study', 'patterns')));
 	panel.selectCheckout({ root: fixture.root });
 	assert.deepEqual(panel.state.scope, { mode: 'focused', topics: ['second-study'], active: 'second-study', layout: 'single' });
 	panel.setView({ theme: 'Dark 2026' });
@@ -231,12 +227,7 @@ test('generated catalogs reject ambiguous aliases and invalid readiness metadata
 	const fixture = createDocumentCheckout(t);
 	const specification = id => `.github/skills/design-system/foundations/${id}.design.md`;
 	const writeTopic = (id, alias, status = 'stable') => {
-		fixture.write(specification(id), `---\ntitle: ${id}\nkind: foundation\nstatus: ${status}\naliases:\n  - ${alias}\n---\n# ${id}\n`);
-		fixture.write(`.github/skills/design-system/content/topics/${id}.json`, JSON.stringify({
-			version: 1, id, renderer: 'guidance', source: 'src/vs/feature/routing.md', content: {},
-			sections: [{ id: `${id}-usage`, key: 'usage', heading: 'Usage' }],
-		}));
-		fixture.write('src/vs/feature/routing.md', '# Routing study\n\n## Usage\n\nUse this route.\n');
+		fixture.write(specification(id), `---\ntitle: ${id}\nkind: foundation\nstatus: ${status}\naliases:\n  - ${alias}\n---\n# ${id}\n\n## Usage\n\nUse this route.\n`);
 	};
 	writeTopic('routing-study', 'previous-study');
 	const repository = readRepository(fixture.root);

@@ -23,6 +23,8 @@ import { copyReviewSources } from '../scripts/archive.mjs';
 import { bookNavigation } from '../model/catalog.mjs';
 import { defaultView, validateState } from '../runtime/view-state.mjs';
 import { readRepository } from '../adapters/vscode/repository.mjs';
+import { hasRichMotion } from './motion-helpers.mjs';
+import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
 
 const root = workspaceRoot;
 const settings = { theme: 'Dark 2026', compareTheme: 'Light 2026', query: '', fixtureId: '', anchor: '' };
@@ -40,7 +42,7 @@ test('generated catalogs use specification metadata and reject invalid metadata 
 	const specification = '.github/skills/design-system/foundations/typography.design.md';
 	fixture.write('.github/design-system/topics.json', '{"version":1,"id":"ignored","title":"Legacy map","topics":[]}');
 	assert.equal(readRepository(fixture.root).getTopic('typography').title, 'Typography');
-	fixture.write(specification, readFileSync(path.join(fixture.root, specification), 'utf8').replace('status: "stable"', 'status: "invalid"'));
+	fixture.write(specification, readFileSync(path.join(fixture.root, specification), 'utf8').replace(/^isDraft:.*\r?\n/m, '').replace('kind: "foundation"', 'kind: "foundation"\nisDraft: "invalid"'));
 	assert.throws(() => readRepository(fixture.root), /invalid design specification metadata/);
 });
 
@@ -76,7 +78,7 @@ test('icon availability uses installed font code points, including aliases', () 
 			root: checkout,
 			read: () => 'register(\'add\', 0xea60)\nregister(\'plus\', 0xea60)\nregister(\'future\', 0xecf9)',
 			source: file => ({ file, line: 1 }),
-		});
+		}, false, dependency);
 		assert.deepEqual(icons.map(({ id, fontAvailable }) => ({ id, fontAvailable })), [
 			{ id: 'add', fontAvailable: true }, { id: 'plus', fontAvailable: true }, { id: 'future', fontAvailable: false },
 		]);
@@ -85,7 +87,7 @@ test('icon availability uses installed font code points, including aliases', () 
 	}
 });
 
-test('the fixed Codicon font supports linked dependencies without allowing source symlink escapes', async () => {
+test('the viewer font uses the session toolchain without allowing selected-source symlink escapes', async () => {
 	const checkout = scratch('design-icon-checkout-');
 	const dependencies = scratch('design-icon-dependencies-');
 	let panel;
@@ -94,12 +96,12 @@ test('the fixed Codicon font supports linked dependencies without allowing sourc
 		writeFileSync(path.join(checkout, sizeFile), '');
 		const font = path.join(dependencies, '@vscode/codicons/dist/codicon.ttf');
 		mkdirSync(path.dirname(font), { recursive: true });
-		const bytes = Buffer.from('fixed-font-fixture');
-		writeFileSync(font, bytes);
+		writeFileSync(font, 'selected-checkout-font-must-not-be-served');
 		symlinkSync(dependencies, path.join(checkout, 'node_modules'), 'junction');
 		assert.throws(() => contained(checkout, 'node_modules/@vscode/codicons/dist/codicon.ttf'), /Source symlink leaves checkout/);
 		panel = await createExplorer(checkout);
 		const response = await fetch(new URL('/codicon.ttf', panel.url));
+		const bytes = readFileSync(path.join(root, 'node_modules/@vscode/codicons/dist/codicon.ttf'));
 		assert.deepEqual({
 			status: response.status, type: response.headers.get('content-type'), bytes: Buffer.from(await response.arrayBuffer()),
 		}, { status: 200, type: 'font/ttf', bytes });
@@ -108,6 +110,23 @@ test('the fixed Codicon font supports linked dependencies without allowing sourc
 		rmSync(checkout, { recursive: true, force: true });
 		rmSync(dependencies, { recursive: true, force: true });
 	}
+});
+
+test('shared source previews report their prerequisite without starting a component renderer', async () => {
+	let discoveries = 0;
+	const panel = await createExplorer(root, {
+		scope: { topics: ['component-button'] },
+		contentVersion: { root, selection: { kind: 'shared', branch: 'design/docs' }, label: 'Shared branch' },
+		adapter: { ...vscodeAdapter, loadFixtureCatalog: async () => { discoveries++; throw new Error('Renderer must not start'); } },
+	});
+	try {
+		const response = await fetch(new URL('/api/fixtures', panel.url));
+		const result = await response.json();
+		assert.deepEqual({
+			status: response.status, availability: result.availability,
+			message: result.reason.includes('prepared local checkout'), controls: result.controls, discoveries,
+		}, { status: 200, availability: 'source-only', message: true, controls: [], discoveries: 0 });
+	} finally { await panel.close(); }
 });
 
 test('catalog and scope validation are metadata-only, bounded and exact', async () => {
@@ -162,15 +181,26 @@ test('component ordering preserves saved views and focused scope order', () => {
 	oldScope.topics.push('modal');
 	const restored = validateState({ scope: oldScope, views: { modal: { theme: 'Light 2026' } } });
 	const focused = validateScope({ topics: ['component-button', 'typography'], active: 'typography', layout: 'compare' });
-	const archived = validateScope({ operation: 'all', active: 'component-notebook', layout: 'single' });
+	const hidden = catalog.find(topic => topic.hidden);
+	assert.ok(hidden, 'expected a hidden topic in the current catalog');
+	const archived = validateScope({ operation: 'all', active: hidden.id, layout: 'single' });
+	// Topics from an earlier catalog that no longer have an owning specification are dropped, not rejected.
+	const retired = validateState({
+		scope: { mode: 'focused', topics: ['component-notebook', 'component-button'], active: 'component-notebook', layout: 'compare' },
+		views: { 'component-notebook': { theme: 'Light 2026' } },
+	}, undefined, { previousTopics: ['component-notebook', 'component-button'] });
 	assert.deepEqual({
 		scope: restored.scope, theme: restored.views.modal.theme,
 		focused: validateState({ scope: focused, views: {} }).scope,
 		archived: validateState({ scope: archived, views: {} }).scope,
+		retired,
 	}, {
 		scope: validateScope({ operation: 'all', active: 'modal', layout: 'single' }), theme: 'Light 2026',
 		focused, archived,
+		retired: { scope: { mode: 'focused', topics: ['component-button'], active: 'component-button', layout: 'single' }, views: {} },
 	});
+	assert.throws(() => validateState({ scope: { mode: 'focused', topics: ['component-notebook'], active: 'component-notebook', layout: 'single' }, views: {} }),
+		/Unknown topic: component-notebook/);
 });
 
 test('each checkout supplies its own catalog and viewer projection without a package-content fallback', async t => {
@@ -178,9 +208,11 @@ test('each checkout supplies its own catalog and viewer projection without a pac
 	const second = createDocumentCheckout(t);
 	const specification = '.github/skills/design-system/foundations/typography.design.md';
 	second.write(specification, readFileSync(path.join(second.root, specification), 'utf8').replace('title: "Typography"', 'title: "Checkout type guidance"'));
-	const curation = JSON.parse(readFileSync(path.join(second.bookRoot, 'content/components/curation.json'), 'utf8'));
-	curation.productControls.find(control => control.id === 'button').name = 'Checkout action';
-	second.write('.github/skills/design-system/content/components/curation.json', JSON.stringify(curation));
+	// Component titles come from each checkout's code-local specification front matter.
+	const component = 'src/vs/base/browser/ui/button/button.design.md';
+	const componentSpec = title => `---\ntitle: "${title}"\nkind: "component"\nisDraft: true\n---\n# ${title}\n\n## Overview\nStarts an action.\n\n## Usage\n- Label the action.\n\n## Accessibility\n- Keep it keyboard operable.\n\n## Preview\nNo live example is declared.\n`;
+	first.write(component, componentSpec('Button'));
+	second.write(component, componentSpec('Checkout action'));
 	const panels = await Promise.all([createExplorer(first.root), createExplorer(second.root)]);
 	try {
 		const projections = await Promise.all(panels.map(async panel => (await fetch(new URL('/api/repository', panel.url))).json()));
@@ -196,6 +228,7 @@ test('each checkout supplies its own catalog and viewer projection without a pac
 	} finally { await Promise.all(panels.map(panel => panel.close())); }
 	rmSync(path.join(second.bookRoot, 'foundations'), { recursive: true });
 	rmSync(path.join(second.bookRoot, 'patterns'), { recursive: true });
+	rmSync(path.join(second.root, component));
 	const basic = await createExplorer(second.root);
 	try {
 		assert.deepEqual({ mode: basic.store.repository.projection.mode, topics: basic.state.scope.topics },
@@ -237,7 +270,8 @@ test('Typography excludes unrelated readers, Spacing reuses registrations, all s
 		assert.deepEqual(Object.keys(store.metrics.parses).sort(), ['guidance', 'sizes', 'sourceDocuments', 'typography']);
 		assert.deepEqual({
 			primary: typography.data.primarySourceDocument.id,
-			provenanceRetained: typography.data.sourceDocuments.length > 1 && typography.data.sourceDocuments.every(document =>
+			// Related guidance stays linked inline; contributor resources list the Markdown the chapter actually read.
+			provenanceRetained: typography.data.sourceDocuments.length > 0 && typography.data.sourceDocuments.every(document =>
 				typography.data.resources.guidance.some(resource => resource.file === document.id)),
 		}, {
 			primary: '.github/skills/design-system/foundations/typography.design.md',
@@ -257,13 +291,17 @@ test('Typography excludes unrelated readers, Spacing reuses registrations, all s
 	} finally { store.close(); }
 });
 
-test('every topic loads real sources, a bounded summary and no fixture startup', async () => {
+test('every topic loads real sources or its document listing, a bounded summary and no fixture startup', async () => {
 	const panel = await createExplorer(root);
 	try {
 		for (const entry of catalog) {
 			const envelope = await panel.store.read(entry.id, settings);
 			assert.equal(envelope.checkout, root);
-			assert.ok(envelope.sources.length > 0, entry.id);
+			if (entry.rendererKind === 'documents') {
+				assert.ok(envelope.data.library.listing.results.length > 0, entry.id);
+			} else {
+				assert.ok(envelope.sources.length > 0, entry.id);
+			}
 			assert.equal(envelope.topic, getTopic(entry.id).id);
 			if (getTopic(entry.id).content === 'tbd') {
 				assert.deepEqual(envelope.capability, { fixture: false, readiness: 'content-tbd' });
@@ -643,6 +681,30 @@ test('corrupt or unavailable storage is explicit and never overwrites saved data
 	} finally { await runtime.close('panel'); }
 });
 
+test('records saved before catalog tracking retire topics the book no longer has', t => {
+	const home = scratch('design-state-legacy-');
+	t.after(() => rmSync(home, { recursive: true, force: true }));
+	const storage = new ViewStateStorage(root, { home, view: 'legacy' });
+	const write = state => {
+		mkdirSync(path.dirname(storage.file), { recursive: true });
+		writeFileSync(storage.file, JSON.stringify({
+			format: 'vscode-design-system-view', version: 1, identity: storage.identity, revision: 3, updatedAt: '2026-01-01T00:00:00.000Z', state,
+		}));
+	};
+	write({
+		scope: { mode: 'focused', topics: ['component-retired', 'typography'], active: 'component-retired', layout: 'compare' },
+		views: { 'component-retired': { theme: 'Light 2026' }, typography: { theme: 'Light 2026' } },
+	});
+	const { unavailableTopics, state } = storage.read();
+	assert.deepEqual({ unavailableTopics, scope: state.scope, views: Object.keys(state.views), theme: state.views.typography.theme }, {
+		unavailableTopics: ['component-retired'],
+		scope: { mode: 'focused', topics: ['typography'], active: 'typography', layout: 'single' },
+		views: ['typography'], theme: 'Light 2026',
+	});
+	write({ scope: { mode: 'focused', topics: ['Not A Topic'], active: 'Not A Topic', layout: 'single' }, views: {} });
+	assert.throws(() => storage.read(), /Couldn't restore saved.*Unknown topic: Not A Topic/);
+});
+
 test('Copilot home uses an explicit nonempty value without expanding it', () => {
 	const original = process.env.COPILOT_HOME;
 	try {
@@ -657,11 +719,21 @@ test('book manifest and authored content are served only from their explicit con
 	const bookRoot = scratch('design-book-content-');
 	t.after(() => rmSync(bookRoot, { recursive: true, force: true }));
 	const book = readBook();
+	book.components.page = 'content/topics/components.json';
 	writeFileSync(path.join(bookRoot, 'topics.json'), JSON.stringify(book));
 	cpSync(repositoryRoot, bookRoot, { recursive: true });
+	// An explicit manifest is the older curated layout, which also supplies its component and token inventories.
+	mkdirSync(path.join(bookRoot, 'content/components'), { recursive: true });
+	mkdirSync(path.join(bookRoot, 'content/foundations'), { recursive: true });
+	writeFileSync(path.join(bookRoot, 'content/components/curation.json'), JSON.stringify({
+		version: 1, archiveReason: 'Archived.', missingReference: 'No reference.', productControls: [], families: [], additions: [],
+	}));
+	writeFileSync(path.join(bookRoot, 'content/components/fixture-bindings.json'), JSON.stringify({ version: 1, spacing: {}, motion: [] }));
+	writeFileSync(path.join(bookRoot, 'content/components/toolkit-specifications.json'), JSON.stringify({ version: 1, file: '', specifications: [] }));
+	writeFileSync(path.join(bookRoot, 'content/foundations/token-domains.json'), JSON.stringify({ version: 1, domains: [], palettes: [] }));
 	writeFileSync(path.join(bookRoot, 'content/article.md'), '# Authored guidance');
 	writeFileSync(path.join(bookRoot, 'content/private.mjs'), 'not a content asset');
-	symlinkSync(path.join(repositoryRoot, 'topics.json'), path.join(bookRoot, 'content/escape.json'));
+	symlinkSync(path.join(repositoryRoot, 'SKILL.md'), path.join(bookRoot, 'content/escape.json'));
 	const panel = await createExplorer(root, { bookRoot });
 	try {
 		const request = route => fetch(new URL(route, panel.url));
@@ -683,6 +755,7 @@ test('authored sources use the selected repository data root and keep independen
 	const checkout = temporaryRoot();
 	t.after(() => { rmSync(bookRoot, { recursive: true, force: true }); rmSync(checkout, { recursive: true, force: true }); });
 	cpSync(repositoryRoot, bookRoot, { recursive: true });
+	mkdirSync(path.join(bookRoot, 'content'), { recursive: true });
 	writeFileSync(path.join(bookRoot, 'content/example.md'), 'original guidance');
 	const source = '.github/skills/design-system/content/example.md';
 	const callbacks = new Map();
@@ -735,7 +808,7 @@ test('headless reads prioritize Motion definitions and component APIs over rende
 		buttonKinds: [...new Set(button.definitions.map(item => item.definitionKind))],
 		readiness: button.capability.readiness,
 	}, {
-		motionKinds: ['motion-analysis', 'motion-preset', 'motion-preset-binding', 'motion-recipe', 'motion-response', 'motion-token'],
+		motionKinds: hasRichMotion ? ['motion-analysis', 'motion-preset', 'motion-preset-binding', 'motion-recipe', 'motion-response', 'motion-token'] : [],
 		motionSources: true,
 		buttonApi: true,
 		buttonKinds: ['component-api'],
@@ -757,23 +830,18 @@ test('GUI topics and bounded agent reads share normalized source resources witho
 	} finally { store.close(); }
 });
 
-test('headless reads preserve unavailable component guidance and enforce their excerpt budget', async () => {
-	const unavailable = await readReference(root, 'component-breadcrumbs');
-	const bounded = await readReference(root, 'motion', { limit: 1000 });
+test('headless reads reject components without owning guidance and enforce their excerpt budget', async () => {
+	// A family without a code-local specification has no topic; readers search the documentation library instead.
+	await assert.rejects(readReference(root, 'component-breadcrumbs'), /Unknown topic: component-breadcrumbs/);
+	const bounded = await readReference(root, 'component-button', { limit: 1000 });
 	const used = bounded.summary.length + bounded.guidance.reduce((sum, entry) => sum + entry.text.length, 0)
 		+ bounded.definitions.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0)
 		+ bounded.examples.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0);
 	assert.deepEqual({
-		readiness: unavailable.capability.readiness,
-		reason: unavailable.summary.length > 0,
-		definitions: unavailable.definitions,
 		withinBudget: used <= 1000,
 		omittedDefinitions: bounded.definitionCount > bounded.definitions.length,
 		truncated: bounded.truncated,
-	}, {
-		readiness: 'content-tbd', reason: true, definitions: [],
-		withinBudget: true, omittedDefinitions: true, truncated: true,
-	});
+	}, { withinBudget: true, omittedDefinitions: true, truncated: true });
 });
 
 test('headless search reports optional missing sources while returning available guidance', async t => {
@@ -782,20 +850,21 @@ test('headless search reports optional missing sources while returning available
 	const missing = 'src/vs/platform/theme/common/motion/motionRecipes.ts';
 	const store = new TopicStore(root);
 	try {
-		const reference = await store.read('motion', settings);
+		const reference = await store.read('tokens', settings);
 		for (const file of reference.sources.filter(file => file !== missing && !file.startsWith('.github/extensions/'))) {
+			if (!existsSync(store.sourcePath(file))) { continue; }
 			const target = path.join(checkout, file);
 			mkdirSync(path.dirname(target), { recursive: true });
 			writeFileSync(target, readFileSync(store.sourcePath(file)));
 		}
 	} finally { store.close(); }
-	const guidance = path.join(checkout, '.github/skills/design-system/foundations/motion.design.md');
+	const guidance = path.join(checkout, '.github/skills/design-system/foundations/tokens.design.md');
 	writeFileSync(guidance, `${readFileSync(guidance, 'utf8')}\n\nheadless-missing-source-probe\n`);
-	const result = await searchReference(checkout, 'headless-missing-source-probe', { topics: ['motion'] });
+	const result = await searchReference(checkout, 'headless-missing-source-probe', { topics: ['tokens'] });
 	assert.deepEqual({
-		foundGuidance: result.results.some(item => item.file.endsWith('/motion.design.md') && item.text.includes('headless-missing-source-probe')),
-		unavailableSources: result.unavailableSources,
+		foundGuidance: result.results.some(item => item.file.endsWith('/tokens.design.md') && item.text.includes('headless-missing-source-probe')),
+		reportsMissing: result.unavailableSources.includes(missing),
 		incomplete: result.incomplete,
 		truncated: result.truncated,
-	}, { foundGuidance: true, unavailableSources: [missing], incomplete: true, truncated: false });
+	}, { foundGuidance: true, reportsMissing: true, incomplete: true, truncated: false });
 });

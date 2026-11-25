@@ -9,14 +9,14 @@ import { bookTitle } from './book.mjs';
 import { TopicStore, canonicalRoot } from './store.mjs';
 import { defaultView } from './view-state.mjs';
 import { DocumentLibrary } from './documents.mjs';
-import { documentExcerpt } from '../model/documents.mjs';
+import { documentExcerpt, withoutPresentationData } from '../model/documents.mjs';
 
 export function listTopics(root) {
 	const { catalog, projection: { book } } = readRepository(root);
 	return { title: book.title, version: book.version, defaultTopic: book.defaultTopic,
-		topics: catalog.filter(item => !item.hidden).map(({ id, title, group, subgroup, kind, status, design, aliases, references, navigation = 'topic' }) => ({
+		topics: catalog.filter(item => !item.hidden).map(({ id, title, group, subgroup, kind, isDraft, design, aliases, references, navigation = 'topic' }) => ({
 			id, title, group, ...(subgroup ? { subgroup } : {}), ...(kind ? { kind } : {}),
-			...(status ? { status } : {}), ...(design ? { design } : {}), aliases, references, navigation,
+			isDraft, ...(design ? { design } : {}), aliases, references, navigation,
 		})) };
 }
 
@@ -58,7 +58,7 @@ export async function readReference(root, id, { limit = 12000 } = {}) {
 		const documents = result.data.resources.guidance;
 		for (const document of documents) {
 			if (guidanceBudget <= 0) { break; }
-			const source = document.text ?? readFileSync(store.sourcePath(document.file), 'utf8');
+			const source = withoutPresentationData(document.text ?? readFileSync(store.sourcePath(document.file), 'utf8'));
 			const text = source.slice(0, guidanceBudget);
 			guidanceBudget -= text.length;
 			remaining -= text.length;

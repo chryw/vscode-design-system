@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { load } from '../adapters/vscode/groups/spacing.mjs';
 import { TopicStore } from '../runtime/store.mjs';
+import { repository } from './repository-helpers.mjs';
 
 const root = workspaceRoot;
 const read = file => readFileSync(`${root}/${file}`, 'utf8');
@@ -32,8 +33,7 @@ test('spacing patterns retain exact declarations, source locations, and lazy dep
 		}
 		assert.deepEqual(Object.keys(store.metrics.parses).sort(), ['guidance', 'sizes', 'sourceDocuments', 'spacing']);
 		assert.equal(store.documentLibrary, undefined);
-		assert.equal(result.coverage.find(item => item.expected === 'Product spacing patterns').status, 'implementation-only');
-		assert.equal(result.coverage.find(item => item.expected === 'Named semantic spacing roles').status, 'not-defined-in-covered-sources');
+		assert.deepEqual(result.coverage, [], 'authored specifications own readiness; viewer coverage notes are not a second registry');
 		assert.ok(Buffer.byteLength(JSON.stringify(result)) < 128000);
 		assert.ok(Buffer.byteLength(JSON.stringify({ ...result.data, catalog: [] })) < 50000);
 	} finally { store.close(); }
@@ -43,6 +43,7 @@ test('spacing examples reread values and explicitly reject missing or ambiguous 
 	const context = transform => ({
 		read: file => file.endsWith('.css') ? transform(read(file)) : read(file),
 		source: file => ({ file, line: 1 }),
+		repository,
 	});
 	const changed = load(context(text => text.replace('gap: var(--vscode-spacing-size40);', 'gap: var(--vscode-spacing-size60);')));
 	assert.equal(changed.spacing.patterns[0].rules[0].declarations[0].value, 'var(--vscode-spacing-size60)');

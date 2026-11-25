@@ -9,7 +9,7 @@ import path from 'node:path';
 import { readRepository, repositoryDirectoryFor } from '../adapters/vscode/repository.mjs';
 import { vscodeAdapter } from '../adapters/vscode/readers.mjs';
 import { TopicStore, canonicalRoot, contained } from './store.mjs';
-import { packageRoot, viewRoot } from './paths.mjs';
+import { packageRoot, viewRoot, workspaceRoot } from './paths.mjs';
 import { bookTitle, contentAssets, readBook } from './book.mjs';
 import { defaultView, validateState, validateViewPatch } from './view-state.mjs';
 import { StateStorageError } from './state-storage.mjs';
@@ -343,6 +343,14 @@ export async function createExplorer(root, options = {}) {
 				if (!visibleTopicIds(scope).some(id => getTopic(id).fixture)) {
 					throw new Error('Select a component or Motion before requesting its renderer');
 				}
+				if (['latest', 'shared'].includes(contentVersion.selection.kind)) {
+					json({
+						availability: 'source-only',
+						reason: 'This content version is a source-only checkout. Select a prepared local checkout for live examples.',
+						controls: [],
+					});
+					return;
+				}
 				if (url.searchParams.get('refresh') === 'true' && !fixtureDiscovery) { invalidateFixtures(); }
 				if (fixtureCatalog && url.searchParams.get('check') === 'true') {
 					const cached = fixtureCatalog;
@@ -405,8 +413,8 @@ export async function createExplorer(root, options = {}) {
 				return;
 			}
 			if (url.pathname === '/codicon.ttf') {
-				// This fixed dependency asset can use linked node_modules; user-selected source paths remain contained.
-				const file = path.join(canonical, 'node_modules/@vscode/codicons/dist/codicon.ttf');
+				// Viewer assets use the session toolchain, not dependencies in a selected source checkout.
+				const file = path.join(workspaceRoot, 'node_modules/@vscode/codicons/dist/codicon.ttf');
 				send(200, 'font/ttf', readFileSync(file)); return;
 			}
 			const asset = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
